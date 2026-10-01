@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "113634488038",
+    "project_id": "swift-ride-5ab75",
+    "storage_bucket": "swift-ride-5ab75.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:113634488038:android:f9ee0f93f32f216041d527",
+        "android_client_info": {
+          "package_name": "com.dartnexuslab.swiftri"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfJSXerZy1CfKivdmqAeNd1qRt3hIy5d0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

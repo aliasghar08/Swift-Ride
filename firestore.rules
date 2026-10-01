@@ -1,0 +1,294 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Models
+    // ===============================================================
+    //
+    // Collection: users/{userId}
+    //   - phone: string (required, 7-20 chars)
+    //   - email: string | null (optional, valid email format)
+    //   - fullName: string (required, 1-100 chars)
+    //   - role: string ("rider" | "driver" | "admin")
+    //   - rating: number (0.0 - 5.0)
+    //   - totalRides: number (>= 0)
+    //   - fcmTokens: list of strings (max 10 tokens)
+    //   - createdAt: timestamp (immutable)
+    //   - updatedAt: timestamp
+    //   - location: map | null
+    //
+    // Collection: drivers/{driverId}
+    //   - userId: string (matches document id and auth.uid)
+    //   - licenseNumber: string (1-50 chars)
+    //   - vehicleMake: string, vehicleModel: string, vehiclePlate: string, vehicleColor: string
+    //   - vehicleYear: number (1990 - 2035)
+    //   - isVerified: bool
+    //   - isOnline: bool
+    //   - subscriptionStatus: string ("ACTIVE" | "INACTIVE" | "TRIAL")
+    //   - subscriptionExpiresAt: timestamp
+    //   - stripeAccountId: string | null
+    //   - payoutStatus: string ("pending" | "active")
+    //   - rating: number, totalRides: number
+    //   - createdAt: timestamp (immutable)
+    //
+    // Collection: rides/{rideId}
+    //   - riderId: string (immutable)
+    //   - driverId: string | null
+    //   - status: string ("REQUESTED" | "ACCEPTED" | "DRIVER_ARRIVED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED")
+    //   - pickup: map (geopoint, address, geohash)
+    //   - dropoff: map (geopoint, address, geohash)
+    //   - offeredFare: number (> 0)
+    //   - acceptedFare: number | null
+    //   - distanceKm: number, durationMin: number
+    //   - commissionAmount: number (0 during free year)
+    //   - paymentIntentId: string | null
+    //   - paymentStatus: string ("pending" | "paid" | "failed")
+    //   - safetyFlags: list of strings
+    //   - shareToken: string | null
+    //   - pin: string (4 digits)
+    //   - createdAt: timestamp (immutable)
+    //   - completedAt: timestamp | null
+    //
+    // Collection: ride_offers/{offerId}
+    //   - rideId: string, driverId: string
+    //   - counterFare: number (> 0)
+    //   - status: string ("PENDING" | "ACCEPTED" | "REJECTED" | "EXPIRED")
+    //   - createdAt: timestamp
+    //
+    // Collection: payments/{paymentId}
+    //   - rideId: string, userId: string
+    //   - amount: number (> 0)
+    //   - method: string ("CARD" | "CASH" | "WALLET")
+    //   - stripePaymentIntentId: string
+    //   - status: string ("pending" | "succeeded" | "failed" | "refunded")
+    //   - createdAt: timestamp
+    //
+    // Collection: safety_events/{eventId}
+    //   - rideId: string, type: string ("LONG_STOP" | "ROUTE_DEVIATION" | "EARLY_END" | "CRASH_DETECTED" | "SOS")
+    //   - geopoint: lat/lng, metadata: map
+    //   - resolvedAt: timestamp | null, createdAt: timestamp
+    // ===============================================================
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.admin == true ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          getUserData().role == 'admin'));
+    }
+
+    function isDriver() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        getUserData().role == 'driver';
+    }
+
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function validStringLength(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidStatusTransition(prev, next) {
+      return (prev == "REQUESTED" && (next == "ACCEPTED" || next == "CANCELLED")) ||
+             (prev == "ACCEPTED" && (next == "DRIVER_ARRIVED" || next == "CANCELLED")) ||
+             (prev == "DRIVER_ARRIVED" && (next == "IN_PROGRESS" || next == "CANCELLED")) ||
+             (prev == "IN_PROGRESS" && (next == "COMPLETED" || next == "CANCELLED")) ||
+             (prev == next);
+    }
+
+    // User Validators
+    function isValidUser(data) {
+      return hasRequiredFields(data, ['phone', 'fullName', 'role', 'rating', 'totalRides', 'createdAt']) &&
+        validStringLength(data.phone, 7, 25) &&
+        validStringLength(data.fullName, 1, 100) &&
+        data.role in ['rider', 'driver', 'admin'] &&
+        data.rating is number && data.rating >= 0 && data.rating <= 5 &&
+        data.totalRides is number && data.totalRides >= 0;
+    }
+
+    // Driver Validators
+    function isValidDriver(data) {
+      return hasRequiredFields(data, ['userId', 'licenseNumber', 'vehicleMake', 'vehicleModel', 'vehiclePlate', 'isVerified', 'isOnline']) &&
+        data.userId == request.auth.uid &&
+        validStringLength(data.licenseNumber, 1, 50) &&
+        validStringLength(data.vehicleMake, 1, 50) &&
+        validStringLength(data.vehicleModel, 1, 50) &&
+        validStringLength(data.vehiclePlate, 1, 20) &&
+        data.isVerified is bool &&
+        data.isOnline is bool;
+    }
+
+    // Ride Validators
+    function isValidRide(data) {
+      return hasRequiredFields(data, ['riderId', 'status', 'pickup', 'dropoff', 'offeredFare', 'createdAt']) &&
+        data.riderId is string &&
+        data.status in ['REQUESTED', 'ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
+        data.offeredFare is number && data.offeredFare > 0;
+    }
+
+    // Ride Offer Validators
+    function isValidOffer(data) {
+      return hasRequiredFields(data, ['rideId', 'driverId', 'counterFare', 'status', 'createdAt']) &&
+        data.counterFare is number && data.counterFare > 0 &&
+        data.status in ['PENDING', 'ACCEPTED', 'REJECTED', 'EXPIRED'];
+    }
+
+    // User Collection Rules
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isDriver());
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) &&
+        // Prevent regular user from setting role to admin on create
+        (request.resource.data.role in ['rider', 'driver'] || isAdmin());
+      allow update: if isAuthenticated() &&
+        (isAdmin() ||
+         (isOwner(userId) &&
+          isValidUser(request.resource.data) &&
+          areImmutableFieldsUnchanged(['createdAt', 'role'])));
+      allow delete: if isAdmin();
+    }
+
+    // Driver Profiles
+    match /drivers/{driverId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(driverId) && isValidDriver(request.resource.data) &&
+        // Driver cannot self-verify
+        request.resource.data.isVerified == false;
+      allow update: if isAuthenticated() &&
+        (isAdmin() ||
+         (isOwner(driverId) &&
+          isValidDriver(request.resource.data) &&
+          // Cannot modify verification or subscription status without admin/functions
+          request.resource.data.isVerified == resource.data.isVerified &&
+          areImmutableFieldsUnchanged(['createdAt', 'userId'])));
+      allow delete: if isAdmin();
+
+      // Driver subcollection for uploaded documents
+      match /documents/{docId} {
+        allow read: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+        allow write: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+      }
+    }
+
+    // Rides Collection
+    match /rides/{rideId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.riderId == request.auth.uid ||
+         resource.data.driverId == request.auth.uid ||
+         resource.data.status == 'REQUESTED' ||
+         isAdmin());
+      allow create: if isAuthenticated() &&
+        request.resource.data.riderId == request.auth.uid &&
+        request.resource.data.status == 'REQUESTED' &&
+        isValidRide(request.resource.data);
+      allow update: if isAuthenticated() &&
+        isValidRide(request.resource.data) &&
+        isValidStatusTransition(resource.data.status, request.resource.data.status) &&
+        (resource.data.riderId == request.auth.uid ||
+         resource.data.driverId == request.auth.uid ||
+         (resource.data.status == 'REQUESTED' && request.resource.data.driverId == request.auth.uid) ||
+         isAdmin()) &&
+        areImmutableFieldsUnchanged(['riderId', 'createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    // Ride Offers (Driver Bidding)
+    match /ride_offers/{offerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.driverId == request.auth.uid &&
+        isValidOffer(request.resource.data);
+      allow update: if isAuthenticated() &&
+        isValidOffer(request.resource.data) &&
+        (resource.data.driverId == request.auth.uid ||
+         get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.riderId == request.auth.uid ||
+         isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Payments Collection
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin());
+      // Payments are generated or settled via Cloud Functions / Stripe webhooks
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Safety Events (SOS, Deviations, Crashes)
+    match /safety_events/{eventId} {
+      allow read: if isAuthenticated() &&
+        (get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.riderId == request.auth.uid ||
+         get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.driverId == request.auth.uid ||
+         isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Shared Trip Public Tokens
+    match /shared_trips/{shareToken} {
+      allow read: if true; // Publicly accessible with valid token for Share My Trip
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+
+    // AI Conversations (Chatbot history)
+    match /ai_conversations/{conversationId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.role in ['rider', 'driver'];
+      allow update: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin()) &&
+        areImmutableFieldsUnchanged(['userId', 'role', 'createdAt']);
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // AI Insights (Earnings recommendations, Safety checks, Maintenance alerts)
+    match /ai_insights/{insightId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      // Created on-device or via Cloud Functions
+      allow create: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || isAdmin());
+      // Users can mark insights as read
+      allow update: if isAuthenticated() &&
+        (resource.data.userId == request.auth.uid || isAdmin()) &&
+        areImmutableFieldsUnchanged(['userId', 'type', 'createdAt']);
+      allow delete: if isAdmin();
+    }
+
+    // AI Preferences (User toggles for voice, safety checks, earnings advisor)
+    match /ai_preferences/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create, update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "rules": {
+    "driver_locations": {
+      "$driverId": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $driverId",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp']) && newData.child('lat').isNumber() && newData.child('lng').isNumber()"
+      }
+    },
+    "ride_tracking": {
+      "$rideId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['lat', 'lng', 'timestamp'])"
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Driver documents and vehicle photos
+    match /drivers/{driverId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (isOwner(driverId) || request.auth.token.admin == true);
+      allow write: if isAuthenticated() && isOwner(driverId) &&
+        request.resource.size < 10 * 1024 * 1024 && // Max 10MB
+        request.resource.contentType.matches('image/.*|application/pdf');
+    }
+
+    // Public avatars and vehicle photos for rider inspection
+    match /public/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && request.resource.size < 5 * 1024 * 1024;
+    }
+  }
+}

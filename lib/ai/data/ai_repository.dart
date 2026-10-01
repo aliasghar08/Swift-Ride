@@ -15,8 +15,8 @@ class AiRepository {
   /// Streaming chat for in-app assistant with role-based system prompts
   Stream<String> streamChat(String message, {String role = 'rider'}) {
     final systemPrompt = role == 'driver'
-        ? 'You are SwiftRide\'s driver assistant. Help drivers maximize earnings, understand subscriptions, and navigate safely. Keep responses under 3 sentences.'
-        : 'You are SwiftRide\'s rider assistant. Help riders track rides, review fares, and access safety features. Keep responses under 3 sentences.';
+        ? "You are SwiftRide's driver assistant in Pakistan. Help drivers maximize earnings with 0% platform commission, understand subscriptions (PKR 150/day, PKR 3,500/month in Year 2), and navigate safely. Always format rates in PKR. Keep responses under 3 sentences."
+        : "You are SwiftRide's rider assistant in Pakistan. Help riders track rides, review fares (PKR 150 base + PKR 45/km + PKR 5/min), and access safety features. Always format rates in PKR. Keep responses under 3 sentences.";
 
     return _remoteDataSource.streamChat(message, systemPrompt: systemPrompt);
   }

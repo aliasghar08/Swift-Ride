@@ -625,11 +625,27 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
           SizedBox(height: layout.scale(14)),
 
-          // Ergonomic Action Buttons: Share Trip, SOS Emergency, Cancel
+          // Ergonomic Action Buttons: Call Driver, Share Trip, SOS Emergency, Cancel
           StaggeredEntryWidget(
             index: 2,
             child: Row(
               children: [
+                // Call Driver (Native Dialer)
+                SizedBox(
+                  height: layout.touchTarget(48),
+                  width: layout.touchTarget(48),
+                  child: IconButton(
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                      foregroundColor: AppTheme.emeraldGreen,
+                    ),
+                    icon: const Icon(Icons.phone),
+                    tooltip: 'Call Driver',
+                    onPressed: () => _viewModel.callDriver(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+
                 // Share My Trip
                 Expanded(
                   child: SizedBox(
@@ -885,37 +901,52 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               ),
               const SizedBox(height: 20),
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Dismiss', style: TextStyle(color: AppTheme.slateMuted, fontWeight: FontWeight.w600)),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.sunsetCoral,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.sunsetCoral,
+                      side: const BorderSide(color: AppTheme.sunsetCoral),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                    onPressed: () async {
-                      await _viewModel.dispatchSos(
-                        safetyProv: safetyProv,
-                        rideId: rideId,
-                        userId: userId,
-                        latitude: lat,
-                        longitude: lng,
-                      );
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('EMERGENCY SOS DISPATCHED: Safety authorities notified via native channel.'),
-                            backgroundColor: AppTheme.sunsetCoral,
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text('DISPATCH SOS', style: TextStyle(fontWeight: FontWeight.w800)),
+                    icon: const Icon(Icons.local_police, size: 18),
+                    label: const Text('Call 15 (Police)'),
+                    onPressed: () => _viewModel.callPolice(),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Dismiss', style: TextStyle(color: AppTheme.slateMuted, fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.sunsetCoral,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        ),
+                        onPressed: () async {
+                          await _viewModel.dispatchSos(
+                            safetyProv: safetyProv,
+                            rideId: rideId,
+                            userId: userId,
+                            latitude: lat,
+                            longitude: lng,
+                          );
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('EMERGENCY SOS DISPATCHED: Safety authorities notified via native channel.'),
+                                backgroundColor: AppTheme.sunsetCoral,
+                              ),
+                            );
+                          }
+                        },
+                        child: const Text('DISPATCH SOS', style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+                    ],
                   ),
                 ],
               ),

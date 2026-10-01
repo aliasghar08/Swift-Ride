@@ -4,6 +4,7 @@ import 'package:swiftride/ai/ai.dart';
 import 'package:swiftride/core/provider/custom_provider.dart';
 import 'package:swiftride/core/theme/app_theme.dart';
 import 'package:swiftride/providers/auth_provider.dart';
+import 'package:swiftride/providers/driver_provider.dart';
 import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/providers/safety_provider.dart';
 
@@ -166,7 +167,7 @@ void main() {
     testWidgets('AiMessageBubble renders user and model variants', (WidgetTester tester) async {
       final userMessage = AiMessage.user('Can you check my fare?');
       final modelMessage = AiMessage.model(
-        'SwiftRide fare is \$2.00 base + \$0.50/km.',
+        'SwiftRide fare is PKR 150 base + PKR 45/km.',
         intent: 'show_earnings',
       );
 
@@ -293,6 +294,36 @@ void main() {
       expect(find.text('SwiftRide AI Assistant'), findsOneWidget);
       expect(find.text('Powered by Gemini 3.8 Flash'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('EarningsAdvisorScreen renders insight, zero commission banner and hotspots', (WidgetTester tester) async {
+      final driverProv = DriverProvider();
+      final advisorProv = EarningsAdvisorProvider();
+
+      await tester.pumpWidget(
+        CustomMultiProvider(
+          providers: [
+            (child) => CustomChangeNotifierProvider<DriverProvider>(
+                  notifier: driverProv,
+                  child: child,
+                ),
+            (child) => CustomChangeNotifierProvider<EarningsAdvisorProvider>(
+                  notifier: advisorProv,
+                  child: child,
+                ),
+          ],
+          child: const MaterialApp(
+            home: EarningsAdvisorScreen(),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('AI Earnings Advisor'), findsOneWidget);
+      expect(find.text('Year 1 Zero Commission Active'), findsOneWidget);
+      expect(find.text('Projected Surge Hotspots Today'), findsOneWidget);
+      expect(find.text('Predictive Vehicle Health'), findsOneWidget);
     });
   });
 }

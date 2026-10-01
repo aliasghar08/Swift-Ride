@@ -32,8 +32,8 @@ class DriverProfile {
     this.rating = 4.9,
     this.totalRides = 0,
     this.totalEarnings = 0.0,
-    this.latitude = 37.7749,
-    this.longitude = -122.4194,
+    this.latitude = 33.6844,
+    this.longitude = 73.0479,
     required this.createdAt,
   });
 
@@ -112,8 +112,8 @@ class DriverProfile {
       rating: (map['rating'] as num?)?.toDouble() ?? 4.9,
       totalRides: (map['totalRides'] as num?)?.toInt() ?? 0,
       totalEarnings: (map['totalEarnings'] as num?)?.toDouble() ?? 0.0,
-      latitude: (loc?['lat'] as num?)?.toDouble() ?? 37.7749,
-      longitude: (loc?['lng'] as num?)?.toDouble() ?? -122.4194,
+      latitude: (loc?['lat'] as num?)?.toDouble() ?? 33.6844,
+      longitude: (loc?['lng'] as num?)?.toDouble() ?? 73.0479,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

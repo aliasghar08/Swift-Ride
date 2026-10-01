@@ -63,7 +63,7 @@
 
 	<!-- Google Maps Platform API Key -->
 	<key>GMSApiKey</key>
-	<string>YOUR_GOOGLE_MAPS_IOS_API_KEY</string>
+	<string>YOUR_IOS_MAPS_API_KEY_HERE</string>
 
 	<!-- URL Schemes (Deep Linking, Google Auth) -->
 	<key>CFBundleURLTypes</key>

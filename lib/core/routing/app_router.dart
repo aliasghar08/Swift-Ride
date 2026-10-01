@@ -8,6 +8,7 @@ import '../../presentation/driver/driver_home_screen.dart';
 import '../../presentation/admin/admin_dashboard_screen.dart';
 import '../../presentation/common/shared_trip_screen.dart';
 import '../../ai/ai.dart';
+import '../../presentation/auth/phone_auth_screen.dart';
 
 /// The central shell displaying the active role view (Rider, Driver, or Admin)
 /// with the persistent top ModeAppBar.
@@ -40,12 +41,19 @@ class MainShellScreen extends StatelessWidget {
   }
 }
 
-/// Pure Flutter route generator supporting the main app shell and deep-linked trip tracking.
+/// Pure Flutter route generator supporting the main app shell, phone auth, and deep-linked trip tracking.
 class AppRouter {
   static const String initialRoute = '/';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final uri = Uri.parse(settings.name ?? '/');
+
+    if (uri.path == '/login') {
+      return MaterialPageRoute(
+        builder: (_) => const PhoneAuthScreen(),
+        settings: settings,
+      );
+    }
 
     if (uri.path == '/track') {
       final token = uri.queryParameters['token'];
@@ -75,3 +83,4 @@ class AppRouter {
     );
   }
 }
+

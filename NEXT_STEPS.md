@@ -66,6 +66,44 @@ firebase functions:secrets:set GEMINI_API_KEY
 
 ---
 
+## 2.2 Google Maps Platform API Key Setup (Required for Map Tiles)
+
+To display live Google Maps tiles with streets, buildings, labels, and traffic on iOS and Android:
+
+1. **Obtain API Keys from Google Cloud Console**:
+   - Go to [Google Cloud Console Credentials](https://console.cloud.google.com/google/maps-apis/credentials).
+   - Ensure the following APIs are enabled in your Google Cloud Project:
+     - **Maps SDK for iOS**
+     - **Maps SDK for Android**
+     - **Routes API / Routes Preferred**
+     - **Places API (New)**
+     - **Geocoding API**
+   - Create an API key with Application Restriction:
+     - **iOS restriction:** Bundle ID `com.dartnexuslab.swiftri`
+     - **Android restriction:** Package name `com.dartnexuslab.swiftri` + SHA-1 certificate fingerprint
+
+2. **Insert iOS Key (`ios/Runner/Info.plist`)**:
+   Open `ios/Runner/Info.plist` and replace `YOUR_IOS_MAPS_API_KEY_HERE`:
+   ```xml
+   <key>GMSApiKey</key>
+   <string>YOUR_ACTUAL_IOS_GOOGLE_MAPS_API_KEY</string>
+   ```
+
+3. **Insert Android Key (`android/app/src/main/AndroidManifest.xml`)**:
+   Open `android/app/src/main/AndroidManifest.xml` and replace `YOUR_ANDROID_MAPS_API_KEY_HERE`:
+   ```xml
+   <meta-data
+       android:name="com.google.android.geo.API_KEY"
+       android:value="YOUR_ACTUAL_ANDROID_GOOGLE_MAPS_API_KEY"/>
+   ```
+
+4. **Rebuild & Run**:
+   ```bash
+   flutter clean && flutter pub get
+   cd ios && pod install && cd ..
+   flutter run
+   ```
+
 ## 3. Deploy Backend Security Rules & Cloud Functions
 
 ```bash

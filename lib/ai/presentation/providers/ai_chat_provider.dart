@@ -59,7 +59,7 @@ class AiChatProvider extends ChangeNotifier {
       final functionCall = await _repository.parseUserIntent(trimmed);
       if (functionCall != null) {
         final intentName = functionCall.name;
-        userMsg.copyWith(intent: intentName);
+        _messages[_messages.length - 1] = userMsg.copyWith(intent: intentName);
 
         if (onIntentDetected != null) {
           onIntentDetected(intentName);

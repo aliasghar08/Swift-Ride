@@ -474,13 +474,50 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
         ] else if (ride.status == RideStatus.accepted) ...[
           // Driver on the way to pickup
-          SizedBox(
-            height: layout.touchTarget(48),
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.near_me, color: Color(0xFF0A1128)),
-              label: const Text('Arrived at Pickup Location'),
-              onPressed: () => _viewModel.signalArrival(rideProv),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: layout.touchTarget(48),
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.near_me, color: Color(0xFF0A1128)),
+                    label: const Text('Arrived at Pickup'),
+                    onPressed: () => _viewModel.signalArrival(rideProv),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: layout.touchTarget(48),
+                width: layout.touchTarget(48),
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.accentCyan.withValues(alpha: 0.15),
+                    foregroundColor: AppTheme.accentCyan,
+                  ),
+                  icon: const Icon(Icons.phone),
+                  tooltip: 'Call Rider',
+                  onPressed: () => _viewModel.callRider('+92 300 1234567'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: layout.touchTarget(48),
+                width: layout.touchTarget(48),
+                child: IconButton(
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white12,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.navigation),
+                  tooltip: 'Navigate with Google/Apple Maps',
+                  onPressed: () => _viewModel.navigateExternally(
+                    ride.pickup.latitude,
+                    ride.pickup.longitude,
+                  ),
+                ),
+              ),
+            ],
           ),
         ] else if (ride.status == RideStatus.driverArrived) ...[
           // Arrived: Driver enters rider's 4-digit PIN to start trip

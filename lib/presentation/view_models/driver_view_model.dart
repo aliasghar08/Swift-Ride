@@ -4,7 +4,10 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../services/native/native_audio_service.dart';
 import '../../services/native/native_device_service.dart';
+import '../../services/native/native_launcher_service.dart';
+import '../../services/native/native_notification_service.dart';
 import '../../services/native/native_payment_service.dart';
 
 /// ViewModel managing Driver Cockpit UI state, PIN verification inputs,
@@ -12,6 +15,9 @@ import '../../services/native/native_payment_service.dart';
 class DriverViewModel extends ChangeNotifier {
   final NativeDeviceService _deviceService;
   final NativePaymentService _paymentService;
+  final NativeNotificationService _notificationService;
+  final NativeAudioService _audioService;
+  final NativeLauncherService _launcherService;
 
   final TextEditingController pinController = TextEditingController();
   final TextEditingController counterFareController = TextEditingController();
@@ -22,8 +28,14 @@ class DriverViewModel extends ChangeNotifier {
   DriverViewModel({
     NativeDeviceService? deviceService,
     NativePaymentService? paymentService,
+    NativeNotificationService? notificationService,
+    NativeAudioService? audioService,
+    NativeLauncherService? launcherService,
   })  : _deviceService = deviceService ?? NativeDeviceService(),
-        _paymentService = paymentService ?? NativePaymentService();
+        _paymentService = paymentService ?? NativePaymentService(),
+        _notificationService = notificationService ?? NativeNotificationService(),
+        _audioService = audioService ?? NativeAudioService(),
+        _launcherService = launcherService ?? NativeLauncherService();
 
   String? get pinErrorMessage => _pinErrorMessage;
   bool get isProcessingPayout => _isProcessingPayout;
@@ -39,10 +51,17 @@ class DriverViewModel extends ChangeNotifier {
       locProv.startBroadcaster();
       await _deviceService.setKeepScreenOn(true);
       await _deviceService.triggerHaptic('medium');
+      _notificationService.showNotification(
+        id: 301,
+        title: 'SwiftRide Driver Online',
+        body: 'Broadcasting live coordinates. Ready for ride requests.',
+      );
+      _audioService.speak('You are now online and ready for rides.');
     } else {
       locProv.stopBroadcaster();
       await _deviceService.setKeepScreenOn(false);
       await _deviceService.triggerHaptic('light');
+      _audioService.speak('You are now offline.');
     }
     notifyListeners();
   }
@@ -64,6 +83,13 @@ class DriverViewModel extends ChangeNotifier {
   void signalArrival(RideProvider rideProv) {
     _deviceService.triggerHaptic('heavy');
     rideProv.driverArrived();
+
+    _notificationService.showNotification(
+      id: 302,
+      title: 'Arrived at Pickup',
+      body: 'Waiting for rider to board. Please request 4-digit PIN.',
+    );
+    _audioService.speak('Arrived at pickup. Ask rider for verification PIN.');
   }
 
   bool verifyPinAndStartTrip(RideProvider rideProv) {
@@ -74,11 +100,18 @@ class DriverViewModel extends ChangeNotifier {
       _pinErrorMessage = null;
       _deviceService.triggerHaptic('heavy');
       pinController.clear();
+      _notificationService.showNotification(
+        id: 303,
+        title: 'Trip Started',
+        body: 'Navigating to destination. Zero commission active.',
+      );
+      _audioService.speak('PIN verified. Starting trip to destination.');
       notifyListeners();
       return true;
     } else {
       _pinErrorMessage = 'Invalid verification PIN. Ask rider for 4-digit code.';
       _deviceService.triggerHaptic('vibrate');
+      _audioService.playAlertTone('beep');
       notifyListeners();
       return false;
     }
@@ -95,7 +128,28 @@ class DriverViewModel extends ChangeNotifier {
       driverProv.creditTripEarnings(fare);
       authProv.incrementRidesCount();
       _deviceService.triggerHaptic('heavy');
+
+      _notificationService.showNotification(
+        id: 304,
+        title: 'Trip Completed!',
+        body: 'Earned PKR ${fare.toStringAsFixed(0)} (100% kept, 0% commission)',
+      );
+      _audioService.playAlertTone('success');
+      _audioService.speak('Trip completed. PKR ${fare.toInt()} added to earnings.');
     }
+  }
+
+  /// Calls the rider via native phone dialer (replaces url_launcher)
+  Future<bool> callRider(String phone) async {
+    return await _launcherService.launchDialer(phone);
+  }
+
+  /// Opens turn-by-turn navigation in native Google/Apple Maps
+  Future<bool> navigateExternally(double lat, double lng) async {
+    return await _launcherService.launchMapsDirections(
+      destinationLat: lat,
+      destinationLng: lng,
+    );
   }
 
   Future<NativePaymentResult> requestInstantPayout(DriverProvider driverProv) async {

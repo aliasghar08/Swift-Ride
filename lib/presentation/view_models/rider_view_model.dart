@@ -7,7 +7,10 @@ import '../../providers/driver_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/safety_provider.dart';
 import '../../services/map_service.dart';
+import '../../services/native/native_audio_service.dart';
 import '../../services/native/native_device_service.dart';
+import '../../services/native/native_launcher_service.dart';
+import '../../services/native/native_notification_service.dart';
 import '../../services/native/native_safety_service.dart';
 
 /// ViewModel managing Rider UI state, address search, pin-dropping,
@@ -15,19 +18,30 @@ import '../../services/native/native_safety_service.dart';
 class RiderViewModel extends ChangeNotifier {
   final NativeDeviceService _deviceService;
   final NativeSafetyService _safetyService;
+  final NativeNotificationService _notificationService;
+  final NativeAudioService _audioService;
+  final NativeLauncherService _launcherService;
   final MapService _mapService = MapService();
 
   final TextEditingController pickupController =
-      TextEditingController(text: 'Current Location');
+      TextEditingController(text: 'Blue Area Commercial Center');
   final TextEditingController dropoffController =
       TextEditingController(text: 'Islamabad International Airport (ISB)');
-  final TextEditingController fareController = TextEditingController(text: '450');
+  final TextEditingController fareController = TextEditingController(text: '1750');
 
-  double _estimatedDistanceKm = 8.5;
-  double _estimatedDurationMin = 18.0;
+  double _estimatedDistanceKm = 31.2;
+  double _estimatedDurationMin = 37.0;
 
-  LocationPoint? _pickupLocation;
-  LocationPoint? _dropoffLocation;
+  LocationPoint? _pickupLocation = const LocationPoint(
+    latitude: 33.7128,
+    longitude: 73.0642,
+    address: 'Blue Area Commercial Center, Islamabad',
+  );
+  LocationPoint? _dropoffLocation = const LocationPoint(
+    latitude: 33.5605,
+    longitude: 72.8518,
+    address: 'Islamabad International Airport (ISB)',
+  );
   List<LatLng> _routePolyline = [];
 
   bool _isPinMode = false;
@@ -36,9 +50,15 @@ class RiderViewModel extends ChangeNotifier {
   RiderViewModel({
     NativeDeviceService? deviceService,
     NativeSafetyService? safetyService,
+    NativeNotificationService? notificationService,
+    NativeAudioService? audioService,
+    NativeLauncherService? launcherService,
   })  : _deviceService = deviceService ?? NativeDeviceService(),
-        _safetyService = safetyService ?? NativeSafetyService() {
-    _initDefaultPKRFare();
+        _safetyService = safetyService ?? NativeSafetyService(),
+        _notificationService = notificationService ?? NativeNotificationService(),
+        _audioService = audioService ?? NativeAudioService(),
+        _launcherService = launcherService ?? NativeLauncherService() {
+    _recalculateRouteIfPossible();
   }
 
   bool get isPinMode => _isPinMode;
@@ -52,21 +72,23 @@ class RiderViewModel extends ChangeNotifier {
   double get suggestedFare =>
       DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
 
-  void _initDefaultPKRFare() {
-    final fare = DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
-    fareController.text = fare.toInt().toString();
-  }
 
   /// Initializes pickup address from real device coordinates
   Future<void> initializeFromCoordinates(double lat, double lng) async {
+    // If simulator returns Cupertino / San Francisco coordinates, snap to Islamabad
+    final isSimulatorDefault = (lat > 37.0 && lat < 38.0) && (lng < -121.0 && lng > -123.0);
+    final targetLat = isSimulatorDefault ? 33.7128 : lat;
+    final targetLng = isSimulatorDefault ? 73.0642 : lng;
+
     _pickupLocation = LocationPoint(
-      latitude: lat,
-      longitude: lng,
-      address: 'Current Location',
+      latitude: targetLat,
+      longitude: targetLng,
+      address: isSimulatorDefault ? 'Blue Area Commercial Center' : 'Current Location',
     );
-    final realAddress = await _mapService.reverseGeocode(lat, lng);
+    final realAddress = await _mapService.reverseGeocode(targetLat, targetLng);
     pickupController.text = realAddress;
     _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+    _recalculateRouteIfPossible();
     notifyListeners();
   }
 
@@ -111,8 +133,8 @@ class RiderViewModel extends ChangeNotifier {
       final route = _mapService.calculateRoute(origin, dest);
 
       _routePolyline = route.polylinePoints;
-      _estimatedDistanceKm = route.distanceKm;
-      _estimatedDurationMin = route.durationMin;
+      _estimatedDistanceKm = double.parse(route.distanceKm.toStringAsFixed(1));
+      _estimatedDurationMin = double.parse(route.durationMin.toStringAsFixed(0));
 
       final suggested = DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
       fareController.text = suggested.toInt().toString();
@@ -163,11 +185,25 @@ class RiderViewModel extends ChangeNotifier {
       durationMin: _estimatedDurationMin,
       currentDriver: driverProv.driverProfile,
     );
+
+    // Native notification
+    _notificationService.showNotification(
+      id: 201,
+      title: 'Searching Drivers',
+      body: 'Offer sent: PKR ${fare.toInt()} (0% Commission)',
+    );
   }
 
   void acceptDriverOffer(RideProvider rideProv, String offerId) {
     _deviceService.triggerHaptic('heavy');
     rideProv.acceptOffer(offerId);
+
+    _notificationService.showNotification(
+      id: 202,
+      title: 'Driver Confirmed!',
+      body: 'Driver is en route to pickup. Safe travels!',
+    );
+    _audioService.speak('Driver confirmed your ride.');
   }
 
   Future<void> dispatchSos({
@@ -177,7 +213,7 @@ class RiderViewModel extends ChangeNotifier {
     required double latitude,
     required double longitude,
   }) async {
-    // 1. Native emergency broadcast & hardware siren vibration via MethodChannel
+    // 1. Native emergency broadcast, loud alert tone & hardware siren vibration via MethodChannel
     await _safetyService.triggerEmergencyAlert(
       rideId: rideId,
       latitude: latitude,
@@ -185,6 +221,13 @@ class RiderViewModel extends ChangeNotifier {
       message: 'Rider initiated emergency alert',
     );
     await _safetyService.triggerEmergencyHaptics();
+    await _audioService.playAlertTone('siren');
+    await _notificationService.showNotification(
+      id: 999,
+      title: 'EMERGENCY SOS ACTIVE',
+      body: 'Your live GPS location is being broadcast to emergency contacts.',
+      channelId: 'swiftride_emergency',
+    );
 
     // 2. Register safety event in state
     safetyProv.triggerSos(
@@ -194,6 +237,16 @@ class RiderViewModel extends ChangeNotifier {
       longitude: longitude,
       message: 'Rider initiated emergency alert',
     );
+  }
+
+  /// Calls the driver via native phone dialer (replaces url_launcher)
+  Future<bool> callDriver([String phone = '+92 300 9876543']) async {
+    return await _launcherService.launchDialer(phone);
+  }
+
+  /// Calls emergency police (15 in Pakistan) via native phone dialer
+  Future<bool> callPolice() async {
+    return await _launcherService.launchDialer('15');
   }
 
   String generateShareLink({

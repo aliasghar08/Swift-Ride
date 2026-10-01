@@ -37,8 +37,8 @@ class SafetyEvent {
       id: docId ?? map['id'] ?? '',
       rideId: map['rideId'] ?? '',
       type: SafetyEventType.fromString(map['type']),
-      latitude: (geo?['latitude'] as num?)?.toDouble() ?? 37.7749,
-      longitude: (geo?['longitude'] as num?)?.toDouble() ?? -122.4194,
+      latitude: (geo?['latitude'] as num?)?.toDouble() ?? 33.6844,
+      longitude: (geo?['longitude'] as num?)?.toDouble() ?? 73.0479,
       metadata: map['metadata'] as Map<String, dynamic>? ?? {},
       resolvedAt: map['resolvedAt'] != null
           ? DateTime.tryParse(map['resolvedAt'].toString())

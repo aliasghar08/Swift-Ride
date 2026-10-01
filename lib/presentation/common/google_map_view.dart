@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/constants/app_constants.dart';
 import '../../services/map_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -59,7 +60,7 @@ class GoogleMapView extends StatefulWidget {
 
 class _GoogleMapViewState extends State<GoogleMapView> {
   GoogleMapController? _controller;
-  LatLng _centerPin = const LatLng(37.7749, -122.4194);
+  LatLng _centerPin = const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
   bool _cameraMoving = false;
   Timer? _debounce;
   bool _isLocating = false;

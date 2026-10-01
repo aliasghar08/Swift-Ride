@@ -52,4 +52,30 @@ class NativeDeviceService {
       return 85;
     }
   }
+
+  /// Fetches native device hardware information (model, OS, manufacturer).
+  Future<Map<String, dynamic>> getDeviceInfo() async {
+    try {
+      final res = await _channel.invokeMapMethod<String, dynamic>(
+        NativeChannelConstants.methodGetDeviceInfo,
+      );
+      if (res != null) return res;
+    } catch (_) {}
+    return {
+      'model': 'SwiftRide Device',
+      'os': 'Mobile',
+      'version': '1.0.0',
+    };
+  }
+
+  /// Fetches application release and build version from native bundle.
+  Future<String> getAppVersion() async {
+    try {
+      final res = await _channel.invokeMethod<String>(
+        NativeChannelConstants.methodGetAppVersion,
+      );
+      if (res != null) return res;
+    } catch (_) {}
+    return '1.0.0+1';
+  }
 }

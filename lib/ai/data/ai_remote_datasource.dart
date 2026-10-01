@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 abstract class AiRemoteDataSource {
@@ -13,26 +14,38 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
   GenerativeModel? _toolsModel;
   bool _isInitialized = false;
 
+  static const String defaultGeminiModel = String.fromEnvironment(
+    'GEMINI_MODEL',
+    defaultValue: 'gemini-1.5-flash',
+  );
+
+  static const String defaultSystemPrompt =
+      "You are SwiftRide's in-app AI assistant for Pakistan. SwiftRide is a zero-commission ride-hailing platform in Year 1. "
+      "Standard platform fares are PKR 150 base + PKR 45/km + PKR 5/min. Subscriptions starting Year 2 are PKR 150/day and PKR 3,500/month. "
+      "Keep answers concise (under 3 sentences), courteous, and always format monetary amounts in PKR.";
+
   void _ensureInitialized({String? systemPrompt}) {
     if (_isInitialized && _chatModel != null) return;
+
+    // Gracefully handle uninitialized Firebase (e.g. tests or offline sandbox)
     try {
+      if (Firebase.apps.isEmpty) {
+        return;
+      }
+
       final ai = FirebaseAI.googleAI();
 
       _chatModel = ai.generativeModel(
-        model: 'gemini-3.8-flash',
-        systemInstruction: Content.system(
-          systemPrompt ??
-              'You are SwiftRide\'s in-app assistant. Keep responses helpful, courteous, and under 3 sentences.',
-        ),
+        model: defaultGeminiModel,
+        systemInstruction: Content.system(systemPrompt ?? defaultSystemPrompt),
         generationConfig: GenerationConfig(
           maxOutputTokens: 256,
           temperature: 0.7,
-          thinkingConfig: ThinkingConfig.withThinkingLevel(ThinkingLevel.low),
         ),
       );
 
       _toolsModel = ai.generativeModel(
-        model: 'gemini-3.8-flash',
+        model: defaultGeminiModel,
         tools: [
           Tool.functionDeclarations([
             FunctionDeclaration(

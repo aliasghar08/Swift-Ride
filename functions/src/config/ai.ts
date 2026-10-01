@@ -7,7 +7,7 @@ export const logger = pino({
 });
 
 export const AI_CONFIG = {
-  MODEL_NAME: 'gemini-3.8-flash',
+  MODEL_NAME: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   MAX_OUTPUT_TOKENS_CHAT: 256,
   MAX_OUTPUT_TOKENS_INSIGHT: 512,
   TEMPERATURE: 0.7,

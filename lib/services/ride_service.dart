@@ -1,3 +1,7 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/utils/distance_calculator.dart';
 import '../core/utils/id_generator.dart';
 import '../domain/models/driver_profile_model.dart';
@@ -6,9 +10,60 @@ import '../domain/models/ride_model.dart';
 import '../domain/models/ride_offer_model.dart';
 import '../domain/models/ride_status.dart';
 
+class RouteEstimate {
+  final int distanceMeters;
+  final int durationSeconds;
+  final String polylineEncoded;
+
+  const RouteEstimate({
+    required this.distanceMeters,
+    required this.durationSeconds,
+    required this.polylineEncoded,
+  });
+
+  double get distanceKm => distanceMeters / 1000.0;
+  double get durationMin => durationSeconds / 60.0;
+}
+
 /// Zero-dependency ride service handling fare estimation, bidding negotiation,
 /// 4-digit safety PIN verification, and ride state lifecycle transitions.
 class RideService {
+  /// Calls getRoute Cloud Function or falls back to geodesic driving distance.
+  Future<RouteEstimate> estimateRoute({
+    required LatLng pickup,
+    required LatLng dropoff,
+  }) async {
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        final callable = FirebaseFunctions.instance.httpsCallable('getRoute');
+        final result = await callable.call({
+          'origin': {'lat': pickup.latitude, 'lng': pickup.longitude},
+          'destination': {'lat': dropoff.latitude, 'lng': dropoff.longitude},
+        });
+        return RouteEstimate(
+          distanceMeters: (result.data['distanceMeters'] as num?)?.toInt() ?? 5000,
+          durationSeconds: (result.data['durationSeconds'] as num?)?.toInt() ?? 600,
+          polylineEncoded: (result.data['polyline'] as String?) ?? '',
+        );
+      }
+    } catch (e) {
+      debugPrint('[RideService.estimateRoute] Fallback to driving distance: $e');
+    }
+
+    final distanceKm = DistanceCalculator.estimatedDrivingDistance(
+      pickup.latitude,
+      pickup.longitude,
+      dropoff.latitude,
+      dropoff.longitude,
+    );
+    final durationMin = DistanceCalculator.estimatedDurationMinutes(distanceKm);
+    return RouteEstimate(
+      distanceMeters: (distanceKm * 1000).toInt(),
+      durationSeconds: (durationMin * 60).toInt(),
+      polylineEncoded: '',
+    );
+  }
+
   /// Estimates suggested fair fare using platform baseline constants.
   double estimateSuggestedFare(double distanceKm, double durationMin) {
     return DistanceCalculator.calculateSuggestedFare(distanceKm, durationMin);

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../core/constants/app_constants.dart';
 import '../domain/models/safety_event_model.dart';
 import '../domain/models/safety_event_type.dart';
 import '../services/safety_service.dart';
@@ -21,8 +22,8 @@ class SafetyProvider extends ChangeNotifier {
   SafetyEvent triggerSos({
     String rideId = 'active_ride',
     String userId = 'user_current',
-    double latitude = 37.7749,
-    double longitude = -122.4194,
+    double latitude = AppConstants.defaultLat,
+    double longitude = AppConstants.defaultLng,
     String message = 'Emergency assistance requested via SwiftRide SOS button',
   }) {
     final event = _safetyService.createSosAlert(

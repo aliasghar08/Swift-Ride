@@ -6,6 +6,7 @@ import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
+import '../auth/phone_auth_screen.dart';
 
 class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -109,7 +110,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
       actions: [
         // Role Switcher Dropdown / Segmented control
         Padding(
-          padding: const EdgeInsets.only(right: 12),
+          padding: const EdgeInsets.only(right: 8),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
@@ -150,9 +151,173 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
         ),
+        // Auth / User Profile Icon Button
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: InkWell(
+            onTap: () => _showUserSessionModal(context, auth, isDark, layout),
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                border: Border.all(
+                  color: auth.isAuthenticated
+                      ? AppTheme.emeraldGreen
+                      : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                  width: 1.5,
+                ),
+              ),
+              child: Icon(
+                auth.isAuthenticated ? Icons.account_circle : Icons.login,
+                size: layout.scale(18),
+                color: auth.isAuthenticated
+                    ? AppTheme.emeraldGreen
+                    : (isDark ? Colors.white70 : AppTheme.darkNavy),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
+
+  void _showUserSessionModal(
+    BuildContext context,
+    AuthProvider auth,
+    bool isDark,
+    ResponsiveLayoutHelper layout,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final user = auth.currentUser;
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.all(layout.scale(20)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: layout.scale(24),
+                      backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                      child: Text(
+                        user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : 'U',
+                        style: const TextStyle(
+                          color: AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 20,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.fullName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: layout.fontSize(17),
+                              color: isDark ? Colors.white : AppTheme.darkNavy,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            user.phone.isNotEmpty ? user.phone : 'Not verified with phone',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(13),
+                              color: AppTheme.slateMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.star, color: AppTheme.amberWarning, size: 14),
+                          const SizedBox(width: 4),
+                          Text(
+                            user.rating.toStringAsFixed(1),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: AppTheme.emeraldGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const Icon(Icons.phone_iphone, color: AppTheme.primaryBlue),
+                  title: Text(
+                    auth.isAuthenticated ? 'Switch / Re-login Phone' : 'Sign In with Phone (OTP)',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('Authenticate using Firebase SMS verification'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+                    );
+                  },
+                ),
+                if (auth.isAuthenticated)
+                  ListTile(
+                    leading: const Icon(Icons.logout, color: AppTheme.sunsetCoral),
+                    title: const Text(
+                      'Sign Out',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.sunsetCoral,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      await auth.signOut();
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
 
   Widget _buildRoleButton({
     required ResponsiveLayoutHelper layout,

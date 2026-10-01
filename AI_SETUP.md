@@ -4,7 +4,19 @@ This document provides complete instructions for provisioning, configuring, secu
 
 ---
 
-## 1. Provider & Architecture Summary
+## 1. Prerequisites Verification Report
+
+| Check | Target | Status | Details |
+|---|---|---|---|
+| **Check 1: FlutterFire Configured** | `lib/firebase_options.dart` | ✅ Configured | Linked to Firebase project `swift-ride-5ab75`. Supports Android (`com.dartnexuslab.swiftri`), iOS (`com.dartnexuslab.swiftri`), Web, and macOS. |
+| **Check 2: Native Credentials** | `GoogleService-Info.plist` & `google-services.json` | ✅ Present | iOS Client ID and Android App ID verified with Project Number `113634488038`. |
+| **Check 3: Client SDKs** | `firebase_ai` & `firebase_app_check` in `pubspec.yaml` | ✅ Installed | `firebase_ai: ^4.0.0`, `firebase_core: ^4.15.0`, `firebase_app_check: ^0.4.8`. |
+| **Check 4: Cloud Functions AI** | `functions/src/modules/ai/` | ✅ Deployed | Gen 2 Callables with App Check enforcement (`enforceAppCheck: true`) and Gemini 3.8 Flash. |
+| **Check 5: Currency & Locale** | Fares & Insights in PKR | ✅ Standardized | Fares formatted in `PKR`, Pakistan hotspots and local routing heuristics configured. |
+
+---
+
+## 2. Provider & Architecture Summary
 
 | Component | Setting / Provider | Justification |
 |---|---|---|
@@ -16,9 +28,9 @@ This document provides complete instructions for provisioning, configuring, secu
 
 ---
 
-## 2. Enabling Firebase AI Logic in Firebase Console
+## 3. Enabling Firebase AI Logic in Firebase Console
 
-1. Navigate to the [Firebase Console](https://console.firebase.google.com/) and select your project (`swiftride-production`).
+1. Navigate to the [Firebase Console](https://console.firebase.google.com/) and select your project (`swift-ride-5ab75`).
 2. In the left navigation menu, expand **Build** and select **Firebase AI Logic** (or **AI Logic** under Extensions / Build).
 3. Click **Get Started** / **Enable**.
 4. When prompted to select your provider:
@@ -28,13 +40,13 @@ This document provides complete instructions for provisioning, configuring, secu
 
 ---
 
-## 3. Configuring Firebase App Check (Mandatory)
+## 4. Configuring Firebase App Check (Mandatory)
 
 Firebase AI Logic requires **Firebase App Check** enforcement. Client apps make direct Gemini calls without storing any client API keys; authentication and abuse prevention are guaranteed by device attestation.
 
 ### Android: Google Play Integrity
 1. In the Firebase Console, go to **App Check** > **Apps** tab.
-2. Select your Android app (`com.swiftride.swiftride`).
+2. Select your Android app (`com.dartnexuslab.swiftri`).
 3. Under **Play Integrity**:
    - Link your Google Play Developer Account or upload your SHA-256 app signing certificate fingerprint.
    - Set Token TTL to **1 hour**.
@@ -47,7 +59,7 @@ Firebase AI Logic requires **Firebase App Check** enforcement. Client apps make 
 5. For local Android emulator testing, generate a debug token in your `Logcat` and register it under **App Check** > **Manage debug tokens**.
 
 ### iOS: DeviceCheck & App Attest
-1. In the Firebase Console, select your iOS app (`com.swiftride.swiftride`).
+1. In the Firebase Console, select your iOS app (`com.dartnexuslab.swiftri`).
 2. Under **DeviceCheck**:
    - Upload your Apple Developer Key ID (`.p8` private key file) and Team ID from developer.apple.com.
 3. Under **App Attest**:
@@ -80,7 +92,7 @@ To test App Check on physical test devices or CI without production attestation:
 
 ---
 
-## 4. Rate Limiting Strategy per User
+## 5. Rate Limiting Strategy per User
 
 Configure AI Logic quota rules to prevent individual users from draining quotas:
 
@@ -107,7 +119,7 @@ export const generateEarningsInsight = onCall(
 
 ---
 
-## 5. Google Cloud Budget Alerts & Caps
+## 6. Google Cloud Budget Alerts & Caps
 
 To guarantee expenses never exceed budget thresholds:
 
@@ -115,7 +127,7 @@ To guarantee expenses never exceed budget thresholds:
 2. Select your Billing Account and click **Budgets & alerts**.
 3. Click **Create Budget**:
    - **Name:** `SwiftRide-AI-Monthly-Cap`
-   - **Projects:** `swiftride-production`
+   - **Projects:** `swift-ride-5ab75`
    - **Services:** Select *Generative Language API* and *Cloud Functions*.
    - **Amount:** Set Target Budget to **$50.00 / month**.
 4. Set Alert Thresholds:
@@ -125,7 +137,7 @@ To guarantee expenses never exceed budget thresholds:
 
 ---
 
-## 6. Remote Config Feature Toggles
+## 7. Remote Config Feature Toggles
 
 Control AI behavior dynamically without redeploying mobile apps:
 
@@ -139,7 +151,7 @@ Control AI behavior dynamically without redeploying mobile apps:
 
 ---
 
-## 7. Monthly Cost Estimates & Scaling Forecast
+## 8. Monthly Cost Estimates & Scaling Forecast
 
 Pricing based on `gemini-3.8-flash`:
 - Input: **$0.75 per 1,000,000 tokens**

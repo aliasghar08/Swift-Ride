@@ -10,11 +10,18 @@ SwiftRide uses a **hybrid architecture** combining client-side rendering with se
 
 | Layer | Component | Purpose | Security Model |
 |---|---|---|---|
-| **Client (Flutter)** | `GoogleMapView` (`google_maps_flutter`) | Vector map tile rendering, marker rendering, polyline visualization, camera animations | Restricted Native API Keys in `Info.plist` & `AndroidManifest.xml` |
+| **Client Dual-Engine** | `RealMapView` (`flutter_map` + CartoDB/OSM & `google_maps_flutter`) | High-res street/sector tile rendering (zero config needed) + 1-tap Google Maps SDK toggle | CartoDB CDN / Restricted Native API Keys in `Info.plist` & `AndroidManifest.xml` |
+| **Client Wrapper** | `GoogleMapView` | Backward-compatible wrapper delegating directly to `RealMapView` | Pure delegation with marker & polyline parity |
 | **Backend (Cloud Functions)** | `getRoute` | Turn-by-turn routing & traffic-aware polylines via Routes Preferred API | Firebase App Check + Secret Manager (`GOOGLE_MAPS_SERVER_KEY`) |
 | **Backend (Cloud Functions)** | `getAutocomplete` | Search suggestions via Places API Autocomplete | App Check + Session Token Billing |
 | **Backend (Cloud Functions)** | `getPlaceDetails` | Detailed coordinates & formatted address via Places Details API | App Check + Secret Manager |
 | **Backend (Cloud Functions)** | `reverseGeocode` | Street address reverse-geocoding for draggable map pins | App Check + 350ms Client Debounce + Firestore Caching |
+
+> [!TIP]
+> **Dual-Engine Smart Map Architecture (`RealMapView`):**
+> - **Cartography Engine (Default for Simulator & Offline):** Automatically renders full streets, roads, buildings, and sector names (e.g. Islamabad sectors G-9, F-8, Blue Area, Srinagar Highway) without requiring any Google Cloud account or API key.
+> - **Google Maps SDK Engine (Production):** Can be toggled on demand via the top-right pill switch badge or automatically enabled when a valid Google Cloud Maps API key is configured.
+> - **Unified Markers & Polylines:** All pickup pins, dropoff markers, live driver tracking icons, and polylines render identically across both engines.
 
 > [!IMPORTANT]
 > **Zero Client Secrets for Web Services:** Client apps never call Google Maps REST APIs directly. All Places, Routes, and Geocoding requests flow through Firebase Cloud Functions secured with Firebase App Check. This prevents quota theft, API key extraction, and unauthorized billing.

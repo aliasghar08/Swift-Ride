@@ -35,7 +35,7 @@ For Android to handle automatic SMS verification and reCAPTCHA fallback:
    - Copy the `SHA1` fingerprint (e.g. `AA:BB:CC:...`).
    - Copy the `SHA256` fingerprint (e.g. `11:22:33:...`).
 3. In Firebase Console, go to **Project settings** (gear icon) → **General**.
-4. Scroll to **Your apps**, select the Android app (`com.swiftride.swiftride`), and click **Add fingerprint**.
+4. Scroll to **Your apps**, select the Android app (`com.dartnexuslab.swiftri`), and click **Add fingerprint**.
 5. Paste the SHA-1 and SHA-256 fingerprints.
 6. Re-download `google-services.json` and replace `android/app/google-services.json`.
 
@@ -310,7 +310,7 @@ Run the complete test suites to verify that the Flutter application and Cloud Fu
 # 1. Analyze Dart & Flutter Code (Expect: 0 issues)
 flutter analyze
 
-# 2. Run All Flutter Unit & Widget Tests (Expect: 41/41 passing)
+# 2. Run All Flutter Unit & Widget Tests (Expect: 42/42 passing)
 flutter test
 
 # 3. Run Specific Auth & Firestore Test Suite

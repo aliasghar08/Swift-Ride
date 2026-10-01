@@ -161,4 +161,69 @@ This document records the architectural decisions, trade-offs, and operational a
    - Places Autocomplete utilizes session tokens to bill per search session instead of per keystroke.
    - Firestore caching layer caches coordinates and reverse geocode results for 24h.
 
+---
+
+## 12. In-House Native MethodChannels (Zero Third-Party Package Bloat)
+
+### Decision
+- Replaced multiple third-party Flutter plugins (`geolocator`, `geocoding`, `permission_handler`, `flutter_polyline_points`, `connectivity_plus`, etc.) with customized, in-house **MethodChannels** implemented natively in **Swift** (`AppDelegate.swift`) on iOS and **Kotlin** (`MainActivity.kt`) on Android.
+- Services implemented:
+  - `NativeLocationService`: Direct interface to `CLLocationManager` (iOS) and `LocationManager` / FusedLocationProvider (Android).
+  - `NativeGeocodingService`: Native forward and reverse geocoding via Apple CoreLocation `CLGeocoder` and Android `Geocoder`.
+  - `NativePolylineService`: In-house polyline decoding algorithm without external dependencies.
+  - `NativeAudioService`: Native haptic and siren alert generator.
+  - `NativeConnectivityService`: Native network status monitoring via `NWPathMonitor` (iOS) and `ConnectivityManager` (Android).
+  - `NativeStorageService`: Secure native storage backed by Keychain (iOS) and EncryptedSharedPreferences (Android).
+
+### Rationale
+- Eliminates dependency conflicts, version pinning issues, and CocoaPods/Gradle compilation failures during major OS updates (iOS 17/18, Android 14/15).
+- Drastically reduces binary bundle size and eliminates third-party telemetry or security audit liabilities.
+
+---
+
+## 13. Dual-Engine Smart Map Architecture (`RealMapView`)
+
+### Decision
+- Built a resilient **Dual-Engine Smart Map** (`lib/presentation/common/real_map_view.dart`) that seamlessly switches between:
+  1. **Cartography Engine (CartoDB / OpenStreetMap):** Automatically serves crisp vector-like raster tiles with full streets, sector names, roads, and buildings out of the box with zero API keys or cloud billing setup.
+  2. **Google Maps SDK Engine:** Native `GMSMapView` / `GoogleMap` widget with custom dark mode styling for production deployments with valid API keys.
+- Implemented a top-right glassmorphic toggle badge enabling instant switching between engines.
+- `GoogleMapView` acts as a 100% backward-compatible wrapper delegating to `RealMapView`.
+
+### Rationale
+- Solves the common issue where developers, simulator runs, CI/CD pipelines, or prospective reviewers encounter a blank white screen due to missing or unbilled Google Cloud credentials.
+- Guarantees immediate, visually stunning map rendering under any circumstance while preserving the native Google Maps SDK for production.
+
+---
+
+## 14. Real Firebase Authentication & Production Firestore Layer
+
+### Decision
+- Replaced all mock/placeholder authentication and database services with production-ready services:
+  - `AuthService`: Phone Authentication with SMS OTP verification (`verifyPhoneNumber`, `signInWithCredential`), supporting test phone numbers (`+923000000000`) for instant CI/CD validation.
+  - `FirestoreUserService`: User profiles, role management (Rider, Driver, Admin), ratings, and push tokens.
+  - `FirestoreDriverService`: Driver profiles, vehicle specs, real-time online status broadcasts, and geohash location updates.
+  - `FirestoreRideService`: Full inDrive-style bidding lifecycle (`REQUESTED` -> `OFFERED` -> `ACCEPTED` -> `DRIVER_ARRIVED` -> `IN_PROGRESS` -> `COMPLETED`), with 4-digit PIN verification and atomic transaction protection.
+  - `FirestoreSafetyService`: Safety event logging (SOS, route deviations, crash alerts) and ephemeral trip sharing.
+
+---
+
+## 15. Regional Localization & Pakistani Rupee (PKR) Standardization
+
+### Decision
+- Standardized the core ride-hailing metrics, currencies, and default coordinates to **Islamabad, Pakistan**:
+  - Default Center: `33.6844, 73.0479` (Islamabad Zero Point).
+  - Default Pickup: `33.7128, 73.0642` (Karachi Company / Blue Area).
+  - Default Dropoff: `33.5605, 72.8518` (Islamabad International Airport ISB).
+  - Real dynamic route distance: `29.6 km · 67 min`.
+  - Base Fare: `PKR 150.0`.
+  - Per Km Rate: `PKR 45.0`.
+  - Per Min Rate: `PKR 5.0`.
+  - Calculated suggested fare: `PKR 1,820`.
+
+### Rationale
+- Fixes previous geographical discrepancies (12,000 km distance between San Francisco coordinates and Islamabad Airport text).
+- Provides a consistent, realistic demonstration of regional zero-commission ride-hailing in a thriving metropolitan market.
+
+
 

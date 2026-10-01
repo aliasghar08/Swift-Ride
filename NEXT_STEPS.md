@@ -104,6 +104,9 @@ To display live Google Maps tiles with streets, buildings, labels, and traffic o
    flutter run
    ```
 
+> [!TIP]
+> **Out-of-the-Box Dual-Engine Smart Map:** SwiftRide already includes a built-in cartography engine (`RealMapView` with CartoDB / OpenStreetMap retina tiles) that renders complete streets, roads, sector labels, and buildings on iOS and Android simulators with zero setup. You can toggle between engines using the glassmorphic pill button on the top right.
+
 ## 3. Deploy Backend Security Rules & Cloud Functions
 
 ```bash
@@ -142,10 +145,10 @@ firebase emulators:start
 ## 5. Running & Building the Flutter Applications
 
 ```bash
-# Run unit and widget tests
+# Run unit and widget tests (Expect: 42/42 passing)
 flutter test
 
-# Run static analysis
+# Run static analysis (Expect: 0 issues found)
 flutter analyze
 
 # Launch on Chrome / Web (Admin Portal & Public Trip Tracking)

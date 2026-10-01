@@ -80,8 +80,8 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
 
 ### 1. 0% Commission & Fair Price Negotiation
 - **Zero Platform Cut**: In Year 1, drivers keep 100% of trip fares.
-- **inDrive Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+$1`, `+$2`, or custom offers.
-- **Suggested Fare Formula**: `Base ($2.00) + ($0.50/km) + ($0.10/min)`.
+- **inDrive Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+Rs 50`, `+Rs 100`, or custom offers.
+- **Suggested Fare Formula**: `Base (PKR 150) + (PKR 45/km) + (PKR 5/min)`.
 
 ### 2. Built-in Gemini AI Layer (`gemini-3.8-flash`)
 - **Daily Earnings Advisor**: Automated 6:00 AM analysis of the driver's past 7 days, local demand hotspots, weather, and events with 3 actionable tips (cached 24h in Firestore).
@@ -96,13 +96,13 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
 - **Share My Trip**: Web tracking URLs (`/track?token=...`) allowing family to track active rides without installing the app.
 - **One-Tap Emergency SOS**: Triggers native siren vibrations, emergency SMS dispatches, and emergency contact broadcasts.
 
-### 4. Native iOS & Android Integration
-- **Apple Pay & PassKit**: Native payment processing via method channels.
-- **Screen WakeLock & Haptics**: Native screen lock control and sensory feedback.
-- **Background Location**: Background GPS streaming for accurate ride tracking.
+### 4. In-House Native Swift & Kotlin MethodChannels
+- **Zero Third-Party Plugin Bloat**: Replaced fragile third-party packages (`geolocator`, `geocoding`, `flutter_polyline_points`, `connectivity_plus`, `permission_handler`) with in-house native channels.
+- **Apple CoreLocation & Android Fused Location**: High-accuracy GPS updates, native reverse-geocoding via `CLGeocoder`/`Geocoder`.
+- **PassKit, Keychain & Security**: Encrypted native secure storage, Apple Pay, screen wake-lock, and haptic feedback.
 
-### 5. Production Google Maps SDK & Cloud Proxies
-- **Native Vector SDK**: Direct integration with `google_maps_flutter` on iOS and Android with customized dark mode styling.
+### 5. Dual-Engine Smart Map (`RealMapView`) & Cloud Proxies
+- **Dual-Engine Architecture**: Renders crisp CartoDB & OpenStreetMap retina raster tiles instantly in development, simulators, and offline environments with zero API key requirement, paired with an instant 1-tap toggle to native Google Maps SDK (`google_maps_flutter`).
 - **Multi-Mode Map Canvas**: Interactive pin-picker with 350ms reverse geocoding debouncing, navigation mode, and live driver tracking with rotated heading markers.
 - **Secure Backend Proxies**: Routes Preferred, Places Autocomplete, and Geocoding APIs proxied via Cloud Functions secured with Firebase App Check.
 
@@ -135,15 +135,17 @@ SwiftRide/
 │   ├── ai/                     # Clean AI Architecture (Domain, Data, Presentation)
 │   ├── core/                   # Theme, Router, Custom Providers, Utilities
 │   ├── domain/models/          # Immutable domain models (Ride, Driver, User, Safety)
-│   ├── presentation/           # Glassy screens, GoogleMapView, animated widgets
+│   ├── presentation/           # Glassy screens, RealMapView, GoogleMapView, animated widgets
 │   ├── providers/              # Pure custom ChangeNotifier providers
 │   └── services/               # Native method channels and business services
-├── test/                       # Flutter Unit & Widget Test Suite (27 tests)
+├── test/                       # Flutter Unit & Widget Test Suite (42 tests, 100% passing)
 ├── AI_SETUP.md                 # Firebase AI Logic & App Check Setup Guide
+├── BUG_REPORT.md               # Diagnostic & Resolution Bug Report
+├── DATA_SETUP.md               # Firebase Auth & Firestore Production Setup
 ├── DECISIONS.md                # Architecture & Design Decision Log
 ├── IOS_CHECKLIST.md            # App Store Pre-Submission Checklist
 ├── IOS_SETUP.md                # Complete iOS Build & Distribution Guide
-├── MAPS_SETUP.md               # Google Maps SDK, Cloud Proxies & Cost Controls
+├── MAPS_SETUP.md               # Google Maps SDK, Dual-Engine & Cost Controls
 ├── LICENSE.md                  # MIT License
 └── SECURITY.md                 # Security & Vulnerability Disclosure Policy
 ```
@@ -174,7 +176,7 @@ Configure your `GEMINI_API_KEY` in Google Cloud Secret Manager for Cloud Functio
 
 ### 3. Run Test Suites
 ```bash
-# Flutter Client Tests (27/27 Passing)
+# Flutter Client Tests (42/42 Passing)
 flutter analyze
 flutter test
 

@@ -13,6 +13,13 @@ dependencies:
   firebase_core: ^4.15.0
   firebase_app_check: ^0.4.8
   firebase_ai: ^4.0.0
+  google_maps_flutter: ^2.10.0
+  google_maps_flutter_android: ^2.14.0
+  google_maps_flutter_ios: ^2.10.0
+  geolocator: ^13.0.0
+  geocoding: ^3.0.0
+  flutter_polyline_points: ^2.1.0
+  permission_handler: ^11.3.0
 
 dev_dependencies:
   flutter_test:

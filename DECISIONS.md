@@ -140,4 +140,25 @@ This document records the architectural decisions, trade-offs, and operational a
    - Provisioned `ios/ExportOptions.plist` for `app-store` method with automatic signing and bitcode disabled.
    - Added automated GitHub Actions workflow (`.github/workflows/ios-release.yml`) for automated TestFlight builds.
 
+---
+
+## 11. Google Maps SDK & Cloud Proxies Architecture
+
+### Decision
+1. **Real Google Maps SDK via `google_maps_flutter`**:
+   - Completely deprecated and removed the mock canvas implementation (`InteractiveMapCanvas`).
+   - Integrated official `google_maps_flutter` (v2.10+) with platform packages (`google_maps_flutter_android`, `google_maps_flutter_ios`).
+   - Created `GoogleMapView` widget supporting four operational modes: `viewOnly`, `pinPicker` (with 350ms reverse-geocode debouncing), `navigation` (following user location and heading), and `liveTracking` (following moving driver marker).
+   - Created `MapMarkers` factory providing standardized pickup, dropoff, and rotated heading driver markers.
+2. **Native Key Isolation**:
+   - Client API keys are restricted directly in native manifests (`Info.plist` -> `GMSApiKey`, `AndroidManifest.xml` -> `com.google.android.geo.API_KEY`).
+   - Android `minSdkVersion` elevated to 21 to meet Google Maps SDK Android requirements.
+3. **Zero Client Secrets for Web Services**:
+   - Client never calls Google Maps REST web services directly.
+   - All routing (`getRoute`), places autocomplete (`getAutocomplete`), place details (`getPlaceDetails`), and reverse geocoding (`reverseGeocode`) are routed through Cloud Functions Gen 2 backed by Google Cloud Secret Manager (`GOOGLE_MAPS_SERVER_KEY`) and protected with Firebase App Check.
+4. **Cost Optimization & Safeguards**:
+   - Pin dragger debouncing at 350ms avoids flooding the Geocoding API while moving the map.
+   - Places Autocomplete utilizes session tokens to bill per search session instead of per keystroke.
+   - Firestore caching layer caches coordinates and reverse geocode results for 24h.
+
 

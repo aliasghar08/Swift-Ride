@@ -31,7 +31,7 @@ export {
 } from './modules/payments';
 
 // 5. Maps Proxy Module (Routes Preferred, Places Autocomplete, Geocoding)
-export { getRoute, getAutocomplete, reverseGeocode } from './modules/maps';
+export { getRoute, getAutocomplete, getPlaceDetails, reverseGeocode } from './modules/maps';
 
 // 6. Safety Module (SOS Emergency, Trip Sharing)
 export { triggerSos, shareTrip, getSharedTrip } from './modules/safety';

@@ -3,6 +3,7 @@ import UIKit
 import CoreLocation
 import PassKit
 import UserNotifications
+import GoogleMaps
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
@@ -10,6 +11,11 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // Google Maps API key — read from Info.plist (GMSApiKey)
+    if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String, !apiKey.isEmpty {
+      GMSServices.provideAPIKey(apiKey)
+    }
+
     GeneratedPluginRegistrant.register(with: self)
 
     if let registrar = self.registrar(forPlugin: "SwiftRideApp") {

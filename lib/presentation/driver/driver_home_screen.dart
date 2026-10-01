@@ -8,8 +8,10 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../common/glass_container.dart';
-import '../common/interactive_map_canvas.dart';
+import '../common/google_map_view.dart';
+import '../common/map_markers.dart';
 import '../common/staggered_animation.dart';
 import '../view_models/driver_view_model.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -53,13 +55,56 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           backgroundColor: const Color(0xFF0B0F19),
           body: Stack(
             children: [
-              // 1. Dark Mode Interactive Vector Map
-              InteractiveMapCanvas(
-                driverLat: locProv.latitude,
-                driverLng: locProv.longitude,
-                driverHeading: locProv.heading,
-                showRoute: currentRide != null,
-                isDarkMode: true,
+              // 1. Dark Mode Real Google Maps View
+              GoogleMapView(
+                initialCenter: LatLng(locProv.latitude, locProv.longitude),
+                initialZoom: 15,
+                mode: MapMode.navigation,
+                darkMode: true,
+                showTraffic: true,
+                markers: {
+                  MapMarkers.driver(
+                    driverId: driver.id,
+                    pos: LatLng(locProv.latitude, locProv.longitude),
+                    heading: locProv.heading,
+                  ),
+                  if (currentRide != null) ...[
+                    MapMarkers.pickup(LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude)),
+                    MapMarkers.dropoff(LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude)),
+                  ],
+                },
+                circles: {
+                  // Heat map overlay of high-demand surge zones
+                  Circle(
+                    circleId: const CircleId('surge_zone_downtown'),
+                    center: LatLng(locProv.latitude + 0.008, locProv.longitude + 0.006),
+                    radius: 750,
+                    fillColor: Colors.orange.withValues(alpha: 0.18),
+                    strokeColor: Colors.orangeAccent.withValues(alpha: 0.6),
+                    strokeWidth: 2,
+                  ),
+                  Circle(
+                    circleId: const CircleId('surge_zone_airport'),
+                    center: LatLng(locProv.latitude - 0.012, locProv.longitude - 0.009),
+                    radius: 1200,
+                    fillColor: Colors.purple.withValues(alpha: 0.14),
+                    strokeColor: Colors.purpleAccent.withValues(alpha: 0.5),
+                    strokeWidth: 2,
+                  ),
+                },
+                polylines: {
+                  if (currentRide != null)
+                    Polyline(
+                      polylineId: const PolylineId('driver_route'),
+                      points: [
+                        LatLng(locProv.latitude, locProv.longitude),
+                        LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+                        LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
+                      ],
+                      color: Colors.amberAccent,
+                      width: 5,
+                    ),
+                },
               ),
 
               // 2. Top Header Bar: Online Switch & Live RTDB Broadcaster

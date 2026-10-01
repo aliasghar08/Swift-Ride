@@ -101,6 +101,11 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
 - **Screen WakeLock & Haptics**: Native screen lock control and sensory feedback.
 - **Background Location**: Background GPS streaming for accurate ride tracking.
 
+### 5. Production Google Maps SDK & Cloud Proxies
+- **Native Vector SDK**: Direct integration with `google_maps_flutter` on iOS and Android with customized dark mode styling.
+- **Multi-Mode Map Canvas**: Interactive pin-picker with 350ms reverse geocoding debouncing, navigation mode, and live driver tracking with rotated heading markers.
+- **Secure Backend Proxies**: Routes Preferred, Places Autocomplete, and Geocoding APIs proxied via Cloud Functions secured with Firebase App Check.
+
 ---
 
 ## 📂 Project Structure
@@ -115,13 +120,14 @@ SwiftRide/
 │   ├── src/
 │   │   ├── config/             # Gemini AI, Firebase, and Logger configs
 │   │   ├── modules/ai/         # Earnings, Safety, Chat, Maintenance Cloud Functions
+│   │   ├── modules/maps/       # Routes, Autocomplete, Place Details, Geocoding Proxies
 │   │   ├── modules/rides/      # Bidding & ride dispatch engine
 │   │   └── modules/safety/     # SOS and trip sharing
 │   └── tests/                  # Vitest backend test suite
 ├── ios/                        # iOS Project (com.dartnexuslab.swiftri, iOS 15.0+)
 │   ├── Runner/
-│   │   ├── AppDelegate.swift   # Native MethodChannels & APNs setup
-│   │   ├── Info.plist          # Transparent iOS permissions & usage strings
+│   │   ├── AppDelegate.swift   # Native MethodChannels, APNs & GMSServices
+│   │   ├── Info.plist          # Transparent iOS permissions, GMSApiKey
 │   │   └── PrivacyInfo.xcprivacy # Apple Privacy Manifest (ITMS-91061)
 │   ├── ExportOptions.plist     # App Store IPA export configuration
 │   └── SwiftRide-unsigned.ipa  # Pre-compiled Unsigned iOS Release IPA (11 MB)
@@ -129,7 +135,7 @@ SwiftRide/
 │   ├── ai/                     # Clean AI Architecture (Domain, Data, Presentation)
 │   ├── core/                   # Theme, Router, Custom Providers, Utilities
 │   ├── domain/models/          # Immutable domain models (Ride, Driver, User, Safety)
-│   ├── presentation/           # Glassy screens, animated widgets, view models
+│   ├── presentation/           # Glassy screens, GoogleMapView, animated widgets
 │   ├── providers/              # Pure custom ChangeNotifier providers
 │   └── services/               # Native method channels and business services
 ├── test/                       # Flutter Unit & Widget Test Suite (27 tests)
@@ -137,6 +143,7 @@ SwiftRide/
 ├── DECISIONS.md                # Architecture & Design Decision Log
 ├── IOS_CHECKLIST.md            # App Store Pre-Submission Checklist
 ├── IOS_SETUP.md                # Complete iOS Build & Distribution Guide
+├── MAPS_SETUP.md               # Google Maps SDK, Cloud Proxies & Cost Controls
 ├── LICENSE.md                  # MIT License
 └── SECURITY.md                 # Security & Vulnerability Disclosure Policy
 ```
@@ -213,6 +220,24 @@ ios/SwiftRide-unsigned.ipa (11 MB)
 ```
 
 Refer to [`IOS_SETUP.md`](./IOS_SETUP.md) and [`IOS_CHECKLIST.md`](./IOS_CHECKLIST.md) for full App Store Connect submission steps.
+
+---
+
+## 🗺️ Google Maps Setup & Key Provisioning
+
+SwiftRide uses `google_maps_flutter` for client rendering combined with Cloud Function proxies for routing and places:
+
+1. **Enable APIs in Google Cloud Console:** Maps SDK for iOS, Maps SDK for Android, Routes API, Places API, Geocoding API, Distance Matrix API.
+2. **Configure Native Keys:**
+   - **iOS:** Add your key restricted to bundle `com.dartnexuslab.swiftri` into `ios/Runner/Info.plist` (`GMSApiKey`).
+   - **Android:** Add your key restricted to package `com.dartnexuslab.swiftri` into `android/app/src/main/AndroidManifest.xml` (`com.google.android.geo.API_KEY`).
+3. **Configure Backend Server Key:**
+   - Store in Google Cloud Secret Manager:
+     ```bash
+     firebase functions:secrets:set GOOGLE_MAPS_SERVER_KEY
+     ```
+
+For comprehensive instructions on key restrictions, testing cURL commands, cost estimation tables ($200 free credit), and billing alerts, consult the **[Google Maps Setup Guide (`MAPS_SETUP.md`)](./MAPS_SETUP.md)**.
 
 ---
 

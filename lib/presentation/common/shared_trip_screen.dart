@@ -5,8 +5,10 @@ import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../view_models/shared_trip_view_model.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'glass_container.dart';
-import 'interactive_map_canvas.dart';
+import 'google_map_view.dart';
+import 'map_markers.dart';
 import 'staggered_animation.dart';
 
 class SharedTripScreen extends StatefulWidget {
@@ -99,11 +101,33 @@ class _SharedTripScreenState extends State<SharedTripScreen> {
                   ),
                   body: Stack(
                     children: [
-                      InteractiveMapCanvas(
-                        driverLat: locProv.latitude,
-                        driverLng: locProv.longitude,
-                        driverHeading: locProv.heading,
-                        showRoute: true,
+                      GoogleMapView(
+                        initialCenter: LatLng(locProv.latitude, locProv.longitude),
+                        initialZoom: 15,
+                        mode: MapMode.liveTracking,
+                        darkMode: true,
+                        showTraffic: true,
+                        markers: {
+                          MapMarkers.driver(
+                            driverId: 'driver',
+                            pos: LatLng(locProv.latitude, locProv.longitude),
+                            heading: locProv.heading,
+                          ),
+                          MapMarkers.pickup(LatLng(locProv.latitude + 0.005, locProv.longitude - 0.004)),
+                          MapMarkers.dropoff(LatLng(locProv.latitude - 0.012, locProv.longitude + 0.015)),
+                        },
+                        polylines: {
+                          Polyline(
+                            polylineId: const PolylineId('shared_route'),
+                            points: [
+                              LatLng(locProv.latitude + 0.005, locProv.longitude - 0.004),
+                              LatLng(locProv.latitude, locProv.longitude),
+                              LatLng(locProv.latitude - 0.012, locProv.longitude + 0.015),
+                            ],
+                            color: Colors.cyanAccent,
+                            width: 5,
+                          ),
+                        },
                       ),
                       Positioned(
                         left: 0,

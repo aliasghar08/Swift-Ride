@@ -9,8 +9,10 @@ import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/safety_provider.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../common/glass_container.dart';
-import '../common/interactive_map_canvas.dart';
+import '../common/google_map_view.dart';
+import '../common/map_markers.dart';
 import '../common/staggered_animation.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../view_models/rider_view_model.dart';
@@ -54,14 +56,40 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         return Scaffold(
           body: Stack(
             children: [
-              // 1. Live Interactive Vector Map
-              InteractiveMapCanvas(
-                driverLat: locProv.latitude,
-                driverLng: locProv.longitude,
-                driverHeading: locProv.heading,
-                isPinPickingMode: _viewModel.isPinMode,
-                showRoute: currentRide != null,
-                onPinChanged: (lat, lng) => _viewModel.updatePinnedCoordinates(lat, lng),
+              // 1. Live Google Maps View
+              GoogleMapView(
+                initialCenter: LatLng(locProv.latitude, locProv.longitude),
+                initialZoom: 15,
+                mode: _viewModel.isPinMode
+                    ? MapMode.pinPicker
+                    : (currentRide != null ? MapMode.liveTracking : MapMode.viewOnly),
+                darkMode: true,
+                showTraffic: true,
+                onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(coords.latitude, coords.longitude),
+                markers: {
+                  if (currentRide != null) ...[
+                    MapMarkers.pickup(LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude)),
+                    MapMarkers.dropoff(LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude)),
+                    MapMarkers.driver(
+                      driverId: currentRide.driverId ?? 'driver',
+                      pos: LatLng(locProv.latitude, locProv.longitude),
+                      heading: locProv.heading,
+                    ),
+                  ],
+                },
+                polylines: {
+                  if (currentRide != null)
+                    Polyline(
+                      polylineId: const PolylineId('rider_active_route'),
+                      points: [
+                        LatLng(locProv.latitude, locProv.longitude),
+                        LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+                        LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
+                      ],
+                      color: Colors.cyanAccent,
+                      width: 5,
+                    ),
+                },
               ),
 
               // 2. Top Header Address Search Card (Responsive constraint)

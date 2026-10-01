@@ -13,6 +13,7 @@ import 'package:swiftride/services/ride_service.dart';
 import 'package:swiftride/services/safety_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('Pure Flutter Services & Domain Models Tests', () {
     late RideService rideService;
     late DriverService driverService;

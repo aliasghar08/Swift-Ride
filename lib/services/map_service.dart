@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/distance_calculator.dart';
+import 'location_service.dart';
 import 'polyline_service.dart';
 
 class PlaceSuggestion {
@@ -193,27 +193,14 @@ class MapService {
   /// Gets device's real GPS position or falls back to platform default.
   Future<LatLng> getCurrentPosition() async {
     try {
-      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        return const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
+      final loc = await LocationService().fetchCurrentPosition();
+      if (loc != null) {
+        return LatLng(loc.latitude, loc.longitude);
       }
-
-      LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-          return const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
-        }
-      }
-
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      return LatLng(pos.latitude, pos.longitude);
     } catch (e) {
       debugPrint('MapService.getCurrentPosition error: $e');
-      return const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
     }
+    return const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
   }
 
   /// In-house reverse geocoder that maps coordinates to the closest sector,

@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
+import '../../services/map_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 /// Reusable Google Maps wrapper used by both rider and driver apps.
@@ -117,24 +117,7 @@ class _GoogleMapViewState extends State<GoogleMapView> {
   Future<void> _moveToCurrentLocation() async {
     setState(() => _isLocating = true);
     try {
-      final perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        final req = await Geolocator.requestPermission();
-        if (req == LocationPermission.denied || req == LocationPermission.deniedForever) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Location permission is required to center map.')),
-            );
-          }
-          return;
-        }
-      }
-
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-
-      final target = LatLng(pos.latitude, pos.longitude);
+      final target = await MapService().getCurrentPosition();
       _controller?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(target: target, zoom: 16.0),

@@ -10,6 +10,7 @@ import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/providers/safety_provider.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('Pure Custom Providers State Management Tests', () {
     test('AuthProvider switches roles and updates user stats', () {
       final auth = AuthProvider();

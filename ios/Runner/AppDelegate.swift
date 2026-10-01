@@ -35,26 +35,90 @@ import GoogleMaps
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
 
+  private let locationManager = CLLocationManager()
+  private let geocoder = CLGeocoder()
+
   private func setupMethodChannels(binaryMessenger: FlutterBinaryMessenger) {
+    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    locationManager.distanceFilter = 10.0
+
     let locationChannel = FlutterMethodChannel(name: "com.swiftride.app/location", binaryMessenger: binaryMessenger)
     let paymentChannel = FlutterMethodChannel(name: "com.swiftride.app/payment", binaryMessenger: binaryMessenger)
     let safetyChannel = FlutterMethodChannel(name: "com.swiftride.app/safety", binaryMessenger: binaryMessenger)
     let deviceChannel = FlutterMethodChannel(name: "com.swiftride.app/device", binaryMessenger: binaryMessenger)
 
-    // 1. Location Channel
-    locationChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
+    // 1. Native Location & Geocoding Channel
+    locationChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
+      guard let self = self else { return }
       switch call.method {
-      case "checkLocationPermissions", "requestLocationPermissions":
+      case "checkLocationPermissions":
+        var isAuthorized = false
+        if #available(iOS 14.0, *) {
+          let status = self.locationManager.authorizationStatus
+          isAuthorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
+        } else {
+          let status = CLLocationManager.authorizationStatus()
+          isAuthorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
+        }
+        result(isAuthorized)
+
+      case "requestLocationPermissions":
+        self.locationManager.requestWhenInUseAuthorization()
         result(true)
+
       case "getCurrentLocation":
-        let locationData: [String: Any] = [
-          "latitude": 37.7749,
-          "longitude": -122.4194,
-          "heading": 45.0,
-          "speed": 12.5,
-          "isMock": false
-        ]
-        result(locationData)
+        self.locationManager.startUpdatingLocation()
+        if let loc = self.locationManager.location {
+          let locationData: [String: Any] = [
+            "latitude": loc.coordinate.latitude,
+            "longitude": loc.coordinate.longitude,
+            "heading": loc.course >= 0 ? loc.course : 0.0,
+            "speed": loc.speed >= 0 ? loc.speed : 0.0,
+            "altitude": loc.altitude,
+            "isMock": false
+          ]
+          result(locationData)
+        } else {
+          // Pakistan default fallback if GPS warming up
+          let fallback: [String: Any] = [
+            "latitude": 33.6844,
+            "longitude": 73.0479,
+            "heading": 0.0,
+            "speed": 0.0,
+            "altitude": 500.0,
+            "isMock": true
+          ]
+          result(fallback)
+        }
+
+      case "startLocationUpdates":
+        self.locationManager.startUpdatingLocation()
+        result(true)
+
+      case "stopLocationUpdates":
+        self.locationManager.stopUpdatingLocation()
+        result(true)
+
+      case "reverseGeocode":
+        if let args = call.arguments as? [String: Any],
+           let lat = args["latitude"] as? Double,
+           let lng = args["longitude"] as? Double {
+          let loc = CLLocation(latitude: lat, longitude: lng)
+          self.geocoder.reverseGeocodeLocation(loc) { placemarks, error in
+            if let p = placemarks?.first {
+              var parts: [String] = []
+              if let name = p.name, !name.isEmpty { parts.append(name) }
+              if let subLoc = p.subLocality, !subLoc.isEmpty { parts.append(subLoc) }
+              if let city = p.locality, !city.isEmpty { parts.append(city) }
+              result(parts.joined(separator: ", "))
+            } else {
+              result(String(format: "Location (%.4f, %.4f)", lat, lng))
+            }
+          }
+        } else {
+          result("Selected Location")
+        }
+
       default:
         result(FlutterMethodNotImplemented)
       }

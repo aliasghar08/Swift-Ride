@@ -1,0 +1,168 @@
+# ==============================================================================
+# SwiftRide — Codemagic CI/CD Configuration
+# Automates testing, analysis, building, and distribution for iOS and Android
+# ==============================================================================
+
+workflows:
+  # --------------------------------------------------------------------------
+  # 1. iOS Release & App Store / TestFlight Pipeline
+  # --------------------------------------------------------------------------
+  ios-release:
+    name: Swift Ride — iOS Release (TestFlight & App Store)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      groups:
+        - app_store_credentials # Configured in Codemagic UI (APP_STORE_CONNECT_KEY_IDENTIFIER, etc.)
+        - firebase_credentials  # App Check and Firebase Secrets
+      vars:
+        BUNDLE_ID: "com.dartnexuslab.swiftri"
+        APP_NAME: "Swift Ride"
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Verify Flutter & Xcode Environment
+        script: |
+          flutter doctor -v
+          xcodebuild -version
+          pod --version
+
+      - name: Install Dependencies
+        script: |
+          flutter pub get
+
+      - name: Run Static Analysis & Unit Tests
+        script: |
+          flutter analyze
+          flutter test
+
+      - name: Set up iOS Code Signing & Provisioning Profiles
+        script: |
+          # Fetch signing files automatically via App Store Connect API if configured
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create || echo "Continuing with local or manual profile configuration..."
+          keychain add-certificates || true
+
+      - name: Install CocoaPods
+        script: |
+          cd ios
+          pod install --repo-update
+          cd ..
+
+      - name: Build Release IPA
+        script: |
+          BUILD_NUM=${BUILD_NUMBER:-$(date +%s)}
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist \
+            --build-name=1.0.0 \
+            --build-number=$BUILD_NUM
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/*.xcarchive
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - dev@swiftride.app
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
+          - Early Drivers
+        expire_in_days: 90
+
+  # --------------------------------------------------------------------------
+  # 2. Android Release Pipeline (App Bundle / APK)
+  # --------------------------------------------------------------------------
+  android-release:
+    name: Swift Ride — Android Production Bundle (Google Play)
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      flutter: stable
+      java: 17
+      groups:
+        - google_play_credentials
+      vars:
+        PACKAGE_NAME: "com.dartnexuslab.swiftri"
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - name: Install Dependencies
+        script: |
+          flutter pub get
+
+      - name: Run Tests
+        script: |
+          flutter analyze
+          flutter test
+
+      - name: Build Release App Bundle (AAB) & Universal APK
+        script: |
+          BUILD_NUM=${BUILD_NUMBER:-$(date +%s)}
+          flutter build appbundle --release --build-name=1.0.0 --build-number=$BUILD_NUM
+          flutter build apk --release --build-name=1.0.0 --build-number=$BUILD_NUM
+
+    artifacts:
+      - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/flutter-apk/*.apk
+
+    publishing:
+      email:
+        recipients:
+          - dev@swiftride.app
+        notify:
+          success: true
+          failure: true
+      google_play:
+        track: internal
+        submit_as_draft: true
+
+  # --------------------------------------------------------------------------
+  # 3. Pull Request Quality Gate (Fast CI)
+  # --------------------------------------------------------------------------
+  pr-quality-check:
+    name: Swift Ride — PR Quality & Test Suite
+    instance_type: mac_mini_m2
+    max_build_duration: 25
+    environment:
+      flutter: stable
+      node: 20
+    triggering:
+      events:
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+          include: true
+          source: true
+    scripts:
+      - name: Flutter Dependencies & Tests
+        script: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+      - name: Firebase Cloud Functions Tests (Vitest)
+        script: |
+          cd functions
+          npm install
+          npm test
+          cd ..

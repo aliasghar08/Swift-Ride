@@ -1,131 +1,241 @@
-# 🚖 SwiftRide — Zero Commission Ride-Hailing Platform
+<div align="center">
 
-[![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?logo=flutter)](https://flutter.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Gen_2-FFCA28?logo=firebase)](https://firebase.google.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript)](https://www.typescriptlang.org)
-[![Stripe](https://img.shields.io/badge/Stripe-Connect-635BFF?logo=stripe)](https://stripe.com)
+# 🚖 Swift Ride (Swft Ride)
+### Next-Generation Zero-Commission Ride-Hailing Platform with Gemini AI
 
-**SwiftRide** is an autonomous, production-ready ride-hailing platform built with **Flutter** (frontend) and **Firebase Gen 2** (backend). Unlike incumbent ride-hailing platforms (Uber, Lyft, inDrive) that extract 13–25% commission from drivers, SwiftRide offers **0% commission for riders and drivers for the first year**.
+[![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Gen_2-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
+[![Gemini AI](https://img.shields.io/badge/Gemini-3.8_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev)
+[![App Check](https://img.shields.io/badge/App_Check-Enforced-34A853?style=for-the-badge&logo=googleplay&logoColor=white)](https://firebase.google.com/docs/app-check)
+[![Codemagic](https://img.shields.io/badge/Codemagic-CI%2FCD-F44336?style=for-the-badge&logo=codemagic&logoColor=white)](https://codemagic.io)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE.md)
+
+<p align="center">
+  <b>Package ID / Bundle Identifier:</b> <code>com.dartnexuslab.swiftri</code><br>
+  <b>Platforms:</b> iOS 15.0+ • Android 8.0+ (API 26+) • Web Admin
+</p>
+
+</div>
+
+---
+
+## 🌟 Overview
+
+**Swift Ride** is an autonomous, full-stack, production-grade ride-hailing ecosystem built with **Flutter 3.x** and **Firebase Gen 2 (Cloud Functions, Firestore, Realtime Database)**, supercharged with an integrated **Gemini AI** layer (`gemini-3.8-flash`) via **Firebase AI Logic**.
+
+Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform cuts, SwiftRide offers **0% commission for riders and drivers in Year 1**. Drivers keep 100% of their negotiated fares, riders enjoy fair pricing, and both parties benefit from proactive AI-powered safety and earnings advisory intelligence.
 
 ---
 
 ## 🏛️ Architectural Overview
 
 ```
-                      ┌──────────────────────────────────────┐
-                      │          Flutter Client              │
-                      │  (Rider • Driver • Admin Dashboard)  │
-                      └──────────────┬───────────────────────┘
-                                     │
-                 ┌───────────────────┴───────────────────┐
-                 │                                       │
-     (State / Transactions)                     (Live GPS Broadcast)
-                 │                                       │
-                 ▼                                       ▼
-    ┌─────────────────────────┐             ┌─────────────────────────┐
-    │     Cloud Firestore     │             │    Realtime Database    │
-    │  • Users & Profiles     │             │  • driver_locations     │
-    │  • Rides & Offers       │             │    (updates every 2-3s) │
-    │  • Payments & Safety    │             │  • ride_tracking        │
-    └────────────┬────────────┘             └────────────┬────────────┘
-                 │                                       │
-                 └───────────────────┬───────────────────┘
-                                     │
-                                     ▼
-                      ┌──────────────────────────────┐
-                      │    Cloud Functions Gen 2     │
-                      │       (Node.js 20 TS)        │
-                      │  • inDrive Bidding Engine    │
-                      │  • Geohash Driver Matching   │
-                      │  • Stripe PaymentIntents     │
-                      │  • Scheduled Subscriptions   │
-                      └──────────────────────────────┘
+                          ┌─────────────────────────────────────────┐
+                          │            Flutter Mobile App           │
+                          │        (Rider • Driver • Admin)         │
+                          │   • Frosted Glassmorphic Design         │
+                          │   • Cascading Staggered Micro-Motion    │
+                          │   • Pure Reactive State Management      │
+                          └────────────────────┬────────────────────┘
+                                               │
+                    ┌──────────────────────────┴──────────────────────────┐
+                    │                                                     │
+        (State, Bids & Transactions)                             (Live Telemetry & GPS)
+                    │                                                     │
+                    ▼                                                     ▼
+      ┌───────────────────────────┐                         ┌───────────────────────────┐
+      │      Cloud Firestore      │                         │     Realtime Database     │
+      │  • Users & Profiles       │                         │  • driver_locations (2s)  │
+      │  • Rides, Bids & Offers   │                         │  • live_ride_tracking     │
+      │  • ai_insights (24h cache)│                         │  • low-latency GPS stream │
+      └─────────────┬─────────────┘                         └─────────────┬─────────────┘
+                    │                                                     │
+                    └──────────────────────────┬──────────────────────────┘
+                                               │
+                                               ▼
+                              ┌─────────────────────────────────┐
+                              │      Cloud Functions Gen 2      │
+                              │         (TypeScript 5.6)        │
+                              │  • inDrive Bidding Engine       │
+                              │  • Geohash Spatial Driver Match │
+                              │  • Stripe Connect Express       │
+                              │  • RideCheck Telemetry Monitor  │
+                              └────────────────┬────────────────┘
+                                               │
+                                               ▼
+                              ┌─────────────────────────────────┐
+                              │      Gemini AI Intelligence     │
+                              │     (Firebase AI Logic SDK)     │
+                              │  • Model: gemini-3.8-flash      │
+                              │  • App Check Enforced           │
+                              │  • Daily Earnings Advisor       │
+                              │  • Proactive Safety Check-in    │
+                              │  • Fleet Maintenance Predictor  │
+                              └─────────────────────────────────┘
 ```
 
 ---
 
-## 🚀 Key Advantages of This Stack
+## 💎 Core Differentiators & Features
 
-1. **Two Databases, One Purpose Each**:
-   - **Cloud Firestore**: Complex queries, transactional integrity, and atomic driver offer acceptance.
-   - **Realtime Database (RTDB)**: High-frequency driver GPS coordinate streaming every 2–3 seconds at ~10ms latency and minimal bandwidth cost.
-2. **0% Commission & Fair Price Negotiation**:
-   - Suggested formula: $\$2.00 \text{ base} + (\$0.50 \times \text{km}) + (\$0.10 \times \text{min})$.
-   - Riders set proposed fares; nearby drivers counter-offer (+$1, +$2, match).
-3. **4-Digit Safety PIN Verification**:
-   - Eliminates wrong-car incidents. Driver cannot start trip until entering the rider's 4-digit code.
-4. **Driver Instant Payouts**:
-   - Connected with Stripe Connect Express for instant debit card cash-outs.
-5. **Share My Trip & SOS Emergency**:
-   - Generates public web tracking links (`/track?token=...`) allowing contacts to track rides without installing the app.
+### 1. 0% Commission & Fair Price Negotiation
+- **Zero Platform Cut**: In Year 1, drivers keep 100% of trip fares.
+- **inDrive Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+$1`, `+$2`, or custom offers.
+- **Suggested Fare Formula**: `Base ($2.00) + ($0.50/km) + ($0.10/min)`.
+
+### 2. Built-in Gemini AI Layer (`gemini-3.8-flash`)
+- **Daily Earnings Advisor**: Automated 6:00 AM analysis of the driver's past 7 days, local demand hotspots, weather, and events with 3 actionable tips (cached 24h in Firestore).
+- **Proactive Safety Check-In**: Instant calm, natural-language check-in message dispatched to both parties whenever RideCheck flags anomalies (extended stop, route deviation).
+- **In-App Conversational Assistant**: Streaming role-aware chatbot (Rider vs Driver) with intent routing for `track_ride`, `show_earnings`, and `trigger_sos`.
+- **Predictive Fleet Maintenance**: Weekly Monday vehicle wear analysis forecasting brake, tire, and oil service urgency (`LOW`, `MEDIUM`, `HIGH`).
+- **Cost-Controlled & Secure**: Strict token budgets (`256` chat / `512` insights) with low thinking level and Firebase Remote Config emergency kill-switches.
+
+### 3. Comprehensive Passenger & Driver Safety
+- **4-Digit PIN Verification**: Eliminates wrong-car entries; drivers cannot start trips without passenger PIN verification.
+- **RideCheck Anomaly Detection**: Monitors speed, route deviation, and stationary duration in real time.
+- **Share My Trip**: Web tracking URLs (`/track?token=...`) allowing family to track active rides without installing the app.
+- **One-Tap Emergency SOS**: Triggers native siren vibrations, emergency SMS dispatches, and emergency contact broadcasts.
+
+### 4. Native iOS & Android Integration
+- **Apple Pay & PassKit**: Native payment processing via method channels.
+- **Screen WakeLock & Haptics**: Native screen lock control and sensory feedback.
+- **Background Location**: Background GPS streaming for accurate ride tracking.
 
 ---
 
-## 📂 Project Directory Structure
+## 📂 Project Structure
 
 ```
 SwiftRide/
-├── lib/
-│   ├── core/
-│   │   ├── constants/           # AppConstants (fare parameters, pricing, geohash)
-│   │   ├── routing/             # GoRouter setup with role switcher & deep-links
-│   │   ├── services/            # SwiftRideNotifier Riverpod 3.x state engine
-│   │   └── theme/               # AppTheme (Light mode rider, Dark mode driver)
-│   ├── domain/
-│   │   └── models/              # Clean models (User, Driver, Ride, Payment, Safety)
-│   └── presentation/
-│       ├── common/              # InteractiveMapCanvas, ModeAppBar, SharedTripScreen
-│       ├── rider/               # RiderHomeScreen (inDrive bidding, fare sheet, tracking)
-│       ├── driver/              # DriverHomeScreen (RTDB broadcaster, PIN verification)
-│       └── admin/               # AdminDashboardScreen (KPIs, Driver verification queue)
-├── functions/                   # Firebase Cloud Functions Gen 2 (TypeScript)
+├── .github/workflows/          # GitHub Actions CI/CD (iOS Release & TestFlight)
+├── android/                    # Android Project (com.dartnexuslab.swiftri)
+├── assets/                     # Master Branding Assets & App Icons
+├── codemagic.yaml              # Codemagic CI/CD Pipeline (iOS, Android, PR checks)
+├── functions/                  # Cloud Functions Gen 2 (TypeScript)
 │   ├── src/
-│   │   ├── config/              # Firebase Admin init, constants, Stripe
-│   │   ├── middleware/          # Auth assertions, Zod validation
-│   │   ├── modules/             # Auth, Rides, Drivers, Payments, Maps, Safety, Admin
-│   │   ├── triggers/            # onRideCreated, onRideUpdated, onPaymentCreated
-│   │   └── scheduled/           # Subscriptions, weekly reports, stale ride cleanup
-│   └── tests/                   # Vitest unit tests (Fare logic, Geohash bounds)
-├── firebase.json                # Emulators, hosting, functions, rules config
-├── firestore.rules              # Strict prototype rules with domain validators
-├── firestore.indexes.json       # Geospatial compound query indexes
-├── database.rules.json          # RTDB rules for live location streaming
-├── storage.rules               # Driver documents and photo verification rules
-├── DECISIONS.md                 # Technical decisions and trade-offs log
-└── NEXT_STEPS.md                # Production launch & deployment checklist
+│   │   ├── config/             # Gemini AI, Firebase, and Logger configs
+│   │   ├── modules/ai/         # Earnings, Safety, Chat, Maintenance Cloud Functions
+│   │   ├── modules/rides/      # Bidding & ride dispatch engine
+│   │   └── modules/safety/     # SOS and trip sharing
+│   └── tests/                  # Vitest backend test suite
+├── ios/                        # iOS Project (com.dartnexuslab.swiftri, iOS 15.0+)
+│   ├── Runner/
+│   │   ├── AppDelegate.swift   # Native MethodChannels & APNs setup
+│   │   ├── Info.plist          # Transparent iOS permissions & usage strings
+│   │   └── PrivacyInfo.xcprivacy # Apple Privacy Manifest (ITMS-91061)
+│   ├── ExportOptions.plist     # App Store IPA export configuration
+│   └── SwiftRide-unsigned.ipa  # Pre-compiled Unsigned iOS Release IPA (11 MB)
+├── lib/
+│   ├── ai/                     # Clean AI Architecture (Domain, Data, Presentation)
+│   ├── core/                   # Theme, Router, Custom Providers, Utilities
+│   ├── domain/models/          # Immutable domain models (Ride, Driver, User, Safety)
+│   ├── presentation/           # Glassy screens, animated widgets, view models
+│   ├── providers/              # Pure custom ChangeNotifier providers
+│   └── services/               # Native method channels and business services
+├── test/                       # Flutter Unit & Widget Test Suite (27 tests)
+├── AI_SETUP.md                 # Firebase AI Logic & App Check Setup Guide
+├── DECISIONS.md                # Architecture & Design Decision Log
+├── IOS_CHECKLIST.md            # App Store Pre-Submission Checklist
+├── IOS_SETUP.md                # Complete iOS Build & Distribution Guide
+├── LICENSE.md                  # MIT License
+└── SECURITY.md                 # Security & Vulnerability Disclosure Policy
 ```
 
 ---
 
-## 🧪 Testing & Verification
+## 🚀 Quick Start Guide
 
-### Run Flutter Tests & Static Analysis
+### Prerequisites
+- **Flutter SDK:** `^3.47.5` (Dart `^3.13.4`)
+- **Xcode:** `15.0+` with iOS 15+ SDK
+- **Node.js:** `v20+` or `v22+` (for Cloud Functions)
+- **CocoaPods:** `1.16+`
+
+### 1. Clone & Install Dependencies
 ```bash
-# Verify widget tests and role switcher
+git clone https://github.com/aliasghar08/Swift-Ride.git
+cd Swift-Ride
+flutter pub get
+```
+
+### 2. Configure Environment
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+Configure your `GEMINI_API_KEY` in Google Cloud Secret Manager for Cloud Functions.
+
+### 3. Run Test Suites
+```bash
+# Flutter Client Tests (27/27 Passing)
+flutter analyze
 flutter test
 
-# Verify clean static analysis (0 warnings/errors)
-flutter analyze
+# Cloud Functions Vitest Suite (11/11 Passing)
+cd functions
+npm install
+npm test
+cd ..
 ```
 
-### Run Cloud Functions Tests & Build
+### 4. Run Locally
 ```bash
-cd functions
-npm test        # Vitest unit tests
-npm run build   # TypeScript compilation
+# Launch on iOS Simulator
+flutter run -d "iPhone 17"
+
+# Launch on Android Emulator
+flutter run -d emulator-5554
 ```
 
 ---
 
-## 💻 Running the App
+## 🍏 iOS Release Build & App Store Distribution
 
+The project is pre-configured with Bundle ID **`com.dartnexuslab.swiftri`**, display name **`Swift Ride`**, and complete privacy manifests.
+
+### Building the Release IPA
 ```bash
-# Run on macOS desktop
-flutter run -d macos
+# Clean and install CocoaPods
+flutter clean
+flutter pub get
+cd ios && pod install && cd ..
 
-# Run on Chrome (Web Admin & Rider)
-flutter run -d chrome
-
-# Run on mobile simulator (iOS / Android)
-flutter run
+# Compile release IPA using ExportOptions.plist
+flutter build ipa --release \
+  --export-options-plist=ios/ExportOptions.plist \
+  --build-name=1.0.0 \
+  --build-number=1
 ```
+
+An unsigned release archive is also pre-packaged at:
+```
+ios/SwiftRide-unsigned.ipa (11 MB)
+```
+
+Refer to [`IOS_SETUP.md`](./IOS_SETUP.md) and [`IOS_CHECKLIST.md`](./IOS_CHECKLIST.md) for full App Store Connect submission steps.
+
+---
+
+## 🤖 CI / CD Pipelines
+
+SwiftRide comes out-of-the-box with two enterprise CI/CD configurations:
+1. **Codemagic** ([`codemagic.yaml`](./codemagic.yaml)): Automated building, testing, code signing, and distribution to **TestFlight** and **Google Play Internal Sharing**.
+2. **GitHub Actions** ([`.github/workflows/ios-release.yml`](./.github/workflows/ios-release.yml)): Tag-driven (`v*`) automated iOS IPA archive and TestFlight deployment.
+
+---
+
+## 🔒 Security & Privacy
+
+SwiftRide enforces strict defense-in-depth principles:
+- **Firebase App Check**: Play Integrity & Apple DeviceCheck enforced across all endpoints.
+- **Apple Privacy Manifest**: [`ios/Runner/PrivacyInfo.xcprivacy`](./ios/Runner/PrivacyInfo.xcprivacy) fully declared.
+- **Zero Client Secrets**: No third-party API keys stored on mobile devices.
+- For vulnerability reporting, see [`SECURITY.md`](./SECURITY.md).
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** — see the [`LICENSE.md`](./LICENSE.md) file for details.
+
+Developed with ❤️ by **Ali Asghar** • [Dart Nexus Lab](https://github.com/aliasghar08)

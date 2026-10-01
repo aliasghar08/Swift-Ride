@@ -1,9 +1,22 @@
-# Miscellaneous
+# ==============================================================================
+# SwiftRide — Comprehensive .gitignore
+# Covers Flutter, Dart, iOS, Android, macOS, Web, Firebase Functions & Tooling
+# ==============================================================================
+
+# Miscellaneous & Operating Systems
 *.class
 *.log
 *.pyc
 *.swp
+*.bak
+*~
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 .atom/
 .build/
 .buildlog/
@@ -12,42 +25,44 @@
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# IntelliJ & VS Code IDE
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
+# Flutter / Dart Tooling
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
 /build/
 /coverage/
 
-# Symbolication related
+# Symbolication & Obfuscation
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Widget Preview related
+# Widget Preview
 .widget_preview/
 
-# iOS / CocoaPods generated
+# Android Specific
+**/android/.gradle/
+**/android/local.properties
+**/android/app/debug/
+**/android/app/profile/
+**/android/app/release/
+**/android/captures/
+**/android/.externalNativeBuild/
+**/android/.cxx/
+*.apk
+*.aab
+
+# iOS / CocoaPods & Xcode
 **/ios/Pods/
 **/ios/.symlinks/
 **/ios/Flutter/Flutter.framework
@@ -59,14 +74,40 @@ app.*.map.json
 **/ios/Flutter/flutter_export_environment.sh
 **/ios/ServiceDefinitions.json
 **/ios/Runner/GeneratedPluginRegistrant.*
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+project.xcworkspace/xcuserdata/
+Runner.xcodeproj/xcuserdata/
 
-# Node / Firebase Cloud Functions
+# macOS Desktop
+**/macos/Flutter/ephemeral/
+**/macos/Pods/
+**/macos/Runner/GeneratedPluginRegistrant.*
+
+# Web
+**/web/.dart_tool/
+
+# Node.js & Firebase Cloud Functions
 **/node_modules/
 functions/lib/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+.firebase/
 
-# Secret Environment Files
+# Security, Certificates & Secrets (Never commit production credentials)
 .env
+.env.*
+!.env.example
 *.local
+*.p12
+*.pem
+*.mobileprovision
+*.keystore
+*.jks
+auth_key_*.p8

@@ -32,7 +32,7 @@ class NativePaymentService {
   Future<NativePaymentResult> processPayment({
     required String rideId,
     required double amount,
-    String currency = 'USD',
+    String currency = 'PKR',
     String method = 'CARD',
   }) async {
     try {

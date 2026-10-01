@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/provider/custom_provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../../providers/driver_provider.dart';
 import '../../presentation/../../presentation/common/glass_container.dart';
 import '../../presentation/../../presentation/common/staggered_animation.dart';
@@ -106,7 +107,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'You keep 100% of all gross passenger fares (\$${driverProv.driver.totalEarnings.toStringAsFixed(2)} earned).',
+                                'You keep 100% of all gross passenger fares (${CurrencyFormatter.format(driverProv.driver.totalEarnings)} earned).',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? Colors.white70 : Colors.black87,

@@ -1,41 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../core/utils/distance_calculator.dart';
 import '../../domain/models/location_point_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/safety_provider.dart';
+import '../../services/map_service.dart';
 import '../../services/native/native_device_service.dart';
 import '../../services/native/native_safety_service.dart';
 
-/// ViewModel managing Rider UI state, fare input, validation,
-/// and native device/safety integrations.
+/// ViewModel managing Rider UI state, address search, pin-dropping,
+/// route polylines, PKR fare negotiation, and native safety integrations.
 class RiderViewModel extends ChangeNotifier {
   final NativeDeviceService _deviceService;
   final NativeSafetyService _safetyService;
+  final MapService _mapService = MapService();
 
   final TextEditingController pickupController =
-      TextEditingController(text: 'Downtown Central Station (700 Market St)');
+      TextEditingController(text: 'Current Location');
   final TextEditingController dropoffController =
-      TextEditingController(text: 'Financial District Plaza (555 California St)');
-  final TextEditingController fareController = TextEditingController(text: '5.50');
+      TextEditingController(text: 'Islamabad International Airport (ISB)');
+  final TextEditingController fareController = TextEditingController(text: '450');
 
-  final double estimatedDistanceKm = 4.8;
-  final double estimatedDurationMin = 12.0;
+  double _estimatedDistanceKm = 8.5;
+  double _estimatedDurationMin = 18.0;
+
+  LocationPoint? _pickupLocation;
+  LocationPoint? _dropoffLocation;
+  List<LatLng> _routePolyline = [];
 
   bool _isPinMode = false;
-  String _selectedPaymentMethod = 'Credit / Debit Card (Stripe)';
+  String _selectedPaymentMethod = 'Cash on Dropoff (PKR)';
 
   RiderViewModel({
     NativeDeviceService? deviceService,
     NativeSafetyService? safetyService,
   })  : _deviceService = deviceService ?? NativeDeviceService(),
-        _safetyService = safetyService ?? NativeSafetyService();
+        _safetyService = safetyService ?? NativeSafetyService() {
+    _initDefaultPKRFare();
+  }
 
   bool get isPinMode => _isPinMode;
   String get selectedPaymentMethod => _selectedPaymentMethod;
+  double get estimatedDistanceKm => _estimatedDistanceKm;
+  double get estimatedDurationMin => _estimatedDurationMin;
+  List<LatLng> get routePolyline => _routePolyline;
+  LocationPoint? get pickupLocation => _pickupLocation;
+  LocationPoint? get dropoffLocation => _dropoffLocation;
 
   double get suggestedFare =>
-      ((2.0 + (estimatedDistanceKm * 0.5) + (estimatedDurationMin * 0.1)) * 2).round() / 2;
+      DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+
+  void _initDefaultPKRFare() {
+    final fare = DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+    fareController.text = fare.toInt().toString();
+  }
+
+  /// Initializes pickup address from real device coordinates
+  Future<void> initializeFromCoordinates(double lat, double lng) async {
+    _pickupLocation = LocationPoint(
+      latitude: lat,
+      longitude: lng,
+      address: 'Current Location',
+    );
+    final realAddress = await _mapService.reverseGeocode(lat, lng);
+    pickupController.text = realAddress;
+    _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+    notifyListeners();
+  }
 
   void togglePinMode() {
     _isPinMode = !_isPinMode;
@@ -43,14 +76,52 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePinnedCoordinates(double lat, double lng) {
-    pickupController.text = 'Pinned (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
+  Future<void> updatePinnedCoordinates(double lat, double lng) async {
+    _pickupLocation = LocationPoint(
+      latitude: lat,
+      longitude: lng,
+      address: 'Locating...',
+    );
+    final realAddress = await _mapService.reverseGeocode(lat, lng);
+    pickupController.text = realAddress;
+    _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+
+    _recalculateRouteIfPossible();
     notifyListeners();
+  }
+
+  void setPickup(LocationPoint point) {
+    _pickupLocation = point;
+    pickupController.text = point.address;
+    _recalculateRouteIfPossible();
+    notifyListeners();
+  }
+
+  void setDropoff(LocationPoint point) {
+    _dropoffLocation = point;
+    dropoffController.text = point.address;
+    _recalculateRouteIfPossible();
+    notifyListeners();
+  }
+
+  void _recalculateRouteIfPossible() {
+    if (_pickupLocation != null && _dropoffLocation != null) {
+      final origin = LatLng(_pickupLocation!.latitude, _pickupLocation!.longitude);
+      final dest = LatLng(_dropoffLocation!.latitude, _dropoffLocation!.longitude);
+      final route = _mapService.calculateRoute(origin, dest);
+
+      _routePolyline = route.polylinePoints;
+      _estimatedDistanceKm = route.distanceKm;
+      _estimatedDurationMin = route.durationMin;
+
+      final suggested = DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+      fareController.text = suggested.toInt().toString();
+    }
   }
 
   void quickIncrementFare(double increment) {
     final cur = double.tryParse(fareController.text) ?? suggestedFare;
-    fareController.text = (cur + increment).toStringAsFixed(2);
+    fareController.text = (cur + increment).round().toString();
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
@@ -69,21 +140,27 @@ class RiderViewModel extends ChangeNotifier {
     final fare = double.tryParse(fareController.text) ?? suggestedFare;
     _deviceService.triggerHaptic('medium');
 
+    final pickup = _pickupLocation ??
+        LocationPoint(
+          latitude: 33.7128,
+          longitude: 73.0642,
+          address: pickupController.text,
+        );
+
+    final dropoff = _dropoffLocation ??
+        LocationPoint(
+          latitude: 33.5605,
+          longitude: 72.8518,
+          address: dropoffController.text,
+        );
+
     rideProv.requestRide(
       riderId: authProv.currentUser.id,
-      pickup: LocationPoint(
-        latitude: 37.7749,
-        longitude: -122.4194,
-        address: pickupController.text,
-      ),
-      dropoff: LocationPoint(
-        latitude: 37.7850,
-        longitude: -122.4060,
-        address: dropoffController.text,
-      ),
+      pickup: pickup,
+      dropoff: dropoff,
       offeredFare: fare,
-      distanceKm: estimatedDistanceKm,
-      durationMin: estimatedDurationMin,
+      distanceKm: _estimatedDistanceKm,
+      durationMin: _estimatedDurationMin,
       currentDriver: driverProv.driverProfile,
     );
   }

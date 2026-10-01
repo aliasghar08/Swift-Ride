@@ -60,8 +60,8 @@ class RideService {
       createdAt: DateTime.now(),
     );
 
-    // Offer 2: Competing driver submits counter-offer (+$1.50)
-    final roundedCounter = ((ride.offeredFare + 1.50) * 2).round() / 2;
+    // Offer 2: Competing driver submits counter-offer (+PKR 50)
+    final roundedCounter = (ride.offeredFare + 50.0).roundToDouble();
     final offer2 = RideOffer(
       id: IdGenerator.generateId(prefix: 'offer_'),
       rideId: ride.id,

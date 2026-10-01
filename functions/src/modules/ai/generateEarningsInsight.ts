@@ -83,10 +83,10 @@ export async function processDriverEarningsInsight(
   // 3. Mock local demand context (weather, events, hotspots)
   const contextData = {
     earningsSummary: {
-      past7DaysEarnings: `$${totalEarnings.toFixed(2)}`,
+      past7DaysEarnings: `PKR ${totalEarnings.toFixed(2)}`,
       completedRides: totalRides,
       estimatedOnlineHours: estimatedHours,
-      avgHourlyRate: `$${avgHourlyRate}/hr`,
+      avgHourlyRate: `PKR ${avgHourlyRate}/hr`,
     },
     localDemandHeatmap: [
       { area: 'Downtown Financial Center', peakHours: '07:30 - 09:30, 16:30 - 19:00', surgeExpected: '1.4x' },

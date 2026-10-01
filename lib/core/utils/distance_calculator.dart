@@ -39,12 +39,12 @@ class DistanceCalculator {
     return (min).roundToDouble();
   }
 
-  /// Computes suggested fare based on SwiftRide formula, rounded to nearest 0.50.
+  /// Computes suggested fare based on SwiftRide PKR formula, rounded to nearest 10 PKR.
   static double calculateSuggestedFare(double distanceKm, double durationMin) {
     final rawFare = AppConstants.baseFare +
         (distanceKm * AppConstants.perKmFare) +
         (durationMin * AppConstants.perMinFare);
-    return (rawFare * 2).round() / 2.0;
+    return ((rawFare / 10).round() * 10).toDouble();
   }
 
   /// Computes money saved by driver due to SwiftRide 0% commission vs 13% incumbent commission.

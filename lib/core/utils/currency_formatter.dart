@@ -1,7 +1,10 @@
 class CurrencyFormatter {
-  /// Formats a number to USD currency string: e.g. 5.5 -> $5.50
+  /// Formats a number to PKR currency string: e.g. 450 -> PKR 450
   static String format(double amount) {
-    return '\$${amount.toStringAsFixed(2)}';
+    if (amount % 1 == 0) {
+      return 'PKR ${amount.toInt()}';
+    }
+    return 'PKR ${amount.toStringAsFixed(0)}';
   }
 
   /// Formats duration in minutes into a friendly string: e.g. 14 -> 14 min

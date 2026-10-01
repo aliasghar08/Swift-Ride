@@ -32,7 +32,7 @@ export const requestPayout = onCall(
       try {
         const transfer = await stripe.transfers.create({
           amount: Math.round(data.amount * 100),
-          currency: 'usd',
+          currency: 'pkr',
           destination: stripeAccountId,
           description: `SwiftRide Driver Payout (${data.method})`,
         });

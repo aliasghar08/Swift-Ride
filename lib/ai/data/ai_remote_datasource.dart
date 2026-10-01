@@ -137,7 +137,7 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
       return 'Your driver is en route and can be viewed on your active ride map. Arrival estimated in 4 minutes.';
     }
     if (lower.contains('fare') || lower.contains('pricing') || lower.contains('cost')) {
-      return 'SwiftRide charges \$2.00 base + \$0.50/km + \$0.10/min. Drivers keep 100% of their earnings with zero commission in Year 1.';
+      return 'SwiftRide charges PKR 150 base + PKR 45/km + PKR 5/min. Drivers keep 100% of their earnings with zero commission in Year 1.';
     }
     if (lower.contains('safety') || lower.contains('emergency') || lower.contains('sos')) {
       return 'SwiftRide features 24/7 RideCheck monitoring, Share My Trip, and an instant SOS emergency button.';

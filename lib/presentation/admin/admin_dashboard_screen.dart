@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../providers/admin_provider.dart';
@@ -124,7 +125,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         _buildKpiCard(
                           layout: layout,
                           title: 'Gross Booking Volume',
-                          value: '\$${kpis.grossMarketplaceValue.toStringAsFixed(2)}',
+                          value: CurrencyFormatter.format(kpis.grossMarketplaceValue),
                           subtitle: '${kpis.totalRides} rides booked',
                           icon: Icons.payments,
                           iconColor: AppTheme.primaryBlue,
@@ -133,7 +134,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         _buildKpiCard(
                           layout: layout,
                           title: 'Driver Savings (100%)',
-                          value: '\$${kpis.driverCommissionSavings.toStringAsFixed(2)}',
+                          value: CurrencyFormatter.format(kpis.driverCommissionSavings),
                           subtitle: 'Saved vs 13% commission',
                           icon: Icons.savings,
                           iconColor: AppTheme.emeraldGreen,
@@ -485,7 +486,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
             Text(
-              '\$${(ride.acceptedFare ?? ride.offeredFare).toStringAsFixed(2)}',
+              CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare),
               style: TextStyle(fontWeight: FontWeight.w800, fontSize: layout.fontSize(14), color: const Color(0xFF0F172A)),
             ),
           ],

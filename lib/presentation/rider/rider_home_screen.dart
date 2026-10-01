@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/currency_formatter.dart';
+import '../../domain/models/location_point_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_offer_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -16,6 +18,7 @@ import '../common/map_markers.dart';
 import '../common/staggered_animation.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../view_models/rider_view_model.dart';
+import 'address_search_screen.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -32,6 +35,28 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   void initState() {
     super.initState();
     _viewModel = RiderViewModel();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
+      _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+    });
+  }
+
+  Future<void> _openAddressSearch({required bool isPickup}) async {
+    final result = await Navigator.of(context).push<LocationPoint>(
+      MaterialPageRoute(
+        builder: (_) => AddressSearchScreen(
+          title: isPickup ? 'Set Pickup Location' : 'Set Destination',
+          initialQuery: isPickup ? _viewModel.pickupController.text : _viewModel.dropoffController.text,
+        ),
+      ),
+    );
+    if (result != null) {
+      if (isPickup) {
+        _viewModel.setPickup(result);
+      } else {
+        _viewModel.setDropoff(result);
+      }
+    }
   }
 
   @override
@@ -67,6 +92,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 showTraffic: true,
                 onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(coords.latitude, coords.longitude),
                 markers: {
+                  if (_viewModel.pickupLocation != null)
+                    MapMarkers.pickup(LatLng(_viewModel.pickupLocation!.latitude, _viewModel.pickupLocation!.longitude)),
+                  if (_viewModel.dropoffLocation != null)
+                    MapMarkers.dropoff(LatLng(_viewModel.dropoffLocation!.latitude, _viewModel.dropoffLocation!.longitude)),
                   if (currentRide != null) ...[
                     MapMarkers.pickup(LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude)),
                     MapMarkers.dropoff(LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude)),
@@ -78,7 +107,14 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ],
                 },
                 polylines: {
-                  if (currentRide != null)
+                  if (_viewModel.routePolyline.isNotEmpty)
+                    Polyline(
+                      polylineId: const PolylineId('rider_preview_route'),
+                      points: _viewModel.routePolyline,
+                      color: AppTheme.accentCyan,
+                      width: 5,
+                    )
+                  else if (currentRide != null)
                     Polyline(
                       polylineId: const PolylineId('rider_active_route'),
                       points: [
@@ -200,14 +236,19 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 const Icon(Icons.radio_button_checked, color: AppTheme.emeraldGreen, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
-                    controller: _viewModel.pickupController,
-                    style: TextStyle(fontSize: layout.fontSize(14)),
-                    decoration: const InputDecoration(
-                      hintText: 'Pickup Location',
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 6),
+                  child: InkWell(
+                    onTap: () => _openAddressSearch(isPickup: true),
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: _viewModel.pickupController,
+                        style: TextStyle(fontSize: layout.fontSize(14)),
+                        decoration: const InputDecoration(
+                          hintText: 'Pickup Location',
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 6),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -227,14 +268,19 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 const Icon(Icons.location_on, color: AppTheme.sunsetCoral, size: 20),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
-                    controller: _viewModel.dropoffController,
-                    style: TextStyle(fontSize: layout.fontSize(14)),
-                    decoration: const InputDecoration(
-                      hintText: 'Destination',
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(vertical: 6),
+                  child: InkWell(
+                    onTap: () => _openAddressSearch(isPickup: false),
+                    child: IgnorePointer(
+                      child: TextField(
+                        controller: _viewModel.dropoffController,
+                        style: TextStyle(fontSize: layout.fontSize(14)),
+                        decoration: const InputDecoration(
+                          hintText: 'Where to? (Destination)',
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(vertical: 6),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -296,7 +342,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    'Suggested: \$${suggested.toStringAsFixed(2)}',
+                    'Suggested: ${CurrencyFormatter.format(suggested)}',
                     style: TextStyle(color: AppTheme.primaryBlue, fontWeight: FontWeight.w700, fontSize: layout.fontSize(12)),
                   ),
                 ),
@@ -326,7 +372,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         color: const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Text('\$', style: TextStyle(fontSize: layout.fontSize(18), fontWeight: FontWeight.bold)),
+                      child: Text('PKR', style: TextStyle(fontSize: layout.fontSize(14), fontWeight: FontWeight.bold)),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -337,7 +383,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           style: TextStyle(fontSize: layout.fontSize(18), fontWeight: FontWeight.bold),
                           decoration: const InputDecoration(
-                            hintText: 'Enter fare',
+                            hintText: 'Enter fare in PKR',
                             contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           ),
                         ),
@@ -351,8 +397,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                         ),
-                        onPressed: () => _viewModel.quickIncrementFare(1.0),
-                        child: const Text('+\$1'),
+                        onPressed: () => _viewModel.quickIncrementFare(50.0),
+                        child: const Text('+50'),
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -362,8 +408,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 10),
                         ),
-                        onPressed: () => _viewModel.quickIncrementFare(2.0),
-                        child: const Text('+\$2'),
+                        onPressed: () => _viewModel.quickIncrementFare(100.0),
+                        child: const Text('+100'),
                       ),
                     ),
                   ],
@@ -568,7 +614,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                     ),
                     Text(
-                      '\$${(ride.acceptedFare ?? ride.offeredFare).toStringAsFixed(2)}',
+                      CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare),
                       style: TextStyle(fontWeight: FontWeight.w800, fontSize: layout.fontSize(15), color: AppTheme.emeraldGreen),
                     ),
                   ],
@@ -688,7 +734,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '\$${offer.counterFare.toStringAsFixed(2)}',
+                  CurrencyFormatter.format(offer.counterFare),
                   style: TextStyle(fontWeight: FontWeight.w800, fontSize: layout.fontSize(15), color: AppTheme.primaryBlue),
                 ),
                 const SizedBox(height: 4),

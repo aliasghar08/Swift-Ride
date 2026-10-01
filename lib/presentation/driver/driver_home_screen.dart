@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -160,7 +161,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ),
                                     ),
                                     Text(
-                                      'Earnings: \$${driver.totalEarnings.toStringAsFixed(2)} • 0% Fee',
+                                      'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 0% Fee',
                                       style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12)),
                                     ),
                                   ],
@@ -293,7 +294,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                'Year 1: \$0 Fee',
+                'Year 1: PKR 0 Fee',
                 style: TextStyle(color: AppTheme.emeraldGreen, fontWeight: FontWeight.w700, fontSize: layout.fontSize(11)),
               ),
             ),
@@ -308,7 +309,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             const SizedBox(width: 8),
             _buildStatBox(layout, 'Rating', '★ ${driver.rating}', Icons.star_border, 1),
             const SizedBox(width: 8),
-            _buildStatBox(layout, 'Saved Fees', '\$${(driver.totalEarnings * 0.13).toStringAsFixed(0)}', Icons.savings_outlined, 2),
+            _buildStatBox(layout, 'Saved Fees', CurrencyFormatter.format(driver.totalEarnings * 0.13), Icons.savings_outlined, 2),
           ],
         ),
         SizedBox(height: layout.scale(14)),
@@ -318,7 +319,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           height: layout.touchTarget(48),
           child: ElevatedButton.icon(
             icon: const Icon(Icons.flash_on, color: Color(0xFF0A1128)),
-            label: Text('Instant Payout to Card (\$${driver.totalEarnings.toStringAsFixed(2)})'),
+            label: Text('Instant Payout (${CurrencyFormatter.format(driver.totalEarnings)})'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.accentCyan,
               foregroundColor: const Color(0xFF0A1128),
@@ -409,7 +410,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
             ),
             Text(
-              'Fare: \$${(ride.acceptedFare ?? ride.offeredFare).toStringAsFixed(2)} (0% Fee)',
+              'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (0% Fee)',
               style: TextStyle(color: AppTheme.emeraldGreen, fontWeight: FontWeight.w800, fontSize: layout.fontSize(15)),
             ),
           ],
@@ -449,7 +450,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       rideId: ride.id,
                       fare: ride.offeredFare,
                     ),
-                    child: Text('Match \$${ride.offeredFare.toStringAsFixed(2)}'),
+                    child: Text('Match ${CurrencyFormatter.format(ride.offeredFare)}'),
                   ),
                 ),
               ),
@@ -463,9 +464,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       rideProv: rideProv,
                       driver: driverProv.driverProfile,
                       rideId: ride.id,
-                      fare: ride.offeredFare + 2.0,
+                      fare: ride.offeredFare + 50.0,
                     ),
-                    child: const Text('Counter +\$2.00'),
+                    child: const Text('Counter +PKR 50'),
                   ),
                 ),
               ),

@@ -1,20 +1,20 @@
 export const APP_CONSTANTS = {
   REGION: 'us-central1' as const,
-  // Fare formula: base + (km * 0.50) + (min * 0.10)
-  FARE_BASE: 2.00,
-  FARE_PER_KM: 0.50,
-  FARE_PER_MIN: 0.10,
+  // Fare formula (PKR): base (150) + (km * 45) + (min * 5)
+  FARE_BASE: 150.00,
+  FARE_PER_KM: 45.00,
+  FARE_PER_MIN: 5.00,
   COMMISSION_RATE_YEAR_ONE: 0.0, // Free 0% commission for first year
 
-  // Cancellation fees
+  // Cancellation fees (PKR)
   CANCELLATION_FEE_BEFORE_ACCEPT: 0.0,
-  CANCELLATION_FEE_AFTER_ACCEPT: 2.00,
-  CANCELLATION_FEE_AFTER_ARRIVE: 5.00,
+  CANCELLATION_FEE_AFTER_ACCEPT: 100.00,
+  CANCELLATION_FEE_AFTER_ARRIVE: 200.00,
 
-  // Driver Subscriptions (Year 2+)
-  SUBSCRIPTION_DAILY: 1.00,
-  SUBSCRIPTION_MONTHLY: 15.00,
-  SUBSCRIPTION_YEARLY: 150.00,
+  // Driver Subscriptions (Year 2+) (PKR)
+  SUBSCRIPTION_DAILY: 150.00,
+  SUBSCRIPTION_MONTHLY: 3500.00,
+  SUBSCRIPTION_YEARLY: 35000.00,
   SUBSCRIPTION_GRACE_DAYS: 3,
 
   // Matching params
@@ -49,15 +49,15 @@ export const APP_CONSTANTS = {
 };
 
 /**
- * Calculates suggested fare rounded to the nearest 0.50.
+ * Calculates suggested fare in PKR rounded to the nearest 10.
  */
 export function calculateSuggestedFare(distanceKm: number, durationMin: number): number {
   const rawFare =
     APP_CONSTANTS.FARE_BASE +
     distanceKm * APP_CONSTANTS.FARE_PER_KM +
     durationMin * APP_CONSTANTS.FARE_PER_MIN;
-  // Round to nearest 0.50
-  return Math.round(rawFare * 2) / 2;
+  // Round to nearest 10 PKR
+  return Math.round(rawFare / 10) * 10;
 }
 
 /**

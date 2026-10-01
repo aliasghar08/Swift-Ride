@@ -99,7 +99,7 @@ void main() {
 
     // Verify Driver view
     expect(find.text('Driver Dashboard'), findsOneWidget);
-    expect(find.text('Year 1: \$0 Fee'), findsOneWidget);
+    expect(find.text('Year 1: PKR 0 Fee'), findsOneWidget);
 
     // Switch to Admin Mode
     await tester.tap(find.text('Admin'));

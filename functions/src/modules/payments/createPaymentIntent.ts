@@ -8,7 +8,7 @@ import { z } from 'zod';
 const CreatePaymentIntentSchema = z.object({
   rideId: z.string().min(1),
   amount: z.number().positive(),
-  currency: z.string().default('usd'),
+  currency: z.string().default('pkr'),
   paymentMethodType: z.enum(['card', 'apple_pay', 'google_pay', 'cash']).default('card'),
 });
 
@@ -31,7 +31,7 @@ export const createPaymentIntent = onCall(
     try {
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(data.amount * 100), // Stripe takes amounts in cents
-        currency: data.currency || 'usd',
+        currency: data.currency || 'pkr',
         metadata: {
           rideId: data.rideId,
           userId: caller.uid,

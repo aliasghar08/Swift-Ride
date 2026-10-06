@@ -127,7 +127,7 @@ This document records the architectural decisions, trade-offs, and operational a
 
 ### Decision
 1. **Bundle Identifier Alignment**:
-   - Set iOS and Android bundle identifier to `com.dartnexuslab.swiftri` across `project.pbxproj`, `GoogleService-Info.plist`, `ExportOptions.plist`, and `build.gradle.kts`.
+   - Set iOS and Android bundle identifier to `com.dartnexuslab.swiftride` across `project.pbxproj`, `GoogleService-Info.plist`, `ExportOptions.plist`, and `build.gradle.kts`.
 2. **Branding & App Display Name**:
    - Configured `CFBundleDisplayName` as `Swift Ride` and `CFBundleName` as `Swft Ride` to fulfill exact naming requirements.
    - Converted master branding asset `assets/Gemini_Generated_Image_5pjlpe5pjlpe5pjl.jpeg` (2048x2048) into all 15 iOS app icon scales (`Icon-App-*`) in `Assets.xcassets/AppIcon.appiconset/`, including the 1024x1024 marketing icon.

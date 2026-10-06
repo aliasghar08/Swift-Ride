@@ -1,8 +1,12 @@
 import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -24,6 +28,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   AuthStep _currentStep = AuthStep.phone;
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
+  bool _isSavingProfile = false;
+
   final TextEditingController _nameController = TextEditingController();
   UserRole _selectedRole = UserRole.rider;
 
@@ -79,7 +85,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     _nameController.text = 'Alex Morgan';
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Loaded test credentials (+92 300 0000000 / OTP: 123456)'),
+        content: Text(
+          'Loaded test credentials (+92 300 0000000 / OTP: 123456)',
+        ),
         duration: Duration(seconds: 2),
       ),
     );
@@ -90,7 +98,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (rawPhone.isEmpty || rawPhone.length < 9) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter a valid Pakistani phone number (e.g. 300 1234567)'),
+          content: Text(
+            'Please enter a valid Pakistani phone number (e.g. 300 1234567)',
+          ),
           backgroundColor: AppTheme.sunsetCoral,
         ),
       );
@@ -116,10 +126,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       },
       onError: (err) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(err),
-            backgroundColor: AppTheme.sunsetCoral,
-          ),
+          SnackBar(content: Text(err), backgroundColor: AppTheme.sunsetCoral),
         );
       },
     );
@@ -143,7 +150,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final success = await auth.verifyOtp(
       smsCode: code,
       phoneNumber: fullPhone,
-      fullName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
+      fullName: _nameController.text.trim().isNotEmpty
+          ? _nameController.text.trim()
+          : null,
       role: _selectedRole,
       onSuccess: () {
         _countdownTimer?.cancel();
@@ -155,10 +164,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       },
       onError: (err) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(err),
-            backgroundColor: AppTheme.sunsetCoral,
-          ),
+          SnackBar(content: Text(err), backgroundColor: AppTheme.sunsetCoral),
         );
       },
     );
@@ -172,6 +178,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   Future<void> _handleSaveProfile() async {
+    // Guard against double submission: this writes the user document and would
+    // otherwise fire once per tap.
+    if (_isSavingProfile) return;
+    setState(() => _isSavingProfile = true);
+
     final name = _nameController.text.trim();
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
 
@@ -184,6 +195,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       auth.switchRole(_selectedRole);
       await auth.firestoreUserService.saveUser(updated);
     }
+
+    if (mounted) setState(() => _isSavingProfile = false);
 
     if (!mounted) return;
     if (widget.onAuthSuccess != null) {
@@ -206,6 +219,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         elevation: 0,
         leading: _currentStep != AuthStep.phone
             ? IconButton(
+                tooltip: 'Back',
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
                   setState(() {
@@ -218,6 +232,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 },
               )
             : IconButton(
+                tooltip: 'Close',
                 icon: const Icon(Icons.close),
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
@@ -239,9 +254,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   decoration: BoxDecoration(
                     gradient: AppTheme.brandGradient,
                     shape: BoxShape.circle,
-                    boxShadow: AppTheme.glowShadow(AppTheme.primaryBlue, blur: 20),
+                    boxShadow: AppTheme.glowShadow(
+                      AppTheme.primaryBlue,
+                      blur: 20,
+                    ),
                   ),
-                  child: const Icon(Icons.directions_car_filled, color: Colors.white, size: 36),
+                  child: const Icon(
+                    Icons.directions_car_filled,
+                    color: Colors.white,
+                    size: 36,
+                  ),
                 ),
               ),
               const SizedBox(height: 18),
@@ -249,8 +271,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 _currentStep == AuthStep.phone
                     ? 'Enter Phone Number'
                     : _currentStep == AuthStep.otp
-                        ? 'Verify OTP Code'
-                        : 'Complete Your Profile',
+                    ? 'Verify OTP Code'
+                    : 'Complete Your Profile',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: layout.fontSize(24),
@@ -264,8 +286,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 _currentStep == AuthStep.phone
                     ? 'We will send a 6-digit verification code to authenticate your account with 0% platform commission.'
                     : _currentStep == AuthStep.otp
-                        ? 'Enter the 6-digit code sent to ${_formatPhoneNumber(_phoneController.text)}'
-                        : 'Choose your account type and display name.',
+                    ? 'Enter the 6-digit code sent to ${_formatPhoneNumber(_phoneController.text)}'
+                    : 'Choose your account type and display name.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: layout.fontSize(13),
@@ -283,13 +305,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
               const SizedBox(height: 24),
 
-              // Test Environment Helper
-              if (_currentStep == AuthStep.phone) ...[
+              // Test Environment Helper — debug builds only. This ships a
+              // one-tap demo login, so it must never appear in production.
+              if (kDebugMode && _currentStep == AuthStep.phone) ...[
                 const Divider(),
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   onPressed: _useTestNumber,
-                  icon: const Icon(Icons.flash_on, color: AppTheme.amberWarning),
+                  icon: const Icon(
+                    Icons.flash_on,
+                    color: AppTheme.amberWarning,
+                  ),
                   label: const Text(
                     'Fill Demo / Test Number (+92 300 0000000)',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -301,7 +327,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       width: 1.2,
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -341,17 +369,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     AuthProvider auth,
     bool isDark,
   ) {
+    final c = AppColors.of(layout.context);
     return Column(
       key: const ValueKey('phone_step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            color: c.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            ),
+            border: Border.all(color: c.border),
             boxShadow: AppTheme.subtleElevation,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
@@ -360,7 +387,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                  color: c.surfaceRaised,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -411,14 +438,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             backgroundColor: AppTheme.primaryBlue,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             elevation: 0,
           ),
           child: auth.isLoading
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 )
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -444,17 +476,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     AuthProvider auth,
     bool isDark,
   ) {
+    final c = AppColors.of(layout.context);
     return Column(
       key: const ValueKey('otp_step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
+            color: c.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
-            ),
+            border: Border.all(color: c.border),
             boxShadow: AppTheme.subtleElevation,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -498,7 +529,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             _canResend
                 ? TextButton(
                     onPressed: _handleSendOtp,
-                    child: const Text('Resend Code', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      'Resend Code',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   )
                 : Text(
                     'Resend code in ${_secondsRemaining}s',
@@ -513,13 +547,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             backgroundColor: AppTheme.emeraldGreen,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
           child: auth.isLoading
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
                 )
               : Text(
                   'Verify & Continue',
@@ -585,20 +624,31 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         ),
         const SizedBox(height: 24),
         ElevatedButton(
-          onPressed: _handleSaveProfile,
+          onPressed: _isSavingProfile ? null : _handleSaveProfile,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.primaryBlue,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: Text(
-            'Complete Setup',
-            style: TextStyle(
-              fontSize: layout.fontSize(15),
-              fontWeight: FontWeight.w700,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
             ),
           ),
+          child: _isSavingProfile
+              ? const SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(
+                  'Complete Setup',
+                  style: TextStyle(
+                    fontSize: layout.fontSize(15),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
         ),
       ],
     );

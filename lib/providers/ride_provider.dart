@@ -1,23 +1,61 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/models/driver_profile_model.dart';
 import '../domain/models/location_point_model.dart';
 import '../domain/models/ride_model.dart';
 import '../domain/models/ride_offer_model.dart';
+import '../domain/models/ride_status.dart';
+import '../domain/models/safety_event_model.dart';
+import '../services/firestore/firestore_ride_service.dart';
+import '../services/firestore/firestore_safety_service.dart';
 import '../services/ride_service.dart';
 
-/// Zero-dependency Ride Provider managing the full ride-hailing lifecycle:
-/// fare bidding, inDrive-style negotiation, 4-digit PIN verification, and history.
+/// Ride lifecycle provider backed by Firestore and Cloud Functions.
+///
+/// The server owns the ride id, the verification PIN, the suggested fare and
+/// every status transition. This provider never invents a ride or a driver
+/// offer: [currentRide] and [activeOffers] are driven by live Firestore streams
+/// so the UI always reflects server truth. Previously this class simulated the
+/// whole lifecycle in memory, including fabricated driver counter-offers.
 class RideProvider extends ChangeNotifier {
+  final FirestoreRideService _firestore;
   final RideService _rideService;
+  final FirestoreSafetyService _safetyEvents;
+
   RideModel? _currentRide;
   List<RideOffer> _activeOffers = [];
   List<RideModel> _rideHistory = [];
 
+  /// Rides currently requesting a driver, for the driver cockpit.
+  List<RideModel> _availableRides = [];
+
+  StreamSubscription<RideModel?>? _rideSub;
+  StreamSubscription<List<RideOffer>>? _offersSub;
+  StreamSubscription<List<RideModel>>? _availableSub;
+  StreamSubscription<List<SafetyEvent>>? _sosSub;
+  SafetyEvent? _activeSos;
+
+  bool _isSubmitting = false;
+  bool _isAcceptingOffer = false;
+  String? _lastError;
+
+  bool _isLoadingHistory = false;
+  bool _hasMoreHistory = false;
+  String? _historyError;
+  DocumentSnapshot<Map<String, dynamic>>? _historyCursor;
+
   RideProvider({
+    FirestoreRideService? firestore,
     RideService? rideService,
+    FirestoreSafetyService? safetyService,
     RideModel? initialRide,
     List<RideModel>? initialHistory,
-  })  : _rideService = rideService ?? RideService(),
+  })  : _firestore = firestore ?? FirestoreRideService(),
+        _rideService = rideService ?? RideService(),
+        _safetyEvents = safetyService ?? FirestoreSafetyService(),
         _currentRide = initialRide,
         _rideHistory = initialHistory ?? [];
 
@@ -26,98 +64,383 @@ class RideProvider extends ChangeNotifier {
   List<RideOffer> get activeOffers => List.unmodifiable(_activeOffers);
   List<RideModel> get rideHistory => List.unmodifiable(_rideHistory);
 
-  /// Requests a ride with rider-proposed fare and generates simulated driver counter offers.
-  void requestRide({
-    required String riderId,
+  /// An unresolved emergency alert on the tracked trip, if any.
+  ///
+  /// The backend has always written `safety_events` and pushed to the
+  /// counterparty, but nothing subscribed to those events: a driver received a
+  /// notification with no in-app surface behind it.
+  SafetyEvent? get activeSos => _activeSos;
+
+  /// Open ride requests a driver can bid on.
+  ///
+  /// `streamAvailableRides()` existed but had no subscriber, so a rider's
+  /// request was written to Firestore and never shown to any driver — the
+  /// dispatch loop never closed.
+  List<RideModel> get availableRides => List.unmodifiable(_availableRides);
+  bool get isSubmitting => _isSubmitting;
+
+  /// True while a driver offer is being accepted, so the UI can disable repeats.
+  bool get isAcceptingOffer => _isAcceptingOffer;
+
+  bool get isLoadingHistory => _isLoadingHistory;
+  bool get hasMoreHistory => _hasMoreHistory;
+
+  /// Non-null when ride history could not be loaded, so the UI can distinguish
+  /// "no rides yet" from "we could not reach the server".
+  String? get historyError => _historyError;
+  String? get lastError => _lastError;
+
+  void _setError(String message) {
+    _lastError = message;
+    notifyListeners();
+  }
+
+  static String _messageForCode(String code) {
+    switch (code) {
+      case 'unauthenticated':
+        return 'Please sign in again to request a ride.';
+      case 'invalid-argument':
+        return 'Some trip details were invalid. Please check and try again.';
+      case 'resource-exhausted':
+        return 'Too many requests right now. Please wait a moment and try again.';
+      case 'unavailable':
+        return 'SwiftRide is unreachable right now. Check your connection and try again.';
+      default:
+        return 'We could not create your ride request. Please try again.';
+    }
+  }
+
+  /// Requests a ride through the `requestRide` Cloud Function.
+  ///
+  /// Returns the new ride id, or null when the request failed — in which case
+  /// [lastError] explains why. Nothing is fabricated locally.
+  Future<String?> requestRide({
     required LocationPoint pickup,
     required LocationPoint dropoff,
     required double offeredFare,
     required double distanceKm,
     required double durationMin,
-    required DriverProfile currentDriver,
-  }) {
-    final ride = _rideService.createRideRequest(
-      riderId: riderId,
-      pickup: pickup,
-      dropoff: dropoff,
-      offeredFare: offeredFare,
-      distanceKm: distanceKm,
-      durationMin: durationMin,
-    );
+  }) async {
+    if (Firebase.apps.isEmpty) {
+      _setError('Ride requests need an internet connection.');
+      return null;
+    }
 
-    final offers = _rideService.generateInitialDriverOffers(
-      ride: ride,
-      currentDriver: currentDriver,
-    );
+    _isSubmitting = true;
+    _lastError = null;
+    notifyListeners();
 
-    _currentRide = ride;
-    _activeOffers = offers;
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('requestRide')
+          .call(<String, dynamic>{
+        'pickup': pickup.toMap(),
+        'dropoff': dropoff.toMap(),
+        'offeredFare': offeredFare,
+        'distanceKm': distanceKm,
+        'durationMin': durationMin,
+      });
+
+      final rideId = res.data['rideId'] as String?;
+      if (rideId == null || rideId.isEmpty) {
+        _setError('We could not create your ride request. Please try again.');
+        return null;
+      }
+
+      _subscribeToRide(rideId);
+      return rideId;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[RideProvider.requestRide] ${e.code}: ${e.message}');
+      _setError(_messageForCode(e.code));
+      return null;
+    } catch (e) {
+      debugPrint('[RideProvider.requestRide] failed: $e');
+      _setError('We could not reach SwiftRide. Check your connection and try again.');
+      return null;
+    } finally {
+      _isSubmitting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Closes the open emergency alert on the tracked trip.
+  ///
+  /// Returns null on success, or a message explaining the refusal.
+  Future<String?> resolveActiveSos({String? note}) async {
+    final sos = _activeSos;
+    if (sos == null) return null;
+
+    final error = await _safetyEvents.resolveSos(sos.id, note: note);
+    if (error == null) {
+      // The stream will also deliver the update, but clearing immediately means
+      // the banner disappears on tap rather than a round-trip later.
+      _activeSos = null;
+      notifyListeners();
+    }
+    return error;
+  }
+
+  /// Persists the rider's chosen payment rail onto the trip.
+  ///
+  /// Returns false when the write failed, so the UI can say the choice is only
+  /// local rather than implying it was saved.
+  Future<bool> setPaymentMethod(String rideId, String methodId) async {
+    final ok = await _firestore.setPaymentMethod(rideId, methodId);
+    if (ok && _currentRide?.id == rideId) {
+      _currentRide = _currentRide?.copyWith(paymentMethod: methodId);
+      notifyListeners();
+    }
+    return ok;
+  }
+
+  /// Asks the backend to record that the driver received cash.
+  Future<String?> confirmCashPayment(String rideId) async {
+    final error = await _firestore.confirmCashPayment(rideId);
+    if (error == null && _currentRide?.id == rideId) {
+      _currentRide = _currentRide?.copyWith(paymentStatus: 'paid');
+      notifyListeners();
+    }
+    return error;
+  }
+
+  /// Restores an in-flight ride after a relaunch.
+  ///
+  /// Returns true when a live ride was found and is now being tracked.
+  Future<bool> resumeActiveRide(String userId, {bool asDriver = false}) async {
+    final ride = await _firestore.findActiveRide(userId: userId, asDriver: asDriver);
+    if (ride == null) return false;
+
+    _subscribeToRide(ride.id, asDriverId: asDriver ? userId : null);
+    return true;
+  }
+
+  /// Starts listening for open ride requests (driver cockpit).
+  void watchAvailableRides() {
+    _availableSub ??= _firestore.streamAvailableRides().listen(
+      (rides) {
+        _availableRides = rides;
+        notifyListeners();
+      },
+      onError: (Object e) => debugPrint('[RideProvider] available rides error: $e'),
+    );
+  }
+
+  /// Stops listening for open requests, e.g. when the driver goes offline.
+  void stopWatchingAvailableRides() {
+    _availableSub?.cancel();
+    _availableSub = null;
+    _availableRides = [];
     notifyListeners();
   }
 
-  /// Driver submits an inDrive-style counter offer.
+  /// Attaches to the live ride + offer streams. Server truth drives the UI.
+  void _subscribeToRide(String rideId, {String? asDriverId}) {
+    _rideSub?.cancel();
+    _offersSub?.cancel();
+
+    _sosSub?.cancel();
+    _activeSos = null;
+    _sosSub = _safetyEvents.streamEventsForRide(rideId).listen(
+      (events) {
+        // Newest first; an unresolved SOS of any type is worth surfacing.
+        final open = events.where((e) => e.resolvedAt == null).toList();
+        final next = open.isEmpty ? null : open.first;
+        if (next?.id == _activeSos?.id && next?.resolvedAt == _activeSos?.resolvedAt) {
+          return;
+        }
+        _activeSos = next;
+        notifyListeners();
+      },
+      onError: (Object e) => debugPrint('[RideProvider] safety events error: $e'),
+    );
+
+    _rideSub = _firestore.streamRide(rideId).listen(
+      (ride) {
+        if (ride == null) return;
+
+        // A bidding driver must not adopt a trip another driver won.
+        final assigned = ride.driverId;
+        if (asDriverId != null && assigned != null && assigned != asDriverId) {
+          if (_currentRide?.id == ride.id) _currentRide = null;
+          _availableRides = _availableRides.where((r) => r.id != ride.id).toList();
+          _rideSub?.cancel();
+          _rideSub = null;
+          notifyListeners();
+          return;
+        }
+
+        _currentRide = ride;
+
+        if (ride.status == RideStatus.completed ||
+            ride.status == RideStatus.cancelled) {
+          _activeOffers = [];
+          if (!_rideHistory.any((r) => r.id == ride.id)) {
+            _rideHistory = [ride, ..._rideHistory];
+          }
+        }
+        notifyListeners();
+      },
+      onError: (Object e) => debugPrint('[RideProvider] ride stream error: $e'),
+    );
+
+    _offersSub = _firestore.streamOffersForRide(rideId).listen(
+      (offers) {
+        _activeOffers = offers;
+        notifyListeners();
+      },
+      onError: (Object e) => debugPrint('[RideProvider] offers stream error: $e'),
+    );
+  }
+
+  /// Driver submits an inDrive-style counter offer. Persisted server-side.
   void submitDriverCounterOffer({
     required String rideId,
     required DriverProfile driver,
+    required String driverName,
     required double counterFare,
   }) {
     final offer = _rideService.createDriverCounterOffer(
       rideId: rideId,
       driver: driver,
+      driverName: driverName,
       counterFare: counterFare,
     );
-    _activeOffers = [..._activeOffers, offer];
-    notifyListeners();
+
+    // Track the ride so the driver sees the rider's decision, and so a trip won
+    // by someone else is dropped rather than shown as theirs.
+    _subscribeToRide(rideId, asDriverId: driver.userId);
+
+    unawaited(
+      _firestore.submitOffer(offer).catchError((Object e) {
+        debugPrint('[RideProvider.submitDriverCounterOffer] failed: $e');
+        _setError('We could not send your offer. Please try again.');
+      }),
+    );
   }
 
-  /// Rider accepts a specific driver offer.
+  /// Rider accepts a driver's offer. Trip state advances via the ride stream.
   void acceptOffer(String offerId) {
-    if (_currentRide == null) return;
-    final offer = _activeOffers.firstWhere((o) => o.id == offerId);
+    if (_isAcceptingOffer) return;
+    final ride = _currentRide;
+    if (ride == null) return;
 
-    _currentRide = _rideService.acceptOffer(_currentRide!, offer);
-    _activeOffers = [];
+    RideOffer? offer;
+    for (final o in _activeOffers) {
+      if (o.id == offerId) {
+        offer = o;
+        break;
+      }
+    }
+    if (offer == null) {
+      _setError('That offer is no longer available.');
+      return;
+    }
+
+    // Accepting is not idempotent: a second tap would fire a second accept
+    // against the same trip. Hold the action until the first one settles.
+    _isAcceptingOffer = true;
     notifyListeners();
+    unawaited(_acceptOffer(ride.id, offer));
+  }
+
+  Future<void> _acceptOffer(String rideId, RideOffer offer) async {
+    try {
+      await _firestore.acceptOffer(rideId, offer);
+    } catch (e) {
+      debugPrint('[RideProvider.acceptOffer] failed: $e');
+      _setError('We could not accept that offer. Please try again.');
+    } finally {
+      _isAcceptingOffer = false;
+      notifyListeners();
+    }
   }
 
   /// Driver signals arrival at pickup.
   void driverArrived() {
-    if (_currentRide == null) return;
-    _currentRide = _rideService.markDriverArrived(_currentRide!);
-    notifyListeners();
+    final ride = _currentRide;
+    if (ride == null) return;
+    unawaited(
+      _firestore.markDriverArrived(ride.id).catchError((Object e) {
+        debugPrint('[RideProvider.driverArrived] failed: $e');
+      }),
+    );
   }
 
-  /// Verifies 4-digit PIN to begin trip. Returns true if valid, false if invalid.
-  bool startTripWithPin(String enteredPin) {
-    if (_currentRide == null) return false;
-    final updated = _rideService.verifyPinAndStartTrip(_currentRide!, enteredPin);
-    if (updated == null) return false;
+  /// Verifies the 4-digit PIN server-side to begin the trip.
+  Future<bool> startTripWithPin(String enteredPin) async {
+    final ride = _currentRide;
+    if (ride == null) return false;
 
-    _currentRide = updated;
-    notifyListeners();
-    return true;
+    final ok = await _firestore.verifyPinAndStartTrip(ride.id, enteredPin);
+    if (!ok) _lastError = 'That verification PIN is incorrect.';
+    return ok;
   }
 
-  /// Completes trip, moves it to ride history, and clears active ride.
-  RideModel? completeTrip() {
-    if (_currentRide == null) return null;
-    final completed = _rideService.completeTrip(_currentRide!);
-
-    _rideHistory = [completed, ..._rideHistory];
-    _currentRide = null;
-    _activeOffers = [];
-    notifyListeners();
-    return completed;
+  /// Completes the trip. Settlement is handled by the payment flow, so this
+  /// never marks the ride as paid.
+  Future<RideModel?> completeTrip() async {
+    final ride = _currentRide;
+    if (ride == null) return null;
+    await _firestore.completeTrip(ride.id);
+    return ride;
   }
 
-  /// Cancels active ride.
+  /// Cancels the active ride.
   void cancelRide(String reason) {
-    if (_currentRide == null) return;
-    final cancelled = _rideService.cancelRide(_currentRide!, reason);
+    final ride = _currentRide;
+    if (ride == null) return;
+    unawaited(
+      _firestore.cancelRide(ride.id, reason).catchError((Object e) {
+        debugPrint('[RideProvider.cancelRide] failed: $e');
+        _setError('We could not cancel the ride. Please try again.');
+      }),
+    );
+  }
 
-    _rideHistory = [cancelled, ..._rideHistory];
-    _currentRide = null;
-    _activeOffers = [];
+  /// Loads the first page of persisted ride history for [riderId].
+  ///
+  /// History previously existed only for the current session — closing the app
+  /// lost it, and the ride log showed nothing for a returning user.
+  Future<void> loadRideHistory(String riderId) async {
+    if (_isLoadingHistory) return;
+
+    _isLoadingHistory = true;
+    _historyError = null;
+    notifyListeners();
+
+    final page = await _firestore.fetchRideHistoryPage(riderId: riderId);
+
+    _rideHistory = page.rides;
+    _historyCursor = page.lastDocument;
+    _hasMoreHistory = page.hasMore;
+    _historyError = page.error;
+    _isLoadingHistory = false;
+    notifyListeners();
+  }
+
+  /// Appends the next page of ride history, if there is one.
+  Future<void> loadMoreHistory(String riderId) async {
+    final cursor = _historyCursor;
+    if (_isLoadingHistory || !_hasMoreHistory || cursor == null) return;
+
+    _isLoadingHistory = true;
+    notifyListeners();
+
+    final page = await _firestore.fetchRideHistoryPage(
+      riderId: riderId,
+      startAfter: cursor,
+    );
+
+    // A ride completed mid-session may already be present.
+    final known = _rideHistory.map((r) => r.id).toSet();
+    _rideHistory = [
+      ..._rideHistory,
+      ...page.rides.where((r) => !known.contains(r.id)),
+    ];
+    _historyCursor = page.lastDocument;
+    _hasMoreHistory = page.hasMore;
+    _historyError = page.error;
+    _isLoadingHistory = false;
     notifyListeners();
   }
 
@@ -126,5 +449,14 @@ class RideProvider extends ChangeNotifier {
     if (_currentRide == null) return;
     _currentRide = _currentRide!.copyWith(shareToken: token);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _rideSub?.cancel();
+    _offersSub?.cancel();
+    _availableSub?.cancel();
+    _sosSub?.cancel();
+    super.dispose();
   }
 }

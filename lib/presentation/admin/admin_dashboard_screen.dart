@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
+import '../../domain/models/ride_status.dart';
 import '../../providers/admin_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/ride_provider.dart';
-import '../../providers/safety_provider.dart';
+import '../common/confirm_action.dart';
 import '../common/glass_container.dart';
+import '../common/skeleton.dart';
 import '../common/staggered_animation.dart';
 import '../view_models/admin_view_model.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -22,11 +25,34 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   late final AdminViewModel _viewModel;
+  bool _adminDataRequested = false;
 
   @override
   void initState() {
     super.initState();
     _viewModel = AdminViewModel();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_adminDataRequested) return;
+    _adminDataRequested = true;
+
+    // Pull real platform metrics and the live verification queue. The dashboard
+    // previously showed only locally-computed figures from this session.
+    //
+    // Deferred to after the frame: loadStats() notifies listeners immediately
+    // (to show its loading state), which is illegal during the build phase.
+    final adminProv = CustomChangeNotifierProvider.of<AdminProvider>(context);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      adminProv.watchPendingDrivers();
+      adminProv.loadStats();
+      adminProv.loadPlatformRides();
+      // The ride log previously showed only rides completed in this session.
+    });
   }
 
   @override
@@ -38,10 +64,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final layout = ResponsiveLayoutHelper(context);
+    final c = AppColors.of(context);
     final adminProv = CustomChangeNotifierProvider.of<AdminProvider>(context);
     final rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     final driverProv = CustomChangeNotifierProvider.of<DriverProvider>(context);
-    final safetyProv = CustomChangeNotifierProvider.of<SafetyProvider>(context);
 
     final kpis = adminProv.getKpis(
       rideHistory: rideProv.rideHistory,
@@ -55,7 +81,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       listenable: _viewModel,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: const Color(0xFFF1F5F9),
+          backgroundColor: c.canvas,
           body: SingleChildScrollView(
             padding: EdgeInsets.all(layout.horizontalPadding),
             child: Column(
@@ -70,7 +96,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       style: TextStyle(
                         fontSize: layout.fontSize(18),
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0F172A),
+                        color: c.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -109,6 +135,38 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
                 SizedBox(height: layout.scale(16)),
 
+                // Metrics loading / failure surface. Previously the grid
+                // rendered zeros with no indication that data had failed to load.
+                if (adminProv.isLoadingStats && !adminProv.hasServerStats)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 12),
+                    child: SkeletonCard(lines: 2),
+                  )
+                else if (adminProv.statsError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: GlassContainer(
+                      borderRadius: 14,
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.cloud_off, color: c.danger, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              adminProv.statsError!,
+                              style: TextStyle(color: c.textPrimary, fontSize: 12.5),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: adminProv.loadStats,
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
                 // Top KPI Cards Grid
                 LayoutBuilder(
                   builder: (context, constraints) {
@@ -142,9 +200,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                         _buildKpiCard(
                           layout: layout,
+                          // Now a genuine platform aggregate from
+                          // getDashboardStats (it previously reported this
+                          // device's own session as if it were the fleet).
                           title: 'Active Fleet Online',
-                          value: driverProv.isOnline ? '1 Online' : '0 Online',
-                          subtitle: 'RTDB broadcasting drivers',
+                          value: '${kpis.activeDrivers}',
+                          subtitle: adminProv.hasServerStats
+                              ? 'Verified drivers online now'
+                              : 'Connect to load live fleet',
                           icon: Icons.directions_car,
                           iconColor: AppTheme.accentCyan,
                           width: cardWidth,
@@ -152,10 +215,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         _buildKpiCard(
                           layout: layout,
                           title: 'Safety Alerts (SOS)',
-                          value: '${safetyProv.safetyEvents.length}',
-                          subtitle: 'Unresolved safety flags',
+                          // A platform-wide figure from getDashboardStats. This
+                          // read a local list that only ever held alerts raised
+                          // on this admin's own device, so it showed 0 while a
+                          // rider could be in an active emergency.
+                          value: kpis.unresolvedSafetyEvents == null
+                              ? '—'
+                              : '${kpis.unresolvedSafetyEvents}',
+                          subtitle: kpis.unresolvedSafetyEvents == null
+                              ? 'Connect to load alerts'
+                              : (kpis.unresolvedSafetyEvents == 0
+                                  ? 'No open alerts'
+                                  : 'Open alerts — act now'),
                           icon: Icons.warning_amber_rounded,
-                          iconColor: safetyProv.safetyEvents.isNotEmpty ? AppTheme.sunsetCoral : Colors.grey,
+                          iconColor: (kpis.unresolvedSafetyEvents ?? 0) > 0
+                              ? AppTheme.sunsetCoral
+                              : Colors.grey,
                           width: cardWidth,
                         ),
                       ],
@@ -210,7 +285,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                              borderSide: BorderSide(color: c.border),
                             ),
                           ),
                         ),
@@ -254,23 +329,67 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ],
                       ),
                       const SizedBox(height: 14),
-                      if (rideProv.rideHistory.isEmpty && rideProv.currentRide == null)
+                      if (adminProv.platformRides.isEmpty &&
+                          !adminProv.isLoadingRides &&
+                          adminProv.ridesError != null)
                         Container(
                           padding: const EdgeInsets.all(20),
                           alignment: Alignment.center,
-                          child: const Text('No rides recorded yet. Switch to Rider mode to test requesting a ride.'),
+                          child: Column(
+                            children: [
+                              Icon(Icons.cloud_off, color: c.danger, size: 22),
+                              const SizedBox(height: 8),
+                              Text(
+                                adminProv.ridesError!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 12.5, color: c.textMuted),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton(
+                                onPressed: () => adminProv.loadPlatformRides(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (adminProv.platformRides.isEmpty && !adminProv.isLoadingRides)
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          alignment: Alignment.center,
+                          child: Text(
+                            'No rides on the platform yet.',
+                            style: TextStyle(fontSize: 12.5, color: c.textMuted),
+                          ),
                         )
                       else ...[
-                        if (rideProv.currentRide != null)
-                          _buildRideLogTile(layout, rideProv.currentRide!, isActive: true, index: 0),
-                        ...rideProv.rideHistory.asMap().entries.map(
-                              (e) => _buildRideLogTile(layout, e.value, isActive: false, index: e.key + 1),
+                        ...adminProv.platformRides.asMap().entries.map(
+                              (e) => _buildRideLogTile(
+                                layout,
+                                e.value,
+                                // Still in flight, as reported by the server.
+                                isActive: e.value.status != RideStatus.completed &&
+                                    e.value.status != RideStatus.cancelled,
+                                index: e.key,
+                              ),
                             ),
-                      ],
+                        if (adminProv.isLoadingRides)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: SkeletonCard(lines: 1),
+                          )
+                        else
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: OutlinedButton(
+                              onPressed: () => adminProv.loadPlatformRides(),
+                              child: const Text('Refresh'),
+                            ),
+                          ),
                     ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+            ],
             ),
           ),
         );
@@ -288,6 +407,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required double width,
     int index = 0,
   }) {
+    final c = AppColors.of(layout.context);
     return StaggeredEntryWidget(
       index: index,
       child: GlassContainer(
@@ -322,7 +442,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: layout.fontSize(18), fontWeight: FontWeight.w800, color: const Color(0xFF0F172A))),
+            Text(value, style: TextStyle(fontSize: layout.fontSize(18), fontWeight: FontWeight.w800, color: c.textPrimary)),
             const SizedBox(height: 4),
             Text(subtitle, style: TextStyle(fontSize: layout.fontSize(10), color: Colors.grey.shade500), maxLines: 1, overflow: TextOverflow.ellipsis),
           ],
@@ -337,15 +457,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     AdminProvider adminProv,
     int index,
   ) {
+    final c = AppColors.of(layout.context);
     return StaggeredEntryWidget(
       index: index,
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         padding: EdgeInsets.all(layout.scale(12)),
         decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
+          color: c.canvas,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: c.border),
           boxShadow: AppTheme.subtleElevation,
         ),
         child: Column(
@@ -385,14 +506,41 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 SizedBox(
                   height: layout.touchTarget(38),
                   child: OutlinedButton(
-                    onPressed: () => _viewModel.processDriverVerification(
-                      adminProv: adminProv,
-                      driverId: driver.userId,
-                      approve: false,
-                    ),
+                    // Rejecting an application is irreversible from this
+                    // screen, so it is confirmed rather than fired on one tap.
+                    onPressed: () async {
+                      final confirmed = await confirmAction(
+                        layout.context,
+                        title: 'Reject this application?',
+                        message:
+                            'This applicant will not be able to accept trips on SwiftRide.',
+                        confirmLabel: 'Reject',
+                        cancelLabel: 'Back',
+                        destructive: true,
+                        icon: Icons.gpp_bad_outlined,
+                      );
+                      if (!confirmed) return;
+
+                      final ok = await _viewModel.processDriverVerification(
+                        adminProv: adminProv,
+                        driverId: driver.userId,
+                        approve: false,
+                      );
+                      if (!layout.context.mounted) return;
+                      ScaffoldMessenger.of(layout.context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            ok
+                                ? 'Application rejected.'
+                                : 'We could not reject that application. Please try again.',
+                          ),
+                          backgroundColor: ok ? AppTheme.slateMuted : AppTheme.sunsetCoral,
+                        ),
+                      );
+                    },
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.sunsetCoral,
-                      side: const BorderSide(color: Color(0xFFFECDD3)),
+                      side: BorderSide(color: c.danger.withValues(alpha: 0.3)),
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                     ),
                     child: const Text('Reject Application', style: TextStyle(fontSize: 12)),
@@ -405,11 +553,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       backgroundColor: AppTheme.emeraldGreen,
                       padding: const EdgeInsets.symmetric(horizontal: 14),
                     ),
-                    onPressed: () => _viewModel.processDriverVerification(
-                      adminProv: adminProv,
-                      driverId: driver.userId,
-                      approve: true,
-                    ),
+                    onPressed: () async {
+                      final ok = await _viewModel.processDriverVerification(
+                        adminProv: adminProv,
+                        driverId: driver.userId,
+                        approve: true,
+                      );
+                      if (!layout.context.mounted) return;
+                      ScaffoldMessenger.of(layout.context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            ok
+                                ? 'Driver approved.'
+                                : 'We could not approve that driver. Please try again.',
+                          ),
+                          backgroundColor: ok ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+                        ),
+                      );
+                    },
                     child: const Text('Approve License', style: TextStyle(fontSize: 12)),
                   ),
                 ),
@@ -427,6 +588,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     required bool isActive,
     int index = 0,
   }) {
+    final c = AppColors.of(layout.context);
     return StaggeredEntryWidget(
       index: index,
       child: Container(
@@ -435,7 +597,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         decoration: BoxDecoration(
           color: isActive ? AppTheme.primaryBlue.withValues(alpha: 0.04) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: isActive ? AppTheme.primaryBlue.withValues(alpha: 0.3) : const Color(0xFFE2E8F0)),
+          border: Border.all(color: isActive ? AppTheme.primaryBlue.withValues(alpha: 0.3) : c.border),
           boxShadow: isActive ? AppTheme.glowShadow(AppTheme.primaryBlue, opacity: 0.1, blur: 8) : AppTheme.subtleElevation,
         ),
         child: Row(
@@ -487,7 +649,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             Text(
               CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare),
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: layout.fontSize(14), color: const Color(0xFF0F172A)),
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: layout.fontSize(14), color: c.textPrimary),
             ),
           ],
         ),

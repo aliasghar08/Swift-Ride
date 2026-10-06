@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/design_tokens.dart';
+import '../common/confirm_action.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
@@ -9,6 +11,8 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../services/ride_service.dart';
+import '../../services/firestore/firestore_user_service.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
@@ -26,6 +30,18 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   late final DriverViewModel _viewModel;
+  final RideService _rideService = RideService();
+
+  LocationProvider? _locProv;
+  RideProvider? _rideProv;
+  DateTime _lastTelemetryPublish = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Phone number for the rider on the active trip, resolved from their profile.
+  String? _riderPhone;
+  String? _riderPhoneForRiderId;
+
+  /// Native GPS arrives far more often than we need to write, so throttle.
+  static const Duration _telemetryInterval = Duration(seconds: 5);
 
   @override
   void initState() {
@@ -34,7 +50,58 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
+    final ride = CustomChangeNotifierProvider.of<RideProvider>(context);
+    if (identical(loc, _locProv) && identical(ride, _rideProv)) return;
+
+    _locProv?.onLocationUpdate = null;
+    _locProv = loc;
+    _rideProv = ride;
+    loc.onLocationUpdate = _publishTelemetry;
+
+    // Drivers must see incoming requests: this stream had no subscriber, so a
+    // rider's request never reached anyone.
+    ride.watchAvailableRides();
+  }
+
+  /// Sends the driver's real position to the backend while a trip is active, so
+  /// the rider's car marker reflects the actual vehicle instead of the rider's
+  /// own GPS.
+  void _publishTelemetry(double latitude, double longitude, double heading) {
+    final activeRide = _rideProv?.activeRide;
+    if (activeRide == null) return;
+
+    final now = DateTime.now();
+    if (now.difference(_lastTelemetryPublish) < _telemetryInterval) return;
+    _lastTelemetryPublish = now;
+
+    _rideService.publishDriverLocation(
+      latitude: latitude,
+      longitude: longitude,
+      heading: heading,
+      activeRideId: activeRide.id,
+    );
+  }
+
+  /// Loads (once per rider) the phone number to dial for the active trip.
+  void _ensureRiderPhone(String? riderId) {
+    if (riderId == null || riderId == _riderPhoneForRiderId) return;
+    _riderPhoneForRiderId = riderId;
+    _riderPhone = null;
+
+    FirestoreUserService().getUser(riderId).then((user) {
+      if (!mounted || _riderPhoneForRiderId != riderId) return;
+      setState(() => _riderPhone = user?.phone);
+    }).catchError((Object e) {
+      debugPrint('[DriverHome] rider phone lookup failed: $e');
+    });
+  }
+
+  @override
   void dispose() {
+    _locProv?.onLocationUpdate = null;
     _viewModel.dispose();
     super.dispose();
   }
@@ -42,6 +109,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final layout = ResponsiveLayoutHelper(context);
+    final c = AppColors.of(context);
     final driverProv = CustomChangeNotifierProvider.of<DriverProvider>(context);
     final rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     final locProv = CustomChangeNotifierProvider.of<LocationProvider>(context);
@@ -49,17 +117,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final currentRide = rideProv.currentRide;
     final driver = driverProv.driverProfile;
 
+    // Resolve the rider's real phone number for the Call Rider action. The
+    // button used to dial a hardcoded +92 300 1234567 belonging to nobody.
+    _ensureRiderPhone(currentRide?.riderId);
+
     return ListenableBuilder(
       listenable: _viewModel,
       builder: (context, _) {
         return Scaffold(
-          backgroundColor: const Color(0xFF0B0F19),
+          backgroundColor: c.canvas,
           body: Stack(
             children: [
               // 1. Dark Mode Real Google Maps View
               GoogleMapView(
                 initialCenter: LatLng(locProv.latitude, locProv.longitude),
                 initialZoom: 15,
+                semanticsLabel: currentRide == null
+                    ? 'Map of your area. You are online and awaiting requests.'
+                    : 'Navigation map. Trip status: ${currentRide.status.displayName}.',
                 mode: MapMode.navigation,
                 darkMode: true,
                 showTraffic: true,
@@ -74,27 +149,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     MapMarkers.dropoff(LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude)),
                   ],
                 },
-                circles: {
-                  // Heat map overlay of high-demand surge zones
-                  Circle(
-                    circleId: const CircleId('surge_zone_downtown'),
-                    center: LatLng(locProv.latitude + 0.008, locProv.longitude + 0.006),
-                    radius: 750,
-                    fillColor: Colors.orange.withValues(alpha: 0.18),
-                    strokeColor: Colors.orangeAccent.withValues(alpha: 0.6),
-                    strokeWidth: 2,
-                  ),
-                  Circle(
-                    circleId: const CircleId('surge_zone_airport'),
-                    center: LatLng(locProv.latitude - 0.012, locProv.longitude - 0.009),
-                    radius: 1200,
-                    fillColor: Colors.purple.withValues(alpha: 0.14),
-                    strokeColor: Colors.purpleAccent.withValues(alpha: 0.5),
-                    strokeWidth: 2,
-                  ),
-                },
+                // No surge overlay: this used to draw "high-demand surge zones"
+                // as circles anchored to the driver's own position, which was
+                // pure decoration presented as demand data. Real surge needs a
+                // backend demand aggregation; until that exists we draw nothing
+                // rather than imply where the money is.
                 polylines: {
-                  if (currentRide != null)
+                  if (currentRide != null) ...[
+                    Polyline(
+                      polylineId: const PolylineId('driver_route_casing'),
+                      points: [
+                        LatLng(locProv.latitude, locProv.longitude),
+                        LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
+                        LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
+                      ],
+                      color: AppTheme.primaryNavy,
+                      width: 9,
+                    ),
                     Polyline(
                       polylineId: const PolylineId('driver_route'),
                       points: [
@@ -102,11 +173,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
                         LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
                       ],
-                      color: Colors.amberAccent,
+                      color: AppTheme.amberWarning,
                       width: 5,
                     ),
+                  ],
                 },
               ),
+
+              // 1b. Active emergency alert on this trip.
+              //
+              // The backend writes safety_events and pushes to the counterparty,
+              // but nothing subscribed: a driver got a notification with no
+              // in-app surface and no way to act on it.
+              if (rideProv.activeSos != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: SafeArea(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: layout.horizontalPadding,
+                        vertical: layout.scale(8),
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
+                        child: _buildSosBanner(layout, rideProv, locProv),
+                      ),
+                    ),
+                  ),
+                ),
 
               // 2. Top Header Bar: Online Switch & Live RTDB Broadcaster
               SafeArea(
@@ -170,11 +266,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               Switch(
                                 value: driverProv.isOnline,
                                 activeThumbColor: AppTheme.accentCyan,
-                                onChanged: (val) => _viewModel.toggleOnline(
-                                  driverProv: driverProv,
-                                  locProv: locProv,
-                                  online: val,
-                                ),
+                                onChanged: (val) async {
+                                  final error = await _viewModel.toggleOnline(
+                                    driverProv: driverProv,
+                                    locProv: locProv,
+                                    online: val,
+                                  );
+                                  if (error != null && context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(error),
+                                        backgroundColor: AppTheme.sunsetCoral,
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
                               const SizedBox(width: 8),
                               InkWell(
@@ -234,7 +340,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
                       ),
                       child: currentRide == null
-                          ? _buildWaitingOrEarningsCard(layout, driver, driverProv)
+                          ? _buildWaitingOrEarningsCard(layout, driver, driverProv, rideProv, authProv)
                           : _buildActiveDriverRideCard(layout, currentRide, rideProv, driverProv, authProv),
                     ),
                   ),
@@ -259,11 +365,148 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  /// Unmissable banner shown while the rider has an unresolved emergency alert.
+  Widget _buildSosBanner(
+    ResponsiveLayoutHelper layout,
+    RideProvider rideProv,
+    LocationProvider locProv,
+  ) {
+    final sos = rideProv.activeSos!;
+    final age = DateTime.now().difference(sos.createdAt);
+    final ageLabel = age.inMinutes < 1 ? 'just now' : '${age.inMinutes} min ago';
+
+    return Semantics(
+      liveRegion: true,
+      label: 'Emergency alert active. The rider triggered SOS $ageLabel.',
+      child: Container(
+        padding: EdgeInsets.all(layout.scale(14)),
+        decoration: BoxDecoration(
+          color: AppTheme.sunsetCoral,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: AppTheme.glowShadow(AppTheme.sunsetCoral, opacity: 0.5, blur: 18),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.emergency, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'EMERGENCY SOS',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        'The rider raised an alert $ageLabel.',
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: layout.touchTarget(44),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppTheme.sunsetCoral,
+                      ),
+                      icon: const Icon(Icons.phone, size: 16),
+                      label: const Text('Call rider', style: TextStyle(fontSize: 12.5)),
+                      onPressed: _riderPhone == null
+                          ? null
+                          : () => _viewModel.callRider(_riderPhone!),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: SizedBox(
+                    height: layout.touchTarget(44),
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white70),
+                      ),
+                      icon: const Icon(Icons.local_police, size: 16),
+                      label: const Text('Call 15', style: TextStyle(fontSize: 12.5)),
+                      onPressed: () => _viewModel.callEmergencyServices(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: layout.touchTarget(40),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(foregroundColor: Colors.white),
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: const Text(
+                  'Rider is safe — close alert',
+                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                ),
+                onPressed: () => _closeSos(rideProv),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Stands down the open alert after explicit confirmation.
+  ///
+  /// Confirmed rather than one-tap: closing an emergency alert by accident would
+  /// hide a real one. The event is never deleted, so the record survives.
+  Future<void> _closeSos(RideProvider rideProv) async {
+    final confirmed = await confirmAction(
+      context,
+      title: 'Close this alert?',
+      message:
+          'This marks the emergency as resolved for everyone on the trip. Only do '
+          'this if the rider has told you they are safe. The incident is still logged.',
+      confirmLabel: 'Close alert',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+
+    final error = await rideProv.resolveActiveSos(note: 'Closed by driver');
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(error ?? 'Alert closed. Thank you for confirming.'),
+        backgroundColor: error == null ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+      ),
+    );
+  }
+
   Widget _buildWaitingOrEarningsCard(
     ResponsiveLayoutHelper layout,
     DriverProfile driver,
     DriverProvider driverProv,
+    RideProvider rideProv,
+    AuthProvider authProv,
   ) {
+    final requests = driverProv.isOnline ? rideProv.availableRides : const <RideModel>[];
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,6 +519,128 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
         ),
         SizedBox(height: layout.scale(12)),
+
+        // Incoming ride requests. Without this list a rider's request reached
+        // nobody, so no trip could ever be matched.
+        if (driverProv.isOnline) ...[
+          if (requests.isEmpty)
+            Container(
+              padding: EdgeInsets.all(layout.scale(12)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentCyan),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Semantics(
+                      liveRegion: true,
+                      label: 'Waiting for ride requests nearby',
+                      child: Text(
+                        'Waiting for ride requests nearby…',
+                        style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            for (final request in requests)
+              Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: EdgeInsets.all(layout.scale(12)),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentCyan.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppTheme.accentCyan.withValues(alpha: 0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.local_taxi, color: AppTheme.accentCyan, size: 16),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Semantics(
+                            liveRegion: true,
+                            label:
+                                'New ride request for ${CurrencyFormatter.format(request.offeredFare)}',
+                            child: Text(
+                              'New request • ${CurrencyFormatter.format(request.offeredFare)}',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: layout.fontSize(13),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      request.pickup.address.isEmpty
+                          ? '${request.distanceKm.toStringAsFixed(1)} km trip'
+                          : request.pickup.address,
+                      style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(11)),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: layout.touchTarget(44),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                              onPressed: () => _viewModel.submitCounterOffer(
+                                rideProv: rideProv,
+                                driver: driver,
+                                driverName: authProv.currentUser.fullName,
+                                rideId: request.id,
+                                fare: request.offeredFare,
+                              ),
+                              child: Text(
+                                'Match ${CurrencyFormatter.format(request.offeredFare)}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: SizedBox(
+                            height: layout.touchTarget(44),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(foregroundColor: AppTheme.accentCyan),
+                              onPressed: () => _viewModel.submitCounterOffer(
+                                rideProv: rideProv,
+                                driver: driver,
+                                driverName: authProv.currentUser.fullName,
+                                rideId: request.id,
+                                fare: request.offeredFare + 50.0,
+                              ),
+                              child: const Text('Counter +50', style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+          SizedBox(height: layout.scale(12)),
+        ],
+
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -314,45 +679,144 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         ),
         SizedBox(height: layout.scale(14)),
 
-        // Stripe Instant Payout Button (minimum 48px height)
+        // Withdraw earnings to a Pakistani payout rail.
         SizedBox(
           height: layout.touchTarget(48),
           child: ElevatedButton.icon(
-            icon: const Icon(Icons.flash_on, color: Color(0xFF0A1128)),
-            label: Text('Instant Payout (${CurrencyFormatter.format(driver.totalEarnings)})'),
+            icon: const Icon(Icons.account_balance_wallet, color: AppTheme.primaryNavy),
+            label: Text(
+              'Withdraw Earnings (${CurrencyFormatter.format(driverProv.availablePayoutBalance)})',
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.accentCyan,
-              foregroundColor: const Color(0xFF0A1128),
+              foregroundColor: AppTheme.primaryNavy,
             ),
-            onPressed: () async {
-              final result = await _viewModel.requestInstantPayout(driverProv);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Stripe Instant Payout (${result.transactionId}) processed to debit card.',
-                    ),
-                    backgroundColor: AppTheme.emeraldGreen,
-                  ),
-                );
-              }
-            },
+            onPressed: _viewModel.isProcessingPayout ||
+                    driverProv.availablePayoutBalance <= 0
+                ? null
+                : () => _showPayoutSheet(driver, driverProv.availablePayoutBalance),
           ),
         ),
       ],
     );
   }
 
+  /// Lets the driver choose a payout rail and destination, then submits to the
+  /// backend ledger. Nothing is credited locally — the server owns the balance.
+  Future<void> _showPayoutSheet(DriverProfile driver, double availableBalance) async {
+    const rails = <({String id, String label, String hint})>[
+      (id: 'jazzcash', label: 'JazzCash wallet', hint: 'Mobile number, e.g. 03001234567'),
+      (id: 'easypaisa', label: 'Easypaisa wallet', hint: 'Mobile number, e.g. 03451234567'),
+      (id: 'raast', label: 'Raast / bank transfer', hint: 'IBAN, e.g. PK36SCBL0000001123456702'),
+      (id: 'manual', label: 'Manual settlement', hint: 'Account note for our team'),
+    ];
+
+    var selectedRail = rails.first.id;
+    final destinationController = TextEditingController();
+
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final c = AppColors.of(ctx);
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) => Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Withdraw ${CurrencyFormatter.format(availableBalance)}',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: c.textPrimary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your final available balance is confirmed by the server.',
+                  style: TextStyle(fontSize: 12, color: c.textMuted),
+                ),
+                const SizedBox(height: 16),
+                for (final rail in rails)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    onTap: () => setSheetState(() => selectedRail = rail.id),
+                    leading: Icon(
+                      selectedRail == rail.id
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: selectedRail == rail.id ? AppTheme.primaryBlue : c.textMuted,
+                    ),
+                    title: Text(
+                      rail.label,
+                      style: TextStyle(fontSize: 14, color: c.textPrimary),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: destinationController,
+                  decoration: InputDecoration(
+                    labelText: 'Destination',
+                    hintText: rails.firstWhere((r) => r.id == selectedRail).hint,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Request payout'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (confirmed != true) return;
+
+    final destination = destinationController.text.trim();
+    if (destination.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter the wallet number or IBAN to pay out to.'),
+          backgroundColor: AppTheme.sunsetCoral,
+        ),
+      );
+      return;
+    }
+
+    final result = await _viewModel.requestPayout(
+      amount: availableBalance,
+      rail: selectedRail,
+      destination: destination,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.accepted ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+        duration: Duration(seconds: result.accepted ? 4 : 8),
+      ),
+    );
+  }
+
   Widget _buildStatBox(ResponsiveLayoutHelper layout, String label, String value, IconData icon, int index) {
+    final c = AppColors.of(layout.context);
     return Expanded(
       child: StaggeredEntryWidget(
         index: index,
         child: Container(
           padding: EdgeInsets.all(layout.scale(10)),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+            color: c.surfaceRaised.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF1E293B)),
+            border: Border.all(color: c.border),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.2),
@@ -404,9 +868,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 color: AppTheme.accentCyan.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(
-                ride.status.displayName,
-                style: TextStyle(color: AppTheme.accentCyan, fontWeight: FontWeight.w700, fontSize: layout.fontSize(12)),
+              child: Semantics(
+                liveRegion: true,
+                label: 'Trip status: ${ride.status.displayName}',
+                child: Text(
+                  ride.status.displayName,
+                  style: TextStyle(color: AppTheme.accentCyan, fontWeight: FontWeight.w700, fontSize: layout.fontSize(12)),
+                ),
               ),
             ),
             Text(
@@ -447,6 +915,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     onPressed: () => _viewModel.submitCounterOffer(
                       rideProv: rideProv,
                       driver: driverProv.driverProfile,
+                      driverName: authProv.currentUser.fullName,
                       rideId: ride.id,
                       fare: ride.offeredFare,
                     ),
@@ -463,6 +932,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     onPressed: () => _viewModel.submitCounterOffer(
                       rideProv: rideProv,
                       driver: driverProv.driverProfile,
+                      driverName: authProv.currentUser.fullName,
                       rideId: ride.id,
                       fare: ride.offeredFare + 50.0,
                     ),
@@ -480,7 +950,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 child: SizedBox(
                   height: layout.touchTarget(48),
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.near_me, color: Color(0xFF0A1128)),
+                    icon: const Icon(Icons.near_me, color: AppTheme.primaryNavy),
                     label: const Text('Arrived at Pickup'),
                     onPressed: () => _viewModel.signalArrival(rideProv),
                   ),
@@ -496,8 +966,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     foregroundColor: AppTheme.accentCyan,
                   ),
                   icon: const Icon(Icons.phone),
-                  tooltip: 'Call Rider',
-                  onPressed: () => _viewModel.callRider('+92 300 1234567'),
+                  tooltip: _riderPhone == null ? 'Rider phone unavailable' : 'Call Rider',
+                  onPressed: _riderPhone == null
+                      ? null
+                      : () => _viewModel.callRider(_riderPhone!),
                 ),
               ),
               const SizedBox(width: 8),
@@ -565,8 +1037,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       height: layout.touchTarget(48),
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
-                        onPressed: () {
-                          final success = _viewModel.verifyPinAndStartTrip(rideProv);
+                        onPressed: () async {
+                          final success = await _viewModel.verifyPinAndStartTrip(rideProv);
                           if (!success && mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -589,22 +1061,97 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           SizedBox(
             height: layout.touchTarget(48),
             child: ElevatedButton.icon(
-              icon: const Icon(Icons.flag, color: Color(0xFF0A1128)),
+              icon: const Icon(Icons.flag, color: AppTheme.primaryNavy),
               label: const Text('Complete Trip & Settle Fare'),
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
-              onPressed: () {
-                _viewModel.completeActiveTrip(
+              onPressed: () async {
+                await _viewModel.completeActiveTrip(
                   rideProv: rideProv,
                   driverProv: driverProv,
                   authProv: authProv,
                 );
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Trip Completed! Fare settled to your balance at 0% platform fee.'),
+                    // Not "earnings added" — the rider still has to pay.
+                    content: Text('Trip completed. Collect payment from the rider.'),
                     backgroundColor: AppTheme.emeraldGreen,
                   ),
                 );
               },
+            ),
+          ),
+        ] else if (ride.status == RideStatus.completed &&
+            ride.paymentStatus != 'paid') ...[
+          // Cash settlement. Without this the trip stayed unpaid forever: the
+          // rider's "Cash" choice was local-only and nothing ever recorded
+          // receipt. The amount is derived server-side.
+          Container(
+            padding: EdgeInsets.all(layout.scale(12)),
+            decoration: BoxDecoration(
+              color: AppTheme.amberWarning.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.amberWarning.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.payments_outlined, color: AppTheme.amberWarning, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Collect ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} in cash',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: layout.fontSize(13),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: layout.touchTarget(48),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                    onPressed: _viewModel.isConfirmingCash
+                        ? null
+                        : () async {
+                            final error = await _viewModel.confirmCashPayment(
+                              rideProv: rideProv,
+                              rideId: ride.id,
+                            );
+                            if (!mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  error ?? 'Cash payment recorded. Your balance is updated.',
+                                ),
+                                backgroundColor: error == null
+                                    ? AppTheme.emeraldGreen
+                                    : AppTheme.sunsetCoral,
+                              ),
+                            );
+
+                            if (error == null) {
+                              await driverProv.loadForUser(authProv.currentUser.id);
+                            }
+                          },
+                    child: _viewModel.isConfirmingCash
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Confirm cash received'),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

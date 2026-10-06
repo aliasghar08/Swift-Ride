@@ -32,10 +32,36 @@ class DriverProfile {
     this.rating = 4.9,
     this.totalRides = 0,
     this.totalEarnings = 0.0,
-    this.latitude = 33.6844,
-    this.longitude = 73.0479,
+    // 0 means "position unknown" — a real fix is written by the location
+    // channel. This used to default to Islamabad city centre, so an
+    // unlocated driver appeared to be sitting in the capital.
+    this.latitude = 0,
+    this.longitude = 0,
     required this.createdAt,
   });
+
+  /// A profile that claims nothing: real identity, zeroed figures.
+  ///
+  /// Used instead of a fabricated placeholder driver. Callers should hydrate it
+  /// from Firestore via `DriverProvider.loadForUser`.
+  factory DriverProfile.empty({String userId = ''}) => DriverProfile(
+        userId: userId,
+        licenseNumber: '',
+        vehicle: const VehicleInfo(
+          make: '',
+          model: '',
+          year: 0,
+          plate: '',
+          color: '',
+        ),
+        isVerified: false,
+        isOnline: false,
+        subscriptionExpiresAt: DateTime.fromMillisecondsSinceEpoch(0),
+        rating: 0,
+        totalRides: 0,
+        totalEarnings: 0,
+        createdAt: DateTime.now(),
+      );
 
   DriverProfile copyWith({
     String? userId,

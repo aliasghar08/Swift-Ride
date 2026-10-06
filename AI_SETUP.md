@@ -8,7 +8,7 @@ This document provides complete instructions for provisioning, configuring, secu
 
 | Check | Target | Status | Details |
 |---|---|---|---|
-| **Check 1: FlutterFire Configured** | `lib/firebase_options.dart` | ✅ Configured | Linked to Firebase project `swift-ride-5ab75`. Supports Android (`com.dartnexuslab.swiftri`), iOS (`com.dartnexuslab.swiftri`), Web, and macOS. |
+| **Check 1: FlutterFire Configured** | `lib/firebase_options.dart` | ✅ Configured | Linked to Firebase project `swift-ride-5ab75`. Supports Android (`com.dartnexuslab.swiftride`), iOS (`com.dartnexuslab.swiftride`), Web, and macOS. |
 | **Check 2: Native Credentials** | `GoogleService-Info.plist` & `google-services.json` | ✅ Present | iOS Client ID and Android App ID verified with Project Number `113634488038`. |
 | **Check 3: Client SDKs** | `firebase_ai` & `firebase_app_check` in `pubspec.yaml` | ✅ Installed | `firebase_ai: ^4.0.0`, `firebase_core: ^4.15.0`, `firebase_app_check: ^0.4.8`. |
 | **Check 4: Cloud Functions AI** | `functions/src/modules/ai/` | ✅ Deployed | Gen 2 Callables with App Check enforcement (`enforceAppCheck: true`) and Gemini 3.8 Flash. |
@@ -46,7 +46,7 @@ Firebase AI Logic requires **Firebase App Check** enforcement. Client apps make 
 
 ### Android: Google Play Integrity
 1. In the Firebase Console, go to **App Check** > **Apps** tab.
-2. Select your Android app (`com.dartnexuslab.swiftri`).
+2. Select your Android app (`com.dartnexuslab.swiftride`).
 3. Under **Play Integrity**:
    - Link your Google Play Developer Account or upload your SHA-256 app signing certificate fingerprint.
    - Set Token TTL to **1 hour**.
@@ -59,7 +59,7 @@ Firebase AI Logic requires **Firebase App Check** enforcement. Client apps make 
 5. For local Android emulator testing, generate a debug token in your `Logcat` and register it under **App Check** > **Manage debug tokens**.
 
 ### iOS: DeviceCheck & App Attest
-1. In the Firebase Console, select your iOS app (`com.dartnexuslab.swiftri`).
+1. In the Firebase Console, select your iOS app (`com.dartnexuslab.swiftride`).
 2. Under **DeviceCheck**:
    - Upload your Apple Developer Key ID (`.p8` private key file) and Team ID from developer.apple.com.
 3. Under **App Attest**:

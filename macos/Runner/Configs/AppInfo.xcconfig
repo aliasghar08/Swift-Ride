@@ -8,7 +8,7 @@
 PRODUCT_NAME = swiftride
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.swiftride.swiftride
+PRODUCT_BUNDLE_IDENTIFIER = com.dartnexuslab.swiftride
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.swiftride. All rights reserved.

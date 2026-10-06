@@ -1,11 +1,15 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
+import 'trusted_contacts_screen.dart';
 import '../auth/phone_auth_screen.dart';
 
 class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -20,7 +24,11 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final layout = ResponsiveLayoutHelper(context);
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
-    final isDark = auth.activeRole == UserRole.driver;
+    // Derive brightness from the active theme, not from the user's role. Other
+    // widgets in this app read Theme.of(context).brightness, so deriving it from
+    // the role here made the app bar disagree with its own contents.
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
 
     return AppBar(
       backgroundColor: Colors.transparent,
@@ -30,14 +38,10 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Container(
             decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF0F172A).withValues(alpha: 0.88)
-                  : Colors.white.withValues(alpha: 0.85),
+              color: c.mapChrome,
               border: Border(
                 bottom: BorderSide(
-                  color: isDark
-                      ? const Color(0xFF334155).withValues(alpha: 0.5)
-                      : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                  color: c.border.withValues(alpha: isDark ? 0.5 : 0.8),
                   width: 1,
                 ),
               ),
@@ -58,16 +62,27 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: layout.scale(9), vertical: 5),
+              padding: EdgeInsets.symmetric(
+                horizontal: layout.scale(9),
+                vertical: 5,
+              ),
               decoration: BoxDecoration(
                 gradient: AppTheme.brandGradient,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: AppTheme.glowShadow(AppTheme.primaryBlue, opacity: 0.3, blur: 12),
+                boxShadow: AppTheme.glowShadow(
+                  AppTheme.primaryBlue,
+                  opacity: 0.3,
+                  blur: 12,
+                ),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.directions_car, color: Colors.white, size: layout.scale(16)),
+                  Icon(
+                    Icons.directions_car,
+                    color: Colors.white,
+                    size: layout.scale(16),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'SwiftRide',
@@ -92,7 +107,9 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.emeraldGreen.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppTheme.emeraldGreen.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Text(
                   '0% Fee (Year 1)',
@@ -114,9 +131,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
-              color: isDark
-                  ? const Color(0xFF1E293B).withValues(alpha: 0.8)
-                  : const Color(0xFFF1F5F9).withValues(alpha: 0.8),
+              color: c.surfaceRaised.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark
@@ -161,11 +176,11 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
               padding: const EdgeInsets.all(7),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                color: c.surfaceRaised,
                 border: Border.all(
                   color: auth.isAuthenticated
                       ? AppTheme.emeraldGreen
-                      : (isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1)),
+                      : c.border,
                   width: 1.5,
                 ),
               ),
@@ -191,7 +206,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   ) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+      backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -219,9 +234,13 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   children: [
                     CircleAvatar(
                       radius: layout.scale(24),
-                      backgroundColor: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                      backgroundColor: AppTheme.primaryBlue.withValues(
+                        alpha: 0.15,
+                      ),
                       child: Text(
-                        user.fullName.isNotEmpty ? user.fullName[0].toUpperCase() : 'U',
+                        user.fullName.isNotEmpty
+                            ? user.fullName[0].toUpperCase()
+                            : 'U',
                         style: const TextStyle(
                           color: AppTheme.primaryBlue,
                           fontWeight: FontWeight.w800,
@@ -244,7 +263,9 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            user.phone.isNotEmpty ? user.phone : 'Not verified with phone',
+                            user.phone.isNotEmpty
+                                ? user.phone
+                                : 'Not verified with phone',
                             style: TextStyle(
                               fontSize: layout.fontSize(13),
                               color: AppTheme.slateMuted,
@@ -254,14 +275,21 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.star, color: AppTheme.amberWarning, size: 14),
+                          const Icon(
+                            Icons.star,
+                            color: AppTheme.amberWarning,
+                            size: 14,
+                          ),
                           const SizedBox(width: 4),
                           Text(
                             user.rating.toStringAsFixed(1),
@@ -280,24 +308,63 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 const Divider(),
                 const SizedBox(height: 8),
                 ListTile(
-                  leading: const Icon(Icons.phone_iphone, color: AppTheme.primaryBlue),
+                  leading: const Icon(
+                    Icons.phone_iphone,
+                    color: AppTheme.primaryBlue,
+                  ),
                   title: Text(
-                    auth.isAuthenticated ? 'Switch / Re-login Phone' : 'Sign In with Phone (OTP)',
+                    auth.isAuthenticated
+                        ? 'Switch / Re-login Phone'
+                        : 'Sign In with Phone (OTP)',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: const Text('Authenticate using Firebase SMS verification'),
+                  subtitle: const Text(
+                    'Authenticate using Firebase SMS verification',
+                  ),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.pop(ctx);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const PhoneAuthScreen(),
+                      ),
                     );
                   },
                 ),
                 if (auth.isAuthenticated)
                   ListTile(
-                    leading: const Icon(Icons.logout, color: AppTheme.sunsetCoral),
+                    leading: const Icon(
+                      Icons.health_and_safety_outlined,
+                      color: AppTheme.emeraldGreen,
+                    ),
+                    title: const Text(
+                      'Trusted Contacts',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      user.trustedContacts.isEmpty
+                          ? 'Nobody is notified if you trigger SOS'
+                          : '${user.trustedContacts.length} contact'
+                                '${user.trustedContacts.length == 1 ? '' : 's'} notified on SOS',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const TrustedContactsScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                if (auth.isAuthenticated)
+                  ListTile(
+                    leading: const Icon(
+                      Icons.logout,
+                      color: AppTheme.sunsetCoral,
+                    ),
                     title: const Text(
                       'Sign Out',
                       style: TextStyle(
@@ -318,7 +385,6 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 
-
   Widget _buildRoleButton({
     required ResponsiveLayoutHelper layout,
     required String label,
@@ -326,35 +392,64 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: layout.scale(8), vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
-          borderRadius: BorderRadius.circular(9),
-          boxShadow: isSelected
-              ? AppTheme.glowShadow(AppTheme.primaryBlue, opacity: 0.35, blur: 8)
-              : null,
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: layout.scale(13),
-              color: isSelected ? Colors.white : AppTheme.slateMuted,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: layout.fontSize(11),
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : AppTheme.slateMuted,
+    // Semantics.tooltip is used instead of a nested Tooltip widget: the nested
+    // tooltip contributes its own semantics node, which replaced this label and
+    // left the control announced incorrectly.
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: '$label mode',
+      tooltip: 'Switch to $label mode',
+      // The visible word is redundant once the role is announced, and leaving it
+      // in would merge into the label ("Rider mode Rider").
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        // Meets the 48dp minimum touch target (WCAG 2.5.5). The visual pill
+        // stays compact; only the tappable area grows.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: EdgeInsets.symmetric(
+                horizontal: layout.scale(8),
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
+                borderRadius: BorderRadius.circular(9),
+                boxShadow: isSelected
+                    ? AppTheme.glowShadow(
+                        AppTheme.primaryBlue,
+                        opacity: 0.35,
+                        blur: 8,
+                      )
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: layout.scale(13),
+                    color: isSelected ? Colors.white : AppTheme.slateMuted,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: layout.fontSize(11),
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: isSelected ? Colors.white : AppTheme.slateMuted,
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -61,9 +61,12 @@
 		<string>location</string>
 	</array>
 
-	<!-- Google Maps Platform API Key -->
+	<!-- Google Maps Platform API Key
+	     Injected at build time from ios/Flutter/Secrets.xcconfig (git-ignored).
+	     Local dev: copy Secrets.xcconfig.example -> Secrets.xcconfig
+	     CI:        codemagic.yaml injects it from GOOGLE_MAPS_IOS_API_KEY. -->
 	<key>GMSApiKey</key>
-	<string>YOUR_IOS_MAPS_API_KEY_HERE</string>
+	<string>$(GMS_API_KEY)</string>
 
 	<!-- URL Schemes (Deep Linking, Google Auth) -->
 	<key>CFBundleURLTypes</key>
@@ -72,11 +75,11 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.dartnexuslab.swiftri</string>
+			<string>com.dartnexuslab.swiftride</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>swiftride</string>
-				<string>com.dartnexuslab.swiftri</string>
+				<string>com.dartnexuslab.swiftride</string>
 				<string>com.googleusercontent.apps.113634488038-ios-663fb9115aa9197f41d527</string>
 			</array>
 		</dict>

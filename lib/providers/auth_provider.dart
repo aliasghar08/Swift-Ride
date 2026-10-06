@@ -25,17 +25,7 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider({
     AppUser? initialUser,
     UserRole initialRole = UserRole.rider,
-  })  : _currentUser = initialUser ??
-            AppUser(
-              id: 'user_alex_101',
-              fullName: 'Alex Morgan',
-              phone: '+92 300 1234567',
-              email: 'alex.morgan@example.com',
-              role: UserRole.rider,
-              rating: 4.95,
-              totalRides: 42,
-              createdAt: DateTime.now().subtract(const Duration(days: 90)),
-            ),
+  })  : _currentUser = initialUser ?? AppUser.guest(),
         _activeRole = initialRole {
     _loadPersistedRole();
     _initAuthListener();
@@ -146,7 +136,20 @@ class AuthProvider extends ChangeNotifier {
         smsCode: smsCode,
       );
 
-      final uid = credential?.user?.uid ?? 'user_${DateTime.now().millisecondsSinceEpoch}';
+      // Never invent an identity. If Firebase did not return a real user we must
+      // fail closed: a fabricated uid would mint a fake authenticated session
+      // (and, before this fix, did so in release builds too).
+      final uid = credential?.user?.uid ??
+          (kDebugMode ? 'debug_user_${DateTime.now().millisecondsSinceEpoch}' : null);
+      if (uid == null) {
+        _isLoading = false;
+        const msg = 'We could not sign you in. Please request a new code and try again.';
+        _authError = msg;
+        notifyListeners();
+        onError?.call(msg);
+        return false;
+      }
+
       final resolvedRole = role ?? _activeRole;
 
       final updatedUser = await _authService.syncUserProfile(

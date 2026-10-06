@@ -61,8 +61,9 @@ class NativeDeviceService {
       );
       if (res != null) return res;
     } catch (_) {}
+    // Report that the model is unknown rather than inventing a device name.
     return {
-      'model': 'SwiftRide Device',
+      'model': 'Unknown device',
       'os': 'Mobile',
       'version': '1.0.0',
     };

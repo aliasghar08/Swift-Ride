@@ -1,4 +1,4 @@
-package com.dartnexuslab.swiftri
+package com.dartnexuslab.swiftride
 
 import android.Manifest
 import android.app.NotificationChannel
@@ -168,9 +168,34 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         MethodChannel(messenger, safetyChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "triggerEmergencyAlert" -> {
-                    result.success(true)
+                    // Removed: this returned true while doing nothing. Dispatch is
+                    // owned by the triggerSos Cloud Function, and the honest
+                    // failure mode is a loud error rather than a silent success.
+                    result.notImplemented()
                 }
-                "sendEmergencySms" -> result.success(true)
+                "sendEmergencySms" -> {
+                    // Opens the SMS composer prefilled and addressed. The user
+                    // still has to press send, so this reports whether the
+                    // composer opened — not that a message was delivered.
+                    val phone = call.argument<String>("phone")
+                    val text = call.argument<String>("message")
+                    if (phone.isNullOrBlank()) {
+                        result.success(false)
+                    } else {
+                        try {
+                            val uri = Uri.parse("smsto:$phone").buildUpon()
+                                .appendQueryParameter("body", text ?: "")
+                                .build()
+                            startActivity(
+                                Intent(Intent.ACTION_SENDTO, uri)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("sms_unavailable", e.message, null)
+                        }
+                    }
+                }
                 "triggerEmergencyHaptics" -> {
                     val vibrator = getSystemService(VIBRATOR_SERVICE) as? Vibrator
                     if (vibrator != null) {
@@ -283,7 +308,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 }
                 "getDouble" -> {
                     if (key != null && prefs.contains(key)) {
-                        result.success(prefs.getFloat(key, 0f).toDouble())
+                        result.success(readDouble(prefs, key))
                     } else {
                         result.success(null)
                     }
@@ -291,7 +316,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 "setDouble" -> {
                     val value = call.argument<Double>("value")
                     if (key != null && value != null) {
-                        prefs.edit().putFloat(key, value.toFloat()).apply()
+                        // SharedPreferences has no putDouble. Storing toRawBits as a
+                        // Long keeps full 64-bit precision — the previous Float
+                        // round-trip silently truncated to ~7 significant digits.
+                        prefs.edit().putLong(key, value.toRawBits()).apply()
                         result.success(true)
                     } else {
                         result.success(false)
@@ -476,17 +504,55 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         }
     }
 
+    /**
+     * Reads a double stored by [setDouble].
+     *
+     * New values are Longs holding the raw 64-bit representation. Values written
+     * by older builds are Floats, so they are still read rather than throwing a
+     * ClassCastException on upgrade.
+     */
+    private fun readDouble(prefs: android.content.SharedPreferences, key: String): Double? {
+        return try {
+            when (val raw = prefs.getAll()[key]) {
+                is Long -> Double.fromBits(raw)
+                is Float -> raw.toDouble()
+                is String -> raw.toDoubleOrNull()
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                "swiftride_alerts",
-                "SwiftRide Alerts",
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = "Critical ride updates and safety alerts"
-            }
             val nm = getSystemService(NotificationManager::class.java)
-            nm?.createNotificationChannel(channel)
+
+            // General ride + safety alerts.
+            nm?.createNotificationChannel(
+                NotificationChannel(
+                    "swiftride_alerts",
+                    "SwiftRide Alerts",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Critical ride updates and safety alerts"
+                }
+            )
+
+            // Emergency SOS channel. This channel is posted to with
+            // channelId "swiftride_emergency" (rider_view_model.dispatchSos).
+            // It MUST exist or Android 8+ silently drops the SOS notification.
+            nm?.createNotificationChannel(
+                NotificationChannel(
+                    "swiftride_emergency",
+                    "Emergency SOS",
+                    NotificationManager.IMPORTANCE_MAX
+                ).apply {
+                    description = "Emergency SOS broadcasts. Do not disable."
+                    enableVibration(true)
+                    setShowBadge(true)
+                }
+            )
         }
     }
 

@@ -1,6 +1,6 @@
 # 🗺️ Google Maps Platform Integration & Setup Guide
 
-This document outlines the complete setup, key provisioning, security restrictions, cost controls, and verification steps for Google Maps integration in **SwiftRide** (`com.dartnexuslab.swiftri`).
+This document outlines the complete setup, key provisioning, security restrictions, cost controls, and verification steps for Google Maps integration in **SwiftRide** (`com.dartnexuslab.swiftride`).
 
 ---
 
@@ -67,13 +67,13 @@ Create **three separate API keys** in [Google Cloud Console > Credentials](https
 ### Key 1: iOS Maps Client Key
 - **Name:** `SwiftRide iOS Maps Key`
 - **Application Restriction:** **iOS apps**
-- **Bundle ID:** `com.dartnexuslab.swiftri`
+- **Bundle ID:** `com.dartnexuslab.swiftride`
 - **API Restrictions:** Restrict to **Maps SDK for iOS** only.
 
 ### Key 2: Android Maps Client Key
 - **Name:** `SwiftRide Android Maps Key`
 - **Application Restriction:** **Android apps**
-- **Package Name:** `com.dartnexuslab.swiftri`
+- **Package Name:** `com.dartnexuslab.swiftride`
 - **SHA-1 Fingerprint:**
   - *Debug Keystore:* Obtain with:
     ```bash
@@ -96,25 +96,68 @@ Create **three separate API keys** in [Google Cloud Console > Credentials](https
 ## 3. Adding Keys to SwiftRide
 
 ### iOS Setup
-Open `ios/Runner/Info.plist` and replace `YOUR_GOOGLE_MAPS_IOS_API_KEY`:
+The iOS key is **never committed**. It is injected into the build from a git-ignored
+xcconfig file and substituted into `Info.plist` as the `$(GMS_API_KEY)` build variable.
+
+`ios/Runner/Info.plist` (already configured — do not put a literal key here):
 ```xml
 <key>GMSApiKey</key>
-<string>AIzaSyYourRealIosKeyHere</string>
+<string>$(GMS_API_KEY)</string>
 ```
-The key is initialized automatically in `ios/Runner/AppDelegate.swift`:
+
+**Local development:**
+```bash
+cd ios/Flutter
+cp Secrets.xcconfig.example Secrets.xcconfig
+# then edit Secrets.xcconfig:
+#   GMS_API_KEY = AIzaSyYourRealIosKeyHere
+```
+
+`Secrets.xcconfig` is included by `ios/Flutter/Debug.xcconfig`,
+`Release.xcconfig`, and `Profile.xcconfig`, so every build configuration picks it up.
+
+**CI (Codemagic):** set `GOOGLE_MAPS_IOS_API_KEY` as an encrypted environment
+variable in the Codemagic UI. The `ios-release` workflow writes
+`ios/Flutter/Secrets.xcconfig` before building and **fails the build** if the
+variable is missing, so a key-less binary can never be shipped.
+
+The key is read and initialized automatically in `ios/Runner/AppDelegate.swift`:
 ```swift
 if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String {
   GMSServices.provideAPIKey(apiKey)
 }
 ```
 
+> [!WARNING]
+> `GMSApiKey` is a custom key name — the Google Maps SDK does **not** read it on its
+> own. Only the `AppDelegate` code above consumes it. If that block is removed, the
+> map renders blank with no error.
+
 ### Android Setup
-Open `android/app/src/main/AndroidManifest.xml` and replace `YOUR_ANDROID_MAPS_API_KEY`:
+The Android key is also **never committed**. It is injected via a Gradle manifest
+placeholder declared in `android/app/build.gradle.kts`:
+
+```kotlin
+val googleMapsApiKey = localProperties.getProperty("GOOGLE_MAPS_ANDROID_API_KEY")
+    ?: System.getenv("GOOGLE_MAPS_ANDROID_API_KEY") ?: ""
+manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
+```
+
+`android/app/src/main/AndroidManifest.xml` (already configured):
 ```xml
 <meta-data
     android:name="com.google.android.geo.API_KEY"
-    android:value="AIzaSyYourRealAndroidKeyHere"/>
+    android:value="${googleMapsApiKey}"/>
 ```
+
+**Local development:** add to `android/local.properties` (git-ignored):
+```properties
+GOOGLE_MAPS_ANDROID_API_KEY=AIzaSyYourRealAndroidKeyHere
+```
+
+**CI (Codemagic):** set `GOOGLE_MAPS_ANDROID_API_KEY` as an encrypted environment
+variable; the `android-release` workflow appends it to `android/local.properties`
+and fails the build if it is absent.
 
 ### Cloud Functions Setup (Secret Manager)
 Store the server key securely using Firebase CLI:

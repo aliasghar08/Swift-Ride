@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Required for APNs. Without this entitlement FirebaseMessaging.getToken()
+	     fails on iOS, so no device token is ever registered and every push —
+	     including emergency SOS — reaches nobody. -->
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

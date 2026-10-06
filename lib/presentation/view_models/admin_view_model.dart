@@ -38,16 +38,16 @@ class AdminViewModel extends ChangeNotifier {
     }).toList();
   }
 
-  void processDriverVerification({
+  /// Sends a verification decision to the backend.
+  ///
+  /// Returns true only when the server confirmed it; the caller must surface a
+  /// failure rather than assuming the application was actioned.
+  Future<bool> processDriverVerification({
     required AdminProvider adminProv,
     required String driverId,
     required bool approve,
-  }) {
-    if (approve) {
-      _deviceService.triggerHaptic('heavy');
-    } else {
-      _deviceService.triggerHaptic('light');
-    }
-    adminProv.verifyDriver(driverId, approve);
+  }) async {
+    await _deviceService.triggerHaptic(approve ? 'heavy' : 'light');
+    return adminProv.verifyDriver(driverId, approve);
   }
 }

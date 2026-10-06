@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/geohash_util.dart';
@@ -55,6 +56,10 @@ class LocationService {
   double _simAngle = 0.0;
   bool _isBroadcasting = false;
 
+  /// Development-only synthetic movement. Opt-in AND hard-gated to debug builds,
+  /// because it publishes invented coordinates that look like real GPS.
+  bool simulateMovementForDemo = false;
+
   Stream<LocationUpdate> get locationStream => _locationStreamController.stream;
   double get currentLat => _currentLat;
   double get currentLng => _currentLng;
@@ -80,13 +85,14 @@ class LocationService {
   /// Checks if location permission is granted natively.
   Future<bool> checkPermission() async {
     final res = await _invokeSafe<bool>(NativeChannelConstants.methodCheckLocationPermissions);
-    return res ?? true;
+    // Fail closed: an unreachable channel means "unknown", never "granted".
+    return res ?? false;
   }
 
   /// Requests location permission natively.
   Future<bool> requestPermission() async {
     final res = await _invokeSafe<bool>(NativeChannelConstants.methodRequestLocationPermissions);
-    return res ?? true;
+    return res ?? false;
   }
 
   /// Acquires real current GPS coordinates directly from native platform channel.
@@ -115,12 +121,14 @@ class LocationService {
           isMock: isMock,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[LocationService] fetchCurrentPosition failed: $e');
+    }
 
-    return const NativeLocationPoint(
-      latitude: AppConstants.defaultLat,
-      longitude: AppConstants.defaultLng,
-    );
+    // Return null rather than the hardcoded city centre. Previously a failed fix
+    // was silently replaced with Islamabad coordinates and published as genuine
+    // GPS. Callers must now handle "no fix" explicitly.
+    return null;
   }
 
   /// Starts live native GPS updates.
@@ -168,7 +176,12 @@ class LocationService {
     if (_isBroadcasting) return;
     _isBroadcasting = true;
 
+    // Real native GPS is the only source of truth.
     startLiveTracking();
+
+    // Synthetic movement is demo scaffolding. Opt-in AND debug-only, so a
+    // production build can never broadcast invented coordinates.
+    if (!kDebugMode || !simulateMovementForDemo) return;
 
     _broadcastTimer = Timer.periodic(interval, (_) {
       _simAngle += 0.08;

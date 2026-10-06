@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swiftride/domain/models/location_point_model.dart';
-import 'package:swiftride/domain/models/ride_status.dart';
 import 'package:swiftride/domain/models/user_role.dart';
 import 'package:swiftride/providers/admin_provider.dart';
 import 'package:swiftride/providers/auth_provider.dart';
@@ -29,75 +28,83 @@ void main() {
       auth.dispose();
     });
 
-    test('DriverProvider toggles online status and credits trip earnings', () {
+    test('DriverProvider starts with no fabricated earnings and tracks trips', () {
       final driver = DriverProvider();
-      expect(driver.isOnline, true);
 
-      driver.toggleOnline(false);
-      expect(driver.isOnline, false);
+      // Regression guard: this provider used to be seeded with a made-up driver
+      // (plate 7XYZ890, 318 rides, PKR 4,250 earned) that the cockpit displayed
+      // as real takings.
+      expect(driver.isOnline, isFalse);
+      expect(driver.totalEarnings, 0);
+      expect(driver.totalRides, 0);
+      expect(driver.driverProfile.userId, isEmpty);
+      expect(driver.driverProfile.totalEarnings, 0);
 
-      final prevEarnings = driver.totalEarnings;
       driver.creditTripEarnings(30.0);
-      expect(driver.totalEarnings, prevEarnings + 30.0);
-
-      driver.requestInstantPayout();
-      expect(driver.driverProfile.payoutStatus, 'paid_out');
+      expect(driver.totalEarnings, 30.0);
 
       driver.dispose();
     });
 
-    test('RideProvider manages complete bidding and PIN lifecycle', () {
+    test('toggleOnline does not claim success without a backend', () async {
+      final driver = DriverProvider();
+
+      // Going online is persisted through the `toggleOnline` Cloud Function so
+      // the onRideCreated trigger can geohash-query available drivers. With no
+      // backend the switch must report the failure rather than flipping to
+      // "online" while dispatch still cannot see this driver.
+      final error = await driver.toggleOnline(true, latitude: 33.70, longitude: 73.05);
+
+      expect(error, isNotNull);
+      expect(driver.isOnline, isFalse);
+      expect(driver.availabilityError, isNotNull);
+
+      driver.dispose();
+    });
+
+    test('RideProvider never fabricates a ride when the backend is unreachable', () async {
+      // Regression guard. This provider used to invent a ride id and two fake
+      // driver counter-offers entirely in memory, so a rider could "book" a trip
+      // that never existed.
       final rideProv = RideProvider();
-      final driverProv = DriverProvider();
 
       expect(rideProv.currentRide, isNull);
 
-      // Rider requests ride
-      rideProv.requestRide(
-        riderId: 'rider_01',
+      final rideId = await rideProv.requestRide(
         pickup: const LocationPoint(latitude: 37.77, longitude: -122.41, address: 'A'),
         dropoff: const LocationPoint(latitude: 37.78, longitude: -122.40, address: 'B'),
         offeredFare: 12.0,
         distanceKm: 3.5,
         durationMin: 10.0,
-        currentDriver: driverProv.driverProfile,
       );
 
-      expect(rideProv.currentRide, isNotNull);
-      expect(rideProv.activeOffers.length, 2);
-
-      // Driver submits counter-offer
-      rideProv.submitDriverCounterOffer(
-        rideId: rideProv.currentRide!.id,
-        driver: driverProv.driverProfile,
-        counterFare: 14.50,
-      );
-      expect(rideProv.activeOffers.length, 3);
-
-      // Rider accepts offer
-      final chosenOffer = rideProv.activeOffers.first;
-      rideProv.acceptOffer(chosenOffer.id);
-      expect(rideProv.currentRide!.status, RideStatus.accepted);
-
-      // Driver arrives
-      rideProv.driverArrived();
-      expect(rideProv.currentRide!.status, RideStatus.driverArrived);
-
-      // Verify PIN
-      final pin = rideProv.currentRide!.pin;
-      expect(rideProv.startTripWithPin('0000'), isFalse);
-      expect(rideProv.startTripWithPin(pin), isTrue);
-      expect(rideProv.currentRide!.status, RideStatus.inProgress);
-
-      // Complete trip
-      final completed = rideProv.completeTrip();
-      expect(completed, isNotNull);
-      expect(completed!.status, RideStatus.completed);
+      // No Firebase in the test environment: this must fail honestly rather than
+      // producing a synthetic ride.
+      expect(rideId, isNull);
       expect(rideProv.currentRide, isNull);
-      expect(rideProv.rideHistory.length, 1);
+      expect(rideProv.activeOffers, isEmpty);
+      expect(rideProv.rideHistory, isEmpty);
+      expect(rideProv.lastError, isNotNull);
 
       rideProv.dispose();
-      driverProv.dispose();
+    });
+
+    test('RideProvider watches open requests for drivers', () {
+      final rideProv = RideProvider();
+
+      // streamAvailableRides() previously had no subscriber at all, so a rider's
+      // request was never shown to any driver and no trip could be matched.
+      expect(rideProv.availableRides, isEmpty);
+
+      rideProv.watchAvailableRides();
+      rideProv.watchAvailableRides(); // idempotent: must not open a second stream
+
+      expect(rideProv.availableRides, isEmpty);
+
+      rideProv.stopWatchingAvailableRides();
+      expect(rideProv.availableRides, isEmpty);
+
+      rideProv.dispose();
     });
 
     test('LocationProvider updates coordinates and heading', () {
@@ -132,13 +139,18 @@ void main() {
       safety.dispose();
     });
 
-    test('AdminProvider verifies pending driver', () {
+    test('AdminProvider starts with no fabricated applicant queue', () async {
       final admin = AdminProvider();
-      expect(admin.pendingDrivers.isNotEmpty, isTrue);
 
-      final firstId = admin.pendingDrivers.first.userId;
-      admin.verifyDriver(firstId, true);
-      expect(admin.pendingDrivers.any((d) => d.userId == firstId), isFalse);
+      // Regression guard: this provider used to seed a made-up applicant
+      // ("driver_sarah_303", Honda Accord) that an operator could approve or
+      // reject, writing to a driver who did not exist.
+      expect(admin.pendingDrivers, isEmpty);
+
+      // Without a backend the decision must fail closed rather than reporting
+      // success against a driver that was never verified.
+      final ok = await admin.verifyDriver('driver_sarah_303', true);
+      expect(ok, isFalse);
 
       admin.dispose();
     });

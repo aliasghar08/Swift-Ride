@@ -32,10 +32,8 @@ class DriverService {
     );
   }
 
-  /// Triggers instant Stripe Connect payout for driver earnings.
-  DriverProfile requestInstantPayout(DriverProfile profile) {
-    return profile.copyWith(
-      payoutStatus: 'paid_out',
-    );
-  }
+  // NOTE: there is deliberately no local requestInstantPayout here. Marking a
+  // payout as paid without the backend would report money as sent that never
+  // moved. Payouts go through the `requestPayout` Cloud Function, which owns the
+  // ledger and the driver's balance.
 }

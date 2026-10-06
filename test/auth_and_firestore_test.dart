@@ -156,7 +156,12 @@ void main() {
       await rideService.completeTrip('ride_test_pk_101');
       fetched = await rideService.getRide('ride_test_pk_101');
       expect(fetched!.status, equals(RideStatus.completed));
-      expect(fetched.paymentStatus, equals('paid'));
+
+      // Completing a trip must NOT settle payment. Settlement is owned by the
+      // payment flow; marking it paid here recorded money as collected that had
+      // never been charged.
+      expect(fetched.paymentStatus, isNot(equals('paid')));
+      expect(fetched.paymentStatus, equals('pending'));
     });
   });
 

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'native_channel_constants.dart';
 
@@ -5,34 +6,21 @@ import 'native_channel_constants.dart';
 class NativeSafetyService {
   static const MethodChannel _channel = MethodChannel(NativeChannelConstants.safetyChannel);
 
-  /// Dispatches emergency SOS payload to native telemetry broadcast.
-  Future<bool> triggerEmergencyAlert({
-    required String rideId,
-    required double latitude,
-    required double longitude,
-    required String message,
-  }) async {
-    try {
-      final res = await _channel.invokeMethod<bool>(
-        NativeChannelConstants.methodTriggerEmergencyAlert,
-        {
-          'rideId': rideId,
-          'latitude': latitude,
-          'longitude': longitude,
-          'message': message,
-        },
-      );
-      return res ?? true;
-    } catch (_) {
-      return true;
-    }
-  }
-
-  /// Sends background emergency SMS to registered emergency contact via native Telephony API.
+  /// Opens the device's SMS composer, prefilled and addressed.
+  ///
+  /// Returns true only when the composer was actually presented. The user still
+  /// has to press send, so a true result does not mean a message was delivered —
+  /// callers must not describe it that way.
+  ///
+  /// This used to return `true` unconditionally: the native handlers were stubs
+  /// that did nothing, so the app reported an emergency SMS that was never even
+  /// composed.
   Future<bool> sendEmergencySms({
     required String recipientPhone,
     required String messageText,
   }) async {
+    if (recipientPhone.trim().isEmpty) return false;
+
     try {
       final res = await _channel.invokeMethod<bool>(
         NativeChannelConstants.methodSendEmergencySms,
@@ -41,9 +29,10 @@ class NativeSafetyService {
           'message': messageText,
         },
       );
-      return res ?? true;
-    } catch (_) {
-      return true;
+      return res ?? false;
+    } catch (e) {
+      debugPrint('[NativeSafetyService] sendEmergencySms failed: $e');
+      return false;
     }
   }
 

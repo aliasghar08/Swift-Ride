@@ -49,10 +49,16 @@ class ResponsiveLayoutHelper {
     return size * max(0.85, min(1.2, ratio));
   }
 
-  /// Calculates responsive font size.
+  /// Responsive font size for [baseSize] at the 390pt design width.
+  ///
+  /// Returns an *unscaled* size on purpose: Flutter applies the user's OS
+  /// text-scale setting to every `TextStyle.fontSize` automatically. This
+  /// previously divided by that scale (`scaled / textScale`), which cancelled
+  /// the user's accessibility setting outright — a rider who asked for larger
+  /// text got text *smaller* than the design size. Do not reintroduce a
+  /// text-scale factor here or text will be double-scaled.
   double fontSize(double baseSize) {
-    final scaled = scale(baseSize);
-    return max(10.0, scaled / textScale);
+    return max(10.0, scale(baseSize));
   }
 
   /// Ensures minimum 48px touch target height for mobile ergonomics (WCAG compliant).

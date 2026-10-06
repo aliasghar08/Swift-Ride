@@ -24,6 +24,7 @@ dependencies:
   geocoding: ^5.0.0
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
+  firebase_messaging: ^16.7.0
 
 dev_dependencies:
   flutter_test:
@@ -34,3 +35,18 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+
+  # Inter (SIL Open Font License 1.1) — see assets/fonts/LICENSE.txt.
+  # Bundled as static instances so `fontWeight` maps deterministically instead of
+  # relying on synthetic bolding.
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700

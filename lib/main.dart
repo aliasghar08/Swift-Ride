@@ -9,19 +9,39 @@ import 'providers/auth_provider.dart';
 import 'providers/driver_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/ride_provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'providers/safety_provider.dart';
+import 'services/fcm_service.dart';
 import 'ai/ai.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Registered before runApp and outside any try/catch: a message arriving while
+  // the app is terminated is delivered on its own isolate, which needs this
+  // handler to exist from process start.
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  }
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // Offline-first Firestore: keep a local cache so a rider or driver on a
+    // patchy connection still sees their last-known trip state instead of an
+    // empty screen. Not supported on web, where the SDK manages this itself.
+    if (!kIsWeb) {
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: true,
+        cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+      );
+    }
 
     // App Check: Use debug provider in debug/simulator mode, and attestation in release
     if (kDebugMode) {

@@ -14,6 +14,11 @@ class LocationProvider extends ChangeNotifier {
   double _heading = 0.0;
   bool _isBroadcasting = false;
 
+  /// Invoked on every location update. The driver cockpit uses this to publish
+  /// telemetry to the backend while a trip is active, so the rider sees the
+  /// real vehicle rather than their own position.
+  void Function(double latitude, double longitude, double heading)? onLocationUpdate;
+
   LocationProvider({
     LocationService? locationService,
     bool autoStart = true,
@@ -23,6 +28,7 @@ class LocationProvider extends ChangeNotifier {
       _longitude = update.longitude;
       _heading = update.heading;
       notifyListeners();
+      onLocationUpdate?.call(update.latitude, update.longitude, update.heading);
     });
     if (autoStart) {
       startBroadcaster();

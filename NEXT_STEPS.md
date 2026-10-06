@@ -79,8 +79,8 @@ To display live Google Maps tiles with streets, buildings, labels, and traffic o
      - **Places API (New)**
      - **Geocoding API**
    - Create an API key with Application Restriction:
-     - **iOS restriction:** Bundle ID `com.dartnexuslab.swiftri`
-     - **Android restriction:** Package name `com.dartnexuslab.swiftri` + SHA-1 certificate fingerprint
+     - **iOS restriction:** Bundle ID `com.dartnexuslab.swiftride`
+     - **Android restriction:** Package name `com.dartnexuslab.swiftride` + SHA-1 certificate fingerprint
 
 2. **Insert iOS Key (`ios/Runner/Info.plist`)**:
    Open `ios/Runner/Info.plist` and replace `YOUR_IOS_MAPS_API_KEY_HERE`:

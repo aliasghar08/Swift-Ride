@@ -181,8 +181,33 @@ import Network
     // 3. Safety Channel
     safetyChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
-      case "triggerEmergencyAlert", "sendEmergencySms":
-        result(true)
+      case "triggerEmergencyAlert":
+        // Removed: this reported success without doing anything. Dispatch belongs
+        // to the triggerSos Cloud Function.
+        result(FlutterMethodNotImplemented)
+      case "sendEmergencySms":
+        // Opens Messages prefilled and addressed. The user must still confirm, so
+        // true means the composer was presented, not that anything was sent.
+        guard let args = call.arguments as? [String: Any],
+              let phone = args["phone"] as? String,
+              !phone.isEmpty else {
+          result(false)
+          return
+        }
+        let body = (args["message"] as? String) ?? ""
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&?=")
+        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        let encodedPhone = phone.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
+        guard let url = URL(string: "sms:\(encodedPhone)&body=\(encodedBody)") else {
+          result(false)
+          return
+        }
+        DispatchQueue.main.async {
+          UIApplication.shared.open(url, options: [:]) { opened in
+            result(opened)
+          }
+        }
       case "triggerEmergencyHaptics":
         let feedback = UINotificationFeedbackGenerator()
         feedback.notificationOccurred(.error)

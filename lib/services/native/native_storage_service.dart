@@ -30,9 +30,10 @@ class NativeStorageService {
         NativeChannelConstants.methodStorageSetString,
         {'key': key, 'value': value},
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 
@@ -56,9 +57,10 @@ class NativeStorageService {
         NativeChannelConstants.methodStorageSetBool,
         {'key': key, 'value': value},
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 
@@ -82,9 +84,10 @@ class NativeStorageService {
         NativeChannelConstants.methodStorageSetInt,
         {'key': key, 'value': value},
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 
@@ -108,9 +111,10 @@ class NativeStorageService {
         NativeChannelConstants.methodStorageSetDouble,
         {'key': key, 'value': value},
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 
@@ -122,9 +126,10 @@ class NativeStorageService {
         NativeChannelConstants.methodStorageRemove,
         {'key': key},
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 
@@ -135,9 +140,10 @@ class NativeStorageService {
       final res = await _channel.invokeMethod<bool>(
         NativeChannelConstants.methodStorageClear,
       );
-      return res ?? true;
+      return res ?? false;
     } catch (_) {
-      return true;
+      // Not durable: the value is cached in memory for this session only.
+      return false;
     }
   }
 }

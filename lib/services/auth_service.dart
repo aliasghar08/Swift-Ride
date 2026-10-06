@@ -51,8 +51,16 @@ class AuthService {
   }) async {
     final auth = _auth;
     if (auth == null) {
-      // Mock/testing fallback
-      debugPrint('[AuthService] Firebase uninitialized: Simulating OTP send to $phoneNumber');
+      // Firebase is genuinely unavailable. Only a debug build may simulate an OTP;
+      // a release build must fail loudly instead of pretending an SMS was sent.
+      if (!kDebugMode) {
+        const msg =
+            'Sign-in is unavailable right now. Please check your connection and try again.';
+        debugPrint('[AuthService] sendOtp aborted (Firebase unavailable)');
+        onError(msg);
+        return;
+      }
+      debugPrint('[AuthService] Firebase unavailable: simulating OTP (debug build only)');
       await Future.delayed(const Duration(milliseconds: 300));
       onCodeSent('mock_verification_id_${DateTime.now().millisecondsSinceEpoch}', 123456);
       return;

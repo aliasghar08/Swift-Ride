@@ -1,9 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:swiftride/core/utils/geohash_util.dart';
 import 'package:swiftride/core/utils/distance_calculator.dart';
 import 'package:swiftride/core/utils/id_generator.dart';
 import 'package:swiftride/domain/models/driver_profile_model.dart';
-import 'package:swiftride/domain/models/location_point_model.dart';
-import 'package:swiftride/domain/models/ride_status.dart';
 import 'package:swiftride/domain/models/subscription_model.dart';
 import 'package:swiftride/domain/models/vehicle_info_model.dart';
 import 'package:swiftride/services/admin_service.dart';
@@ -50,49 +49,37 @@ void main() {
       locationService.dispose();
     });
 
-    test('RideService calculates suggested fare and creates ride with PIN', () {
-      final pickup = const LocationPoint(latitude: 37.7749, longitude: -122.4194, address: 'Downtown');
-      final dropoff = const LocationPoint(latitude: 37.7850, longitude: -122.4060, address: 'Fidi');
-
-      final ride = rideService.createRideRequest(
-        riderId: 'rider_01',
-        pickup: pickup,
-        dropoff: dropoff,
-        offeredFare: 15.00,
-        distanceKm: 5.0,
-        durationMin: 12.0,
+    test('RideService builds a bid from the signed-in driver, not a placeholder', () {
+      // The lifecycle itself is covered by test/ride_lifecycle_test.dart, which
+      // exercises the real Firestore path. The local simulation that this test
+      // used to drive has been deleted.
+      final offer = rideService.createDriverCounterOffer(
+        rideId: 'ride_1',
+        driver: testDriver,
+        driverName: 'Ayesha Khan',
+        counterFare: 640,
       );
 
-      expect(ride.riderId, 'rider_01');
-      expect(ride.status, RideStatus.requested);
-      expect(ride.pin.length, 4);
-      expect(ride.commissionAmount, 0.0); // 0% commission in year 1
-      expect(ride.suggestedFare, greaterThan(0));
+      expect(offer.rideId, 'ride_1');
+      expect(offer.driverId, testDriver.userId);
+      // Regression guard: this was hardcoded to "Marcus Vance (You)", so a rider
+      // saw a bid from a driver who did not exist.
+      expect(offer.driverName, 'Ayesha Khan');
+      expect(offer.counterFare, 640);
+      expect(offer.vehicleSummary, isNotEmpty);
+      expect(offer.vehicleSummary, contains('Black Toyota Camry Hybrid (TEST-123)'));
+    });
 
-      // Test driver counter offers
-      final offers = rideService.generateInitialDriverOffers(ride: ride, currentDriver: testDriver);
-      expect(offers.length, 2);
-      expect(offers.first.counterFare, 15.00);
+    test('RideService falls back to a neutral name when none is provided', () {
+      final offer = rideService.createDriverCounterOffer(
+        rideId: 'ride_2',
+        driver: testDriver,
+        driverName: '   ',
+        counterFare: 500,
+      );
 
-      // Accept offer
-      final acceptedRide = rideService.acceptOffer(ride, offers.first);
-      expect(acceptedRide.status, RideStatus.accepted);
-      expect(acceptedRide.driverId, testDriver.userId);
-
-      // Driver arrived
-      final arrivedRide = rideService.markDriverArrived(acceptedRide);
-      expect(arrivedRide.status, RideStatus.driverArrived);
-
-      // Verify PIN to start trip (invalid vs valid)
-      expect(rideService.verifyPinAndStartTrip(arrivedRide, '9999'), isNull);
-      final inProgressRide = rideService.verifyPinAndStartTrip(arrivedRide, ride.pin);
-      expect(inProgressRide, isNotNull);
-      expect(inProgressRide!.status, RideStatus.inProgress);
-
-      // Complete trip
-      final completed = rideService.completeTrip(inProgressRide);
-      expect(completed.status, RideStatus.completed);
-      expect(completed.paymentStatus, 'paid');
+      // Never an empty label on the rider's screen.
+      expect(offer.driverName, 'Your driver');
     });
 
     test('DriverService credits 100% earnings with \$0 commission', () {
@@ -152,4 +139,22 @@ void main() {
       expect(id.startsWith('ride_'), isTrue);
     });
   });
+
+  group('GeohashUtil', () {
+    test('matches the canonical reference vector', () {
+      // Dispatch queries online drivers by geohash bounds, so an encoding that
+      // disagrees with the backend silently matches nobody.
+      expect(GeohashUtil.encode(42.6, -5.6, 5), 'ezs42');
+    });
+
+    test('encodes Islamabad at the precision used for dispatch', () {
+      expect(GeohashUtil.encode(33.6844, 73.0479, 7), 'ttgzwhp');
+    });
+
+    test('respects the requested precision', () {
+      expect(GeohashUtil.encode(33.6844, 73.0479, 5).length, 5);
+      expect(GeohashUtil.encode(33.6844, 73.0479, 9).length, 9);
+    });
+  });
+
 }

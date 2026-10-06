@@ -131,7 +131,10 @@ service cloud.firestore {
         validStringLength(data.fullName, 1, 100) &&
         data.role in ['rider', 'driver', 'admin'] &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
-        data.totalRides is number && data.totalRides >= 0;
+        data.totalRides is number && data.totalRides >= 0 &&
+        // Trusted contacts feed the SOS fan-out, so bound how many can be set.
+        (!('trustedContacts' in data) ||
+          (data.trustedContacts is list && data.trustedContacts.size() <= 5));
     }
 
     // Driver Validators

@@ -20,7 +20,7 @@
     <true/>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.dartnexuslab.swiftri</key>
+        <key>com.dartnexuslab.swiftride</key>
         <string>SwiftRide AppStore Profile</string>
     </dict>
 </dict>

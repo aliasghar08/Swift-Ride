@@ -21,6 +21,9 @@ class GoogleMapView extends StatelessWidget {
   final VoidCallback? onMapReady;
   final void Function(GoogleMapController controller)? onControllerCreated;
 
+  /// Screen-reader description of what the map shows.
+  final String? semanticsLabel;
+
   const GoogleMapView({
     super.key,
     required this.initialCenter,
@@ -37,6 +40,7 @@ class GoogleMapView extends StatelessWidget {
     this.darkMode = false,
     this.onMapReady,
     this.onControllerCreated,
+    this.semanticsLabel,
   });
 
   @override
@@ -56,6 +60,7 @@ class GoogleMapView extends StatelessWidget {
       darkMode: darkMode,
       onMapReady: onMapReady,
       onControllerCreated: onControllerCreated,
+      semanticsLabel: semanticsLabel,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import '../../core/theme/design_tokens.dart';
 import 'package:flutter/services.dart';
 import 'native_channel_constants.dart';
 
@@ -150,7 +151,7 @@ class NativePlatformMapView extends StatelessWidget {
 
     // Fallback placeholder container for testing/web
     return Container(
-      color: const Color(0xFF0B1120),
+      color: AppColors.of(context).canvas,
       child: const Center(
         child: Icon(Icons.map_outlined, color: Colors.cyanAccent, size: 48),
       ),

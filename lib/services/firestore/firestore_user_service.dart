@@ -115,8 +115,84 @@ class FirestoreUserService {
     }
   }
 
+  /// Replaces this user's trusted-contact phone numbers.
+  ///
+  /// Returns false when the write failed, so the UI does not tell someone their
+  /// emergency contacts were saved when they were not.
+  Future<bool> updateTrustedContacts(String userId, List<String> phones) async {
+    final normalised = phones
+        .map(AppUser.normalizePhone)
+        .whereType<String>()
+        .toSet()
+        .toList();
+
+    final fs = _firestore;
+    if (fs == null) {
+      final user = _memoryCache[userId];
+      if (user != null) {
+        _memoryCache[userId] = user.copyWith(trustedContacts: normalised);
+      }
+      return true;
+    }
+
+    try {
+      await fs.collection(AppConstants.usersCollection).doc(userId).update({
+        'trustedContacts': normalised,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final cached = _memoryCache[userId];
+      if (cached != null) {
+        _memoryCache[userId] = cached.copyWith(trustedContacts: normalised);
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreUserService] Error updating trusted contacts: $e');
+      return false;
+    }
+  }
+
   /// Convenience alias for addFcmToken
   Future<void> updateFcmToken(String userId, String token) => addFcmToken(userId, token);
+
+  /// Removes a device token, e.g. when the user signs out.
+  ///
+  /// Without this a signed-out device keeps receiving the previous account's
+  /// emergency alerts.
+  Future<void> removeFcmToken(String userId, String token) async {
+    final fs = _firestore;
+    if (fs == null) {
+      final user = _memoryCache[userId];
+      if (user != null) {
+        _memoryCache[userId] = user.copyWith(
+          fcmTokens: user.fcmTokens.where((t) => t != token).toList(),
+        );
+      }
+      return;
+    }
+
+    try {
+      await fs.collection(AppConstants.usersCollection).doc(userId).update({
+        'fcmTokens': FieldValue.arrayRemove([token]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      final cached = _memoryCache[userId];
+      if (cached != null) {
+        _memoryCache[userId] = cached.copyWith(
+          fcmTokens: cached.fcmTokens.where((t) => t != token).toList(),
+        );
+      }
+    } catch (e) {
+      debugPrint('[FirestoreUserService] Error removing FCM token: $e');
+    }
+  }
+
+  /// Reads a user's registered device tokens (used by tests and diagnostics).
+  Future<List<String>> fcmTokensFor(String userId) async {
+    final user = await getUser(userId);
+    return user?.fcmTokens ?? const [];
+  }
 
 
   /// Updates user's real-time geographic location coordinates.

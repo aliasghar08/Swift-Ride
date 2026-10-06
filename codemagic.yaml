@@ -18,8 +18,14 @@ workflows:
       groups:
         - app_store_credentials # Configured in Codemagic UI (APP_STORE_CONNECT_KEY_IDENTIFIER, etc.)
         - firebase_credentials  # App Check and Firebase Secrets
+      # REQUIRED (encrypted, set in Codemagic UI > Environment variables):
+      #   GOOGLE_MAPS_IOS_API_KEY  — Google Maps key restricted to
+      #                              iOS apps + bundle com.dartnexuslab.swiftride
+      #                              + Maps SDK for iOS only.
+      # The key is injected into ios/Flutter/Secrets.xcconfig at build time and
+      # never committed to the repository.
       vars:
-        BUNDLE_ID: "com.dartnexuslab.swiftri"
+        BUNDLE_ID: "com.dartnexuslab.swiftride"
         APP_NAME: "Swift Ride"
     triggering:
       events:
@@ -50,6 +56,18 @@ workflows:
             --type IOS_APP_STORE \
             --create || echo "Continuing with local or manual profile configuration..."
           keychain add-certificates || true
+
+      - name: Inject Google Maps iOS API Key
+        script: |
+          # The key is never committed. Set GOOGLE_MAPS_IOS_API_KEY as an encrypted
+          # variable in Codemagic (App settings > Environment variables).
+          if [ -z "${GOOGLE_MAPS_IOS_API_KEY:-}" ]; then
+            echo "ERROR: GOOGLE_MAPS_IOS_API_KEY is not configured in Codemagic."
+            echo "Add it under Environment variables, then re-run this build."
+            exit 1
+          fi
+          printf 'GMS_API_KEY = %s\n' "$GOOGLE_MAPS_IOS_API_KEY" > ios/Flutter/Secrets.xcconfig
+          echo "Wrote ios/Flutter/Secrets.xcconfig for build-time Info.plist substitution."
 
       - name: Install CocoaPods
         script: |
@@ -97,8 +115,12 @@ workflows:
       java: 17
       groups:
         - google_play_credentials
+      # REQUIRED (encrypted, set in Codemagic UI > Environment variables):
+      #   GOOGLE_MAPS_ANDROID_API_KEY — Google Maps key restricted to
+      #                                 Android apps + package com.dartnexuslab.swiftride
+      #                                 + signing SHA-1 + Maps SDK for Android only.
       vars:
-        PACKAGE_NAME: "com.dartnexuslab.swiftri"
+        PACKAGE_NAME: "com.dartnexuslab.swiftride"
     triggering:
       events:
         - tag
@@ -114,6 +136,23 @@ workflows:
         script: |
           flutter analyze
           flutter test
+
+      - name: Inject Google Maps Android API Key
+        script: |
+          # The key is never committed. Set GOOGLE_MAPS_ANDROID_API_KEY as an encrypted
+          # variable in Codemagic (App settings > Environment variables).
+          # Restrict it to: Android apps + package com.dartnexuslab.swiftride
+          # + your signing SHA-1, and the Maps SDK for Android API only.
+          if [ -z "${GOOGLE_MAPS_ANDROID_API_KEY:-}" ]; then
+            echo "ERROR: GOOGLE_MAPS_ANDROID_API_KEY is not configured in Codemagic."
+            echo "Add it under Environment variables, then re-run this build."
+            exit 1
+          fi
+          touch android/local.properties
+          grep -v '^GOOGLE_MAPS_ANDROID_API_KEY=' android/local.properties > android/local.properties.tmp || true
+          mv android/local.properties.tmp android/local.properties
+          printf 'GOOGLE_MAPS_ANDROID_API_KEY=%s\n' "$GOOGLE_MAPS_ANDROID_API_KEY" >> android/local.properties
+          echo "Injected Google Maps Android key into android/local.properties"
 
       - name: Build Release App Bundle (AAB) & Universal APK
         script: |

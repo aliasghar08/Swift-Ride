@@ -9,13 +9,44 @@ class PlatformKpis {
   final int activeDrivers;
   final int pendingVerifications;
 
+  /// Unresolved emergency alerts across the platform.
+  ///
+  /// Null when this figure is genuinely unknown (the stats have not loaded, or
+  /// the local fallback was used). It is nullable on purpose: reporting 0 would
+  /// be a false all-clear on a safety-critical tile, and the dashboard used to
+  /// do exactly that by reading a local list that was always empty.
+  final int? unresolvedSafetyEvents;
+
   const PlatformKpis({
     required this.totalRides,
     required this.grossMarketplaceValue,
     required this.driverCommissionSavings,
     required this.activeDrivers,
     required this.pendingVerifications,
+    this.unresolvedSafetyEvents,
   });
+
+  /// Builds KPIs from the `getDashboardStats` Cloud Function response.
+  ///
+  /// These are real platform aggregates. The local
+  /// [AdminService.computePlatformKpis] only ever saw the current session's own
+  /// ride history, so it reported near-zero activity on a live platform.
+  factory PlatformKpis.fromServer(Map<String, dynamic> data) {
+    int asInt(String key) => (data[key] as num?)?.toInt() ?? 0;
+    double asDouble(String key) => (data[key] as num?)?.toDouble() ?? 0;
+
+    return PlatformKpis(
+      totalRides: asInt('totalRides'),
+      grossMarketplaceValue: asDouble('grossBookingVolume'),
+      driverCommissionSavings: asDouble('zeroCommissionDriverSavings'),
+      activeDrivers: asInt('activeOnlineDrivers'),
+      pendingVerifications: asInt('pendingDriverVerifications'),
+      // Deliberately not `asInt`: an absent field must stay unknown. Defaulting
+      // it to 0 would render "No open alerts" — a false all-clear on the safety
+      // tile if the backend ever omits the figure.
+      unresolvedSafetyEvents: (data['unresolvedSafetyEvents'] as num?)?.toInt(),
+    );
+  }
 }
 
 /// Zero-dependency admin service for KPI metrics aggregation, driver document

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/provider/custom_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../domain/models/user_role.dart';
@@ -45,7 +46,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
   void _handleIntent(BuildContext context, String intent) {
     switch (intent) {
       case 'track_ride':
-        final rideProv = CustomChangeNotifierProvider.read<RideProvider>(context);
+        final rideProv = CustomChangeNotifierProvider.read<RideProvider>(
+          context,
+        );
         if (rideProv.activeRide != null) {
           Navigator.of(context).pop();
         } else {
@@ -61,7 +64,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
         Navigator.of(context).pushNamed('/earnings-advisor');
         break;
       case 'trigger_sos':
-        final safetyProv = CustomChangeNotifierProvider.read<SafetyProvider>(context);
+        final safetyProv = CustomChangeNotifierProvider.read<SafetyProvider>(
+          context,
+        );
         safetyProv.triggerSos();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -111,7 +116,10 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   children: [
                     const Text(
                       'SwiftRide AI Assistant',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     Text(
                       'Powered by Gemini 3.8 Flash',
@@ -168,7 +176,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         chatProv.sendMessage(
                           prompt,
                           role: userRole,
-                          onIntentDetected: (intent) => _handleIntent(context, intent),
+                          onIntentDetected: (intent) =>
+                              _handleIntent(context, intent),
                         );
                         _textController.clear();
                         _scrollToBottom();
@@ -190,7 +199,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       key: ValueKey(msg.id),
                       message: msg,
                       index: index,
-                      onIntentTapped: (intent) => _handleIntent(context, intent),
+                      onIntentTapped: (intent) =>
+                          _handleIntent(context, intent),
                     );
                   },
                 ),
@@ -231,6 +241,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   maxSpread: 7.0,
                   child: IconButton(
                     icon: const Icon(Icons.mic, color: Colors.red),
+                    // Distinct from the idle mic so the listening state is
+                    // announced, not just coloured differently.
+                    tooltip: 'Listening — tap to stop',
                     onPressed: () => chatProv.toggleVoiceListening(),
                   ),
                 )
@@ -248,7 +261,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         chatProv.sendMessage(
                           text,
                           role: userRole,
-                          onIntentDetected: (intent) => _handleIntent(context, intent),
+                          onIntentDetected: (intent) =>
+                              _handleIntent(context, intent),
                         );
                         _textController.clear();
                         _scrollToBottom();
@@ -275,14 +289,18 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       color: isDark ? Colors.white38 : Colors.black38,
                     ),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 10,
+                    ),
                   ),
                   onSubmitted: (text) {
                     if (text.trim().isNotEmpty) {
                       chatProv.sendMessage(
                         text,
                         role: userRole,
-                        onIntentDetected: (intent) => _handleIntent(context, intent),
+                        onIntentDetected: (intent) =>
+                            _handleIntent(context, intent),
                       );
                       _textController.clear();
                       _scrollToBottom();
@@ -293,6 +311,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
 
               // Send button
               IconButton(
+                tooltip: chatProv.isGenerating ? 'Sending…' : 'Send message',
                 icon: chatProv.isGenerating
                     ? const SizedBox(
                         width: 18,
@@ -301,7 +320,9 @@ class _AiChatScreenState extends State<AiChatScreen> {
                       )
                     : Icon(
                         Icons.send_rounded,
-                        color: isDark ? AppTheme.accentCyan : AppTheme.accentTeal,
+                        color: isDark
+                            ? AppTheme.accentCyan
+                            : AppTheme.accentTeal,
                       ),
                 onPressed: chatProv.isGenerating
                     ? null
@@ -311,7 +332,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
                           chatProv.sendMessage(
                             text,
                             role: userRole,
-                            onIntentDetected: (intent) => _handleIntent(context, intent),
+                            onIntentDetected: (intent) =>
+                                _handleIntent(context, intent),
                           );
                           _textController.clear();
                           _scrollToBottom();

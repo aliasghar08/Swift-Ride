@@ -33,10 +33,20 @@ class LocationPoint {
 
   factory LocationPoint.fromMap(Map<String, dynamic> map) {
     final geo = map['geopoint'] as Map<String, dynamic>?;
+    final lat = (geo?['latitude'] ?? map['latitude']) as num?;
+    final lng = (geo?['longitude'] ?? map['longitude']) as num?;
+
+    // No silent fallback. A point without coordinates is corrupt, and
+    // substituting a hardcoded city centre silently relocated real users to
+    // Islamabad. Callers must handle this explicitly.
+    if (lat == null || lng == null) {
+      throw const FormatException('LocationPoint is missing coordinates');
+    }
+
     return LocationPoint(
-      latitude: (geo?['latitude'] ?? map['latitude'] as num?)?.toDouble() ?? 33.6844,
-      longitude: (geo?['longitude'] ?? map['longitude'] as num?)?.toDouble() ?? 73.0479,
-      address: map['address'] ?? 'Selected Location',
+      latitude: lat.toDouble(),
+      longitude: lng.toDouble(),
+      address: map['address'] ?? '',
       geohash: map['geohash'] ?? '',
     );
   }

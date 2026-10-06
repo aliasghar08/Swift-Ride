@@ -1,15 +1,15 @@
 # SwiftRide — iOS App Store Pre-Submission Checklist
 
-Complete every item in this checklist before submitting **Swift Ride** (`com.dartnexuslab.swiftri`) to TestFlight and the Apple App Store.
+Complete every item in this checklist before submitting **Swift Ride** (`com.dartnexuslab.swiftride`) to TestFlight and the Apple App Store.
 
 ---
 
 ## 1. Identity & Bundle Registration
 - [x] **App Display Name:** `Swift Ride` configured in `ios/Runner/Info.plist` (`CFBundleDisplayName`)
-- [x] **Bundle Identifier:** `com.dartnexuslab.swiftri` registered in Apple Developer Account and configured in `project.pbxproj`
+- [x] **Bundle Identifier:** `com.dartnexuslab.swiftride` registered in Apple Developer Account and configured in `project.pbxproj`
 - [x] **Minimum iOS Version:** iOS 15.0 set in `project.pbxproj` and `ios/Podfile`
 - [x] **App Icons:** High-resolution icons (1024x1024 marketing + all device scales) generated into `Assets.xcassets/AppIcon.appiconset` from master asset `assets/Gemini_Generated_Image_5pjlpe5pjlpe5pjl.jpeg`
-- [ ] **App Store Connect Record:** Created under Apple ID with SKU (e.g. `swiftride-ios-2026`) and Bundle ID `com.dartnexuslab.swiftri`
+- [ ] **App Store Connect Record:** Created under Apple ID with SKU (e.g. `swiftride-ios-2026`) and Bundle ID `com.dartnexuslab.swiftride`
 
 ---
 
@@ -41,7 +41,7 @@ Complete every item in this checklist before submitting **Swift Ride** (`com.dar
 ---
 
 ## 4. Firebase & Backend Infrastructure
-- [x] **GoogleService-Info.plist:** Configured with `BUNDLE_ID` = `com.dartnexuslab.swiftri` and reverse client ID
+- [x] **GoogleService-Info.plist:** Configured with `BUNDLE_ID` = `com.dartnexuslab.swiftride` and reverse client ID
 - [x] **Firebase App Check:** iOS `DeviceCheckProvider` activated in `main.dart` and `AppDelegate.swift`
 - [ ] **APNs Authentication Key:** Auth Key (`.p8`) uploaded to Firebase Console under Cloud Messaging
 - [ ] **Push Notification Capability:** Enabled in Xcode under Signing & Capabilities
@@ -51,7 +51,7 @@ Complete every item in this checklist before submitting **Swift Ride** (`com.dar
 ## 5. Code Signing & Release Archive
 - [x] **ExportOptions.plist:** Configured for `app-store` distribution with automatic/manual signing fallback
 - [ ] **Apple Distribution Certificate:** Active iOS Distribution Certificate created in Apple Developer Portal
-- [ ] **App Store Provisioning Profile:** Provisioning profile linked to `com.dartnexuslab.swiftri`
+- [ ] **App Store Provisioning Profile:** Provisioning profile linked to `com.dartnexuslab.swiftride`
 - [ ] **Clean Build Verification:** `flutter clean && flutter pub get && cd ios && pod install`
 - [ ] **IPA Compilation:** `flutter build ipa --release --export-options-plist=ios/ExportOptions.plist`
 

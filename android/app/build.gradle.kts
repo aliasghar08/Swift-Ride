@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -7,8 +9,35 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// ------------------------------------------------------------------------------
+// Google Maps Android API key — read from (in priority order):
+//   1. android/local.properties   (git-ignored, local dev)  -> GOOGLE_MAPS_ANDROID_API_KEY
+//   2. Environment variable       (CI, e.g. Codemagic)      -> GOOGLE_MAPS_ANDROID_API_KEY
+// Injected into AndroidManifest.xml via the ${googleMapsApiKey} placeholder.
+// Never hardcode the key in the manifest: it is version-controlled.
+// ------------------------------------------------------------------------------
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use { load(it) }
+    }
+}
+
+val googleMapsApiKey: String =
+    localProperties.getProperty("GOOGLE_MAPS_ANDROID_API_KEY")
+        ?: System.getenv("GOOGLE_MAPS_ANDROID_API_KEY")
+        ?: ""
+
+if (googleMapsApiKey.isEmpty()) {
+    logger.warn(
+        "[SwiftRide] GOOGLE_MAPS_ANDROID_API_KEY is not set. Google Maps will render " +
+            "a blank canvas on Android. Add it to android/local.properties or the " +
+            "environment. The in-app map engine toggle falls back to OpenStreetMap tiles."
+    )
+}
+
 android {
-    namespace = "com.dartnexuslab.swiftri"
+    namespace = "com.dartnexuslab.swiftride"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -19,10 +48,10 @@ android {
 
     defaultConfig {
         // Unique Application ID matching iOS bundle identifier
-        applicationId = "com.dartnexuslab.swiftri"
+        applicationId = "com.dartnexuslab.swiftride"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21
+        minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
@@ -30,6 +59,10 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Resolved above from android/local.properties or the environment.
+        // Kept out of version control on purpose.
+        manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
     buildTypes {

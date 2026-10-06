@@ -1,2 +1,4 @@
 #include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
 #include "Generated.xcconfig"
+// Local, git-ignored Google Maps iOS key (GMS_API_KEY). Included last so it wins.
+#include? "Secrets.xcconfig"

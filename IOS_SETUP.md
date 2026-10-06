@@ -1,6 +1,6 @@
 # SwiftRide — iOS Build & App Store Submission Guide
 
-This comprehensive guide covers everything required to build, sign, and submit **Swift Ride** (`com.dartnexuslab.swiftri`) to the Apple App Store and TestFlight.
+This comprehensive guide covers everything required to build, sign, and submit **Swift Ride** (`com.dartnexuslab.swiftride`) to the Apple App Store and TestFlight.
 
 ---
 
@@ -10,8 +10,8 @@ This comprehensive guide covers everything required to build, sign, and submit *
 |---|---|---|
 | **App Display Name** | `Swift Ride` | Rendered on iOS Home Screen (`CFBundleDisplayName`) |
 | **App Name** | `Swft Ride` / `Swift Ride` | Set in `CFBundleName` and App Store Connect record |
-| **iOS Bundle Identifier** | `com.dartnexuslab.swiftri` | Configured in Xcode project, `GoogleService-Info.plist`, and `ExportOptions.plist` |
-| **Android Application ID** | `com.dartnexuslab.swiftri` | Kept in exact 1-to-1 sync across platforms |
+| **iOS Bundle Identifier** | `com.dartnexuslab.swiftride` | Configured in Xcode project, `GoogleService-Info.plist`, and `ExportOptions.plist` |
+| **Android Application ID** | `com.dartnexuslab.swiftride` | Kept in exact 1-to-1 sync across platforms |
 | **Minimum iOS Target** | `iOS 15.0` | Configured in `project.pbxproj` and `Podfile` |
 | **App Icon Master Asset** | `assets/Gemini_Generated_Image_5pjlpe5pjlpe5pjl.jpeg` | Automatically converted to all 15 iOS icon sizes in `Assets.xcassets/AppIcon.appiconset` |
 | **Privacy Manifest** | `ios/Runner/PrivacyInfo.xcprivacy` | Apple Mandatory requirement (effective February 2025/2026, ITMS-91061) |
@@ -60,7 +60,7 @@ All checks for **Flutter**, **Xcode**, and **CocoaPods** must report green check
 3. Select **App IDs** > **App**, then click **Continue**.
 4. Configure:
    - **Description:** `Swift Ride iOS`
-   - **Bundle ID:** Select **Explicit** and enter `com.dartnexuslab.swiftri`
+   - **Bundle ID:** Select **Explicit** and enter `com.dartnexuslab.swiftride`
 5. Under **Capabilities**, enable:
    - ✅ **Push Notifications**
    - ✅ **Background Modes** (Remote notifications)
@@ -74,7 +74,7 @@ All checks for **Flutter**, **Xcode**, and **CocoaPods** must report green check
    - **Platforms:** iOS
    - **Name:** `Swift Ride`
    - **Primary Language:** English (US)
-   - **Bundle ID:** Select `com.dartnexuslab.swiftri`
+   - **Bundle ID:** Select `com.dartnexuslab.swiftride`
    - **SKU:** `swiftride-ios-2026`
    - **User Access:** Full Access
 4. Click **Create**.
@@ -86,13 +86,13 @@ All checks for **Flutter**, **Xcode**, and **CocoaPods** must report green check
 ### 4.1 Register iOS App in Firebase Console
 1. Open the [Firebase Console](https://console.firebase.google.com/) > select `swift-ride-5ab75`.
 2. Under **Project Settings** > **General** > **Your apps** > click **Add app** > **iOS**.
-3. Enter iOS bundle ID: `com.dartnexuslab.swiftri`.
+3. Enter iOS bundle ID: `com.dartnexuslab.swiftride`.
 4. App nickname: `Swift Ride iOS`.
 5. Download `GoogleService-Info.plist` and confirm it is placed at:
    ```
    ios/Runner/GoogleService-Info.plist
    ```
-6. Verify that `BUNDLE_ID` in `GoogleService-Info.plist` contains `com.dartnexuslab.swiftri`.
+6. Verify that `BUNDLE_ID` in `GoogleService-Info.plist` contains `com.dartnexuslab.swiftride`.
 
 ### 4.2 APNs Push Notifications Setup
 1. In the [Apple Developer Member Center](https://developer.apple.com/account/resources/authkeys/list), create an **APNs Key** (`.p8` file).
@@ -103,7 +103,7 @@ All checks for **Flutter**, **Xcode**, and **CocoaPods** must report green check
 ### 4.3 Firebase App Check (iOS DeviceCheck / App Attest)
 Firebase AI Logic requires App Check:
 1. In the Firebase Console, navigate to **App Check** > **Apps** tab.
-2. Select `com.dartnexuslab.swiftri`.
+2. Select `com.dartnexuslab.swiftride`.
 3. Under **DeviceCheck**: Upload your Apple Developer `.p8` private key and Team ID.
 4. Token TTL is set to **1 hour**.
 5. Client activation is pre-configured in `lib/main.dart` with `AppleDeviceCheckProvider`.

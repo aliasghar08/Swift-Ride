@@ -8,9 +8,6 @@
     The path provided below has to start and end with a slash "/" in order for
     it to work correctly.
 
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
     This is a placeholder for base href that will be replaced by the value of
     the `--base-href` argument provided to `flutter build`.
   -->
@@ -18,19 +15,34 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="SwiftRide — ride hailing with 0% driver commission. Book a ride, track your driver live, and pay your way.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="swiftride">
+  <meta name="apple-mobile-web-app-title" content="SwiftRide">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>swiftride</title>
+  <title>SwiftRide</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Google Maps JavaScript API — required by google_maps_flutter_web.
+
+    This key is a *client* key: it is unavoidably visible in the page source, so
+    it MUST be restricted to this site's HTTP referrers in Google Cloud Console
+    (APIs & Services > Credentials), with only "Maps JavaScript API" enabled.
+    An unrestricted web key can be copied and billed against this project.
+  -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB2nnXL0LX6CbJkDKvHZZAabP34k36UvKE&loading=async&libraries=marker"
+    async
+    defer>
+  </script>
 </head>
 <body>
   <!--

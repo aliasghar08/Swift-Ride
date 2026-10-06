@@ -34,6 +34,7 @@ export const APP_CONSTANTS = {
     RIDES: 'rides',
     RIDE_OFFERS: 'ride_offers',
     PAYMENTS: 'payments',
+    PAYOUTS: 'payouts',
     SAFETY_EVENTS: 'safety_events',
     SHARED_TRIPS: 'shared_trips',
     AI_CONVERSATIONS: 'ai_conversations',

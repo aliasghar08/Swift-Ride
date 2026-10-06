@@ -3,15 +3,13 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
+	<string>AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE</string>
 	<key>GCM_SENDER_ID</key>
 	<string>113634488038</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.dartnexuslab.swiftri</string>
-	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.113634488038-ios-663fb9115aa9197f41d527</string>
+	<string>com.dartnexuslab.swiftride</string>
 	<key>PROJECT_ID</key>
 	<string>swift-ride-5ab75</string>
 	<key>STORAGE_BUCKET</key>
@@ -27,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:113634488038:ios:663fb9115aa9197f41d527</string>
+	<string>1:113634488038:ios:3ada91b92c00566241d527</string>
 </dict>
 </plist>

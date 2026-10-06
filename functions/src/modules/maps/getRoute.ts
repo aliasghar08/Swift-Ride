@@ -1,8 +1,19 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from 'firebase-functions/v2/https';
+import { defineSecret } from 'firebase-functions/params';
 import { APP_CONSTANTS } from '../../config/constants';
 import { assertAuthenticated } from '../../middleware/auth';
 import { validateInput, LatLngSchema } from '../../middleware/validation';
 import { z } from 'zod';
+
+/**
+ * Server-side Google Maps key.
+ *
+ * This MUST be declared as a secret and bound to the function. It previously
+ * read `process.env.GOOGLE_MAPS_API_KEY` with no `secrets:` binding, so the
+ * variable was always empty in production and the Routes API was never actually
+ * called — every rider silently got a synthetic straight-line estimate.
+ */
+const mapsKey = defineSecret('GOOGLE_MAPS_SERVER_KEY');
 
 const GetRouteSchema = z.object({
   origin: LatLngSchema,
@@ -25,23 +36,29 @@ function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 export const getRoute = onCall(
-  { region: APP_CONSTANTS.REGION, memory: '512MiB', timeoutSeconds: 60 },
+  {
+    region: APP_CONSTANTS.REGION,
+    memory: '512MiB',
+    timeoutSeconds: 60,
+    secrets: [mapsKey],
+  },
   async (request) => {
     await assertAuthenticated(request);
     const { origin, destination } = validateInput(GetRouteSchema, request.data);
 
-    const mapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    const apiKey = mapsKey.value();
 
-    if (mapsApiKey && !mapsApiKey.includes('placeholder')) {
+    if (apiKey) {
       try {
         const response = await fetch(
           'https://routes.googleapis.com/directions/v2:computeRoutes',
           {
             method: 'POST',
             headers: {
-              'X-Goog-Api-Key': mapsApiKey,
+              'X-Goog-Api-Key': apiKey,
               'X-Goog-FieldMask':
-                'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline',
+                'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,' +
+                'routes.travelAdvisory.speedReadingIntervals',
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -72,37 +89,63 @@ export const getRoute = onCall(
           const route = json.routes?.[0];
           if (route) {
             const distanceKm = Math.round(((route.distanceMeters || 0) / 1000) * 10) / 10;
-            const durationSec = parseInt(route.duration?.replace('s', '') || '600', 10);
-            const durationMin = Math.round(durationSec / 60);
+            const durationSec = parseInt(route.duration?.replace('s', '') || '0', 10);
+            const encodedPolyline = route.polyline?.encodedPolyline || '';
 
-            return {
-              distanceKm,
-              durationMin,
-              encodedPolyline: route.polyline?.encodedPolyline || '',
-            };
+            // Only report a road route when we actually got road geometry back.
+            if (encodedPolyline) {
+              // Real per-segment traffic. The UI colours the polyline from these
+              // index ranges instead of assuming the whole route is clear.
+              const intervals = (route.travelAdvisory?.speedReadingIntervals || []).map(
+                (interval: any) => ({
+                  startIndex: interval.startPolylinePointIndex ?? 0,
+                  endIndex: interval.endPolylinePointIndex ?? null,
+                  speed: interval.speed || 'NORMAL',
+                })
+              );
+
+              return {
+                distanceKm,
+                durationMin: Math.max(1, Math.round(durationSec / 60)),
+                encodedPolyline,
+                trafficLevel: intervals.some((i: any) => i.speed === 'TRAFFIC_JAM')
+                  ? 'HEAVY'
+                  : intervals.some((i: any) => i.speed === 'SLOW')
+                    ? 'MODERATE'
+                    : 'NORMAL',
+                trafficIntervals: intervals,
+                isEstimated: false,
+              };
+            }
           }
+        } else {
+          console.warn('Routes API returned', response.status, await response.text());
         }
       } catch (err) {
-        console.warn('Routes API call failed, using fallback calculation', err);
+        console.warn('Routes API call failed, falling back to estimate', err);
       }
     }
 
-    // High-accuracy algorithmic fallback when Maps API Key is pending
+    // Explicitly-labelled estimate. The polyline is intentionally empty so the
+    // client draws a straight line and knows it is not road geometry.
     const directDistKm = haversineDistance(
       origin.latitude,
       origin.longitude,
       destination.latitude,
       destination.longitude
     );
-    // Real driving distance in urban grid is approximately 1.3x straight line
     const distanceKm = Math.max(0.5, Math.round(directDistKm * 1.3 * 10) / 10);
-    // Average urban driving speed ~ 30 km/h -> 2 min per km
     const durationMin = Math.max(3, Math.round(distanceKm * 2.2));
 
     return {
       distanceKm,
       durationMin,
-      encodedPolyline: '', // Client will generate smooth waypoint interpolation
+      encodedPolyline: '',
+      trafficLevel: 'NORMAL',
+      // No geometry means no per-segment traffic either. Reporting NORMAL here
+      // would falsely imply the road is clear.
+      trafficIntervals: [],
+      isEstimated: true,
     };
   }
 );

@@ -24,7 +24,6 @@ class NativeChannelConstants {
   static const String methodCheckNativePaySupport = 'checkNativePaySupport';
 
   // Safety methods
-  static const String methodTriggerEmergencyAlert = 'triggerEmergencyAlert';
   static const String methodSendEmergencySms = 'sendEmergencySms';
   static const String methodTriggerEmergencyHaptics = 'triggerEmergencyHaptics';
 

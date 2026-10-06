@@ -37,8 +37,9 @@ class SafetyEvent {
       id: docId ?? map['id'] ?? '',
       rideId: map['rideId'] ?? '',
       type: SafetyEventType.fromString(map['type']),
-      latitude: (geo?['latitude'] as num?)?.toDouble() ?? 33.6844,
-      longitude: (geo?['longitude'] as num?)?.toDouble() ?? 73.0479,
+      // 0 means "unknown"; this used to default to Islamabad city centre.
+      latitude: (geo?['latitude'] as num?)?.toDouble() ?? 0.0,
+      longitude: (geo?['longitude'] as num?)?.toDouble() ?? 0.0,
       metadata: map['metadata'] as Map<String, dynamic>? ?? {},
       resolvedAt: map['resolvedAt'] != null
           ? DateTime.tryParse(map['resolvedAt'].toString())

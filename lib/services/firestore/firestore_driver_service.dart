@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/geohash_util.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/vehicle_info_model.dart';
 
@@ -166,6 +169,158 @@ class FirestoreDriverService {
   }
 
 
+  /// Requests a driver payout through the `requestPayout` Cloud Function.
+  ///
+  /// Server-side this validates the balance, applies the caller's idempotency
+  /// key, and writes the `payouts` ledger. A rail that is not configured reports
+  /// a failure rather than a synthetic success.
+  Future<PayoutRequestResult> requestPayout({
+    required double amount,
+    required String rail,
+    required String destination,
+    required String idempotencyKey,
+  }) async {
+    if (Firebase.apps.isEmpty) {
+      return const PayoutRequestResult.failed(
+        'Payouts need an internet connection. Your balance is unchanged.',
+      );
+    }
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('requestPayout').call(
+        <String, dynamic>{
+          'amount': amount,
+          'rail': rail,
+          'destination': destination,
+          'idempotencyKey': idempotencyKey,
+        },
+      );
+
+      final data = res.data as Map<String, dynamic>;
+      return PayoutRequestResult(
+        accepted: (data['success'] as bool?) ?? false,
+        payoutId: data['payoutId'] as String?,
+        status: (data['status'] as String?) ?? 'unknown',
+        message: (data['message'] as String?) ?? 'Payout submitted.',
+        configurationMissing: (data['configurationMissing'] as bool?) ?? false,
+        replayed: (data['replayed'] as bool?) ?? false,
+      );
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreDriverService] requestPayout failed: ${e.code} ${e.message}');
+      // `failed-precondition` carries the server's balance guidance.
+      return PayoutRequestResult.failed(
+        e.code == 'failed-precondition' && e.message != null
+            ? e.message!
+            : 'We could not start your payout. Your balance is unchanged.',
+      );
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] requestPayout failed: $e');
+      return const PayoutRequestResult.failed(
+        'We could not start your payout. Your balance is unchanged.',
+      );
+    }
+  }
+
+  /// Sets this driver's availability through the `toggleOnline` Cloud Function.
+  ///
+  /// Persisting here — rather than flipping a local flag — is what lets the
+  /// `onRideCreated` trigger find available drivers. That trigger queries
+  /// `drivers where isOnline == true` by geohash, so while this was local-only
+  /// it matched zero drivers and ride-request push notifications never fired.
+  ///
+  /// Returns a message on refusal (e.g. an unverified driver), or null on success.
+  Future<String?> setOnline({
+    required bool isOnline,
+    double? latitude,
+    double? longitude,
+  }) async {
+    if (Firebase.apps.isEmpty) {
+      return 'Going online needs an internet connection.';
+    }
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('toggleOnline').call(
+        <String, dynamic>{
+          'isOnline': isOnline,
+          if (isOnline && latitude != null && longitude != null)
+            'currentLocation': {
+              'lat': latitude,
+              'lng': longitude,
+              'geohash': GeohashUtil.encode(latitude, longitude, 7),
+            },
+        },
+      );
+
+      return (res.data['success'] as bool?) == true
+          ? null
+          : 'We could not change your availability. Please try again.';
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreDriverService] toggleOnline failed: ${e.code} ${e.message}');
+      return switch (e.code) {
+        'failed-precondition' => e.message ??
+            'You cannot go online until your documents are verified.',
+        'not-found' => 'Complete your driver onboarding before going online.',
+        'permission-denied' => 'Your account is not set up as a driver.',
+        _ => 'We could not change your availability. Please try again.',
+      };
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] toggleOnline failed: $e');
+      return 'We could not change your availability. Please try again.';
+    }
+  }
+
+  /// Fetches this driver's real earnings and withdrawable balance.
+  ///
+  /// The balance accounts for money already committed to payouts, so the figure
+  /// shown in the cockpit matches what `requestPayout` will actually allow.
+  Future<DriverEarnings?> fetchEarnings() async {
+    if (Firebase.apps.isEmpty) return null;
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('getEarnings').call();
+      final data = res.data as Map<String, dynamic>;
+
+      double asDouble(String key) => (data[key] as num?)?.toDouble() ?? 0;
+      int asInt(String key) => (data[key] as num?)?.toInt() ?? 0;
+
+      return DriverEarnings(
+        totalEarnings: asDouble('totalEarnings'),
+        todayEarnings: asDouble('todayEarnings'),
+        availablePayoutBalance: asDouble('availablePayoutBalance'),
+        committedPayouts: asDouble('committedPayouts'),
+        paidOut: asDouble('paidOut'),
+        totalCompletedRides: asInt('totalCompletedRides'),
+        commissionDeducted: asDouble('commissionDeducted'),
+        standardCommissionSaved: asDouble('standardCommissionSaved'),
+      );
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreDriverService] getEarnings failed: ${e.code} ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] getEarnings failed: $e');
+      return null;
+    }
+  }
+
+  /// Streams driver applications awaiting verification, for the admin queue.
+  ///
+  /// The admin dashboard previously rendered a fabricated applicant with no
+  /// Firestore backing at all.
+  Stream<List<DriverProfile>> streamPendingDrivers() {
+    final fs = _firestore;
+    if (fs == null) {
+      return Stream.value(const <DriverProfile>[]);
+    }
+
+    return fs
+        .collection(AppConstants.driversCollection)
+        .where('isVerified', isEqualTo: false)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((doc) => _parseDriverProfile(doc.data(), doc.id))
+            .toList());
+  }
+
   /// Streams online and verified drivers.
   /// Utilizes composite index: `drivers (isOnline ASC, isVerified ASC, currentLocation.geohash ASC)`.
   Stream<List<DriverProfile>> streamNearbyOnlineDrivers() {
@@ -220,4 +375,59 @@ class FirestoreDriverService {
       createdAt: DateTime.now(),
     );
   }
+}
+
+
+/// Outcome of a payout request, as reported by the `requestPayout` function.
+class PayoutRequestResult {
+  final bool accepted;
+  final String? payoutId;
+  final String status;
+  final String message;
+  final bool configurationMissing;
+  final bool replayed;
+
+  const PayoutRequestResult({
+    required this.accepted,
+    required this.status,
+    required this.message,
+    this.payoutId,
+    this.configurationMissing = false,
+    this.replayed = false,
+  });
+
+  const PayoutRequestResult.failed(String reason)
+      : accepted = false,
+        payoutId = null,
+        status = 'failed',
+        message = reason,
+        configurationMissing = false,
+        replayed = false;
+}
+
+
+/// A driver's earnings and withdrawable balance, as reported by `getEarnings`.
+class DriverEarnings {
+  final double totalEarnings;
+  final double todayEarnings;
+
+  /// What the driver can actually withdraw right now: total earnings minus
+  /// everything already committed to a payout.
+  final double availablePayoutBalance;
+  final double committedPayouts;
+  final double paidOut;
+  final int totalCompletedRides;
+  final double commissionDeducted;
+  final double standardCommissionSaved;
+
+  const DriverEarnings({
+    required this.totalEarnings,
+    required this.todayEarnings,
+    required this.availablePayoutBalance,
+    required this.committedPayouts,
+    required this.paidOut,
+    required this.totalCompletedRides,
+    required this.commissionDeducted,
+    required this.standardCommissionSaved,
+  });
 }

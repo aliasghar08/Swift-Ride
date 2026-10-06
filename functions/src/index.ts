@@ -25,6 +25,7 @@ export {
 // 4. Payments Module (Stripe PaymentIntents & Webhooks)
 export {
   createPaymentIntent,
+  confirmCashPayment,
   getPaymentMethods,
   deletePaymentMethod,
   stripeWebhook,
@@ -34,7 +35,7 @@ export {
 export { getRoute, getAutocomplete, getPlaceDetails, reverseGeocode } from './modules/maps';
 
 // 6. Safety Module (SOS Emergency, Trip Sharing)
-export { triggerSos, shareTrip, getSharedTrip } from './modules/safety';
+export { triggerSos, resolveSos, shareTrip, getSharedTrip } from './modules/safety';
 
 // 7. Admin Module
 export { getDashboardStats, verifyDriver, getAdminRides } from './modules/admin';

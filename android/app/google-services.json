@@ -7,9 +7,28 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:113634488038:android:57734bf3f19ee42341d527",
+        "android_client_info": {
+          "package_name": "com.dartnexuslab.swiftride"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDfJSXerZy1CfKivdmqAeNd1qRt3hIy5d0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:113634488038:android:f9ee0f93f32f216041d527",
         "android_client_info": {
-          "package_name": "com.dartnexuslab.swiftri"
+          "package_name": "com.swiftride.swiftride"
         }
       },
       "oauth_client": [],

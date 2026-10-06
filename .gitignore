@@ -111,3 +111,7 @@ ui-debug.log*
 *.keystore
 *.jks
 auth_key_*.p8
+
+# Google Maps / platform keys injected at build time (never commit real values)
+**/ios/Flutter/Secrets.xcconfig
+!**/ios/Flutter/Secrets.xcconfig.example

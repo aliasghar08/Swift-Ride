@@ -6,16 +6,25 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required on API 33+ for ALL notifications (including SOS). Without this
+         declaration the runtime request is auto-denied and SOS never surfaces. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Used by the SOS hardware-siren vibration pattern and haptic feedback.
+         Undeclared, this throws SecurityException inside the SOS handler. -->
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <application
         android:label="Swift Ride"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
-        <!-- Google Maps Android API Key -->
+        <!-- Google Maps Android API Key
+             Injected at build time from android/local.properties (git-ignored) or the
+             GOOGLE_MAPS_ANDROID_API_KEY environment variable — see app/build.gradle.kts.
+             Do NOT hardcode the key here. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
-            android:value="YOUR_ANDROID_MAPS_API_KEY_HERE"/>
+            android:value="${googleMapsApiKey}"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

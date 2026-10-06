@@ -1,195 +1,82 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../core/utils/distance_calculator.dart';
+
 import '../core/utils/id_generator.dart';
 import '../domain/models/driver_profile_model.dart';
-import '../domain/models/location_point_model.dart';
-import '../domain/models/ride_model.dart';
 import '../domain/models/ride_offer_model.dart';
-import '../domain/models/ride_status.dart';
 
-class RouteEstimate {
-  final int distanceMeters;
-  final int durationSeconds;
-  final String polylineEncoded;
-
-  const RouteEstimate({
-    required this.distanceMeters,
-    required this.durationSeconds,
-    required this.polylineEncoded,
-  });
-
-  double get distanceKm => distanceMeters / 1000.0;
-  double get durationMin => durationSeconds / 60.0;
-}
-
-/// Zero-dependency ride service handling fare estimation, bidding negotiation,
-/// 4-digit safety PIN verification, and ride state lifecycle transitions.
+/// Ride utilities that are not backed by Firestore.
+///
+/// The ride lifecycle itself lives in `FirestoreRideService` (Firestore) and the
+/// `requestRide` / `acceptOffer` / `updateRideStatus` Cloud Functions.
+///
+/// This class previously carried a **complete in-memory simulation** of that
+/// lifecycle — creating rides locally, fabricating driver offers named
+/// "Marcus Vance", and moving a ride through its states without touching the
+/// server. That duplicate implementation was the reason the app appeared to work
+/// end to end while no ride ever reached a real driver. It has been deleted, and
+/// only the two genuinely used operations remain.
 class RideService {
-  /// Calls getRoute Cloud Function or falls back to geodesic driving distance.
-  Future<RouteEstimate> estimateRoute({
-    required LatLng pickup,
-    required LatLng dropoff,
+  /// Publishes the driver's live position for [activeRideId].
+  ///
+  /// Routed through the `updateDriverLocation` Cloud Function rather than a
+  /// direct Firestore write so the server can verify the caller really is the
+  /// assigned driver, and so the fix is mirrored onto the ride document the
+  /// rider is already subscribed to.
+  Future<void> publishDriverLocation({
+    required double latitude,
+    required double longitude,
+    required String activeRideId,
+    double heading = 0.0,
+    double speed = 0.0,
   }) async {
+    if (Firebase.apps.isEmpty) return;
     try {
-      if (Firebase.apps.isNotEmpty) {
-        final callable = FirebaseFunctions.instance.httpsCallable('getRoute');
-        final result = await callable.call({
-          'origin': {'lat': pickup.latitude, 'lng': pickup.longitude},
-          'destination': {'lat': dropoff.latitude, 'lng': dropoff.longitude},
-        });
-        return RouteEstimate(
-          distanceMeters: (result.data['distanceMeters'] as num?)?.toInt() ?? 5000,
-          durationSeconds: (result.data['durationSeconds'] as num?)?.toInt() ?? 600,
-          polylineEncoded: (result.data['polyline'] as String?) ?? '',
-        );
-      }
+      await FirebaseFunctions.instance.httpsCallable('updateDriverLocation').call({
+        'lat': latitude,
+        'lng': longitude,
+        'heading': heading,
+        'speed': speed,
+        'activeRideId': activeRideId,
+      });
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[RideService.publishDriverLocation] ${e.code}: ${e.message}');
     } catch (e) {
-      debugPrint('[RideService.estimateRoute] Fallback to driving distance: $e');
+      debugPrint('[RideService.publishDriverLocation] failed: $e');
     }
-
-    final distanceKm = DistanceCalculator.estimatedDrivingDistance(
-      pickup.latitude,
-      pickup.longitude,
-      dropoff.latitude,
-      dropoff.longitude,
-    );
-    final durationMin = DistanceCalculator.estimatedDurationMinutes(distanceKm);
-    return RouteEstimate(
-      distanceMeters: (distanceKm * 1000).toInt(),
-      durationSeconds: (durationMin * 60).toInt(),
-      polylineEncoded: '',
-    );
   }
 
-  /// Estimates suggested fair fare using platform baseline constants.
-  double estimateSuggestedFare(double distanceKm, double durationMin) {
-    return DistanceCalculator.calculateSuggestedFare(distanceKm, durationMin);
-  }
-
-  /// Creates a new ride request with rider proposed fare and 4-digit PIN.
-  RideModel createRideRequest({
-    required String riderId,
-    required LocationPoint pickup,
-    required LocationPoint dropoff,
-    required double offeredFare,
-    required double distanceKm,
-    required double durationMin,
-  }) {
-    final pin = IdGenerator.generatePin();
-    final suggested = estimateSuggestedFare(distanceKm, durationMin);
-
-    return RideModel(
-      id: IdGenerator.generateId(prefix: 'ride_'),
-      riderId: riderId,
-      status: RideStatus.requested,
-      pickup: pickup,
-      dropoff: dropoff,
-      offeredFare: offeredFare,
-      suggestedFare: suggested,
-      distanceKm: distanceKm,
-      durationMin: durationMin,
-      commissionAmount: 0.0, // 0% commission in Year 1
-      pin: pin,
-      createdAt: DateTime.now(),
-    );
-  }
-
-  /// Generates realistic driver counter-offers for inDrive-style negotiation.
-  List<RideOffer> generateInitialDriverOffers({
-    required RideModel ride,
-    required DriverProfile currentDriver,
-  }) {
-    // Offer 1: Current driver matches rider's offered fare
-    final offer1 = RideOffer(
-      id: IdGenerator.generateId(prefix: 'offer_'),
-      rideId: ride.id,
-      driverId: currentDriver.userId,
-      driverName: 'Marcus Vance',
-      counterFare: ride.offeredFare,
-      etaMinutes: 3,
-      vehicleSummary: '${currentDriver.vehicle.color} ${currentDriver.vehicle.make} ${currentDriver.vehicle.model} (${currentDriver.vehicle.plate})',
-      driverRating: currentDriver.rating,
-      createdAt: DateTime.now(),
-    );
-
-    // Offer 2: Competing driver submits counter-offer (+PKR 50)
-    final roundedCounter = (ride.offeredFare + 50.0).roundToDouble();
-    final offer2 = RideOffer(
-      id: IdGenerator.generateId(prefix: 'offer_'),
-      rideId: ride.id,
-      driverId: 'driver_elena_404',
-      driverName: 'Elena Rostova',
-      counterFare: roundedCounter,
-      etaMinutes: 2,
-      vehicleSummary: 'Silver Hyundai Ioniq 5 (9ABC332)',
-      driverRating: 4.98,
-      createdAt: DateTime.now(),
-    );
-
-    return [offer1, offer2];
-  }
-
-  /// Creates a driver counter-offer.
+  /// Builds the offer a driver submits for [rideId].
+  ///
+  /// [driverName] is passed in from the signed-in user: this used to be
+  /// hardcoded to "Marcus Vance (You)", so every rider saw a bid from a driver
+  /// who did not exist.
   RideOffer createDriverCounterOffer({
     required String rideId,
     required DriverProfile driver,
+    required String driverName,
     required double counterFare,
     int etaMinutes = 4,
   }) {
+    final vehicle = driver.vehicle;
+    final summary = [
+      vehicle.color,
+      vehicle.make,
+      vehicle.model,
+    ].where((part) => part.trim().isNotEmpty).join(' ');
+    final plate = vehicle.plate.isEmpty ? '' : ' (${vehicle.plate})';
+
     return RideOffer(
       id: IdGenerator.generateId(prefix: 'offer_'),
       rideId: rideId,
       driverId: driver.userId,
-      driverName: 'Marcus Vance (You)',
+      driverName: driverName.trim().isEmpty ? 'Your driver' : driverName.trim(),
       counterFare: counterFare,
       etaMinutes: etaMinutes,
-      vehicleSummary: '${driver.vehicle.color} ${driver.vehicle.make} ${driver.vehicle.model} (${driver.vehicle.plate})',
+      vehicleSummary: summary.isEmpty ? 'Vehicle details unavailable' : '$summary$plate',
       driverRating: driver.rating,
       createdAt: DateTime.now(),
-    );
-  }
-
-  /// Accepts a driver's offer, locking in the agreed fare and transitioning status.
-  RideModel acceptOffer(RideModel ride, RideOffer offer) {
-    return ride.copyWith(
-      driverId: offer.driverId,
-      acceptedFare: offer.counterFare,
-      status: RideStatus.accepted,
-    );
-  }
-
-  /// Transitions ride status to driver arrived at pickup location.
-  RideModel markDriverArrived(RideModel ride) {
-    return ride.copyWith(status: RideStatus.driverArrived);
-  }
-
-  /// Verifies rider's 4-digit PIN before starting the trip.
-  /// Returns updated RideModel if PIN matches, otherwise returns null.
-  RideModel? verifyPinAndStartTrip(RideModel ride, String enteredPin) {
-    if (ride.pin.trim() != enteredPin.trim()) {
-      return null;
-    }
-    return ride.copyWith(status: RideStatus.inProgress);
-  }
-
-  /// Marks trip as completed, records completion time, and sets payment to paid.
-  RideModel completeTrip(RideModel ride) {
-    return ride.copyWith(
-      status: RideStatus.completed,
-      completedAt: DateTime.now(),
-      paymentStatus: 'paid',
-    );
-  }
-
-  /// Cancels an active ride.
-  RideModel cancelRide(RideModel ride, String reason) {
-    return ride.copyWith(
-      status: RideStatus.cancelled,
-      completedAt: DateTime.now(),
-      safetyFlags: [...ride.safetyFlags, 'Cancelled: $reason'],
     );
   }
 }

@@ -44,37 +44,42 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME',
-    appId: '1:113634488038:web:41d527663fb9115aa9197f',
+    apiKey: 'AIzaSyA43Ral7l47XFAVOl1Q4hBbMp5uV8DEGeg',
+    appId: '1:113634488038:web:ac112abeabfcc0cc41d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     authDomain: 'swift-ride-5ab75.firebaseapp.com',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
+    measurementId: 'G-Y6HNVYJ7VF',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDfJSXerZy1CfKivdmqAeNd1qRt3hIy5d0',
-    appId: '1:113634488038:android:f9ee0f93f32f216041d527',
+    appId: '1:113634488038:android:57734bf3f19ee42341d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME',
-    appId: '1:113634488038:ios:663fb9115aa9197f41d527',
+    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
-    iosBundleId: 'com.dartnexuslab.swiftri',
+    iosBundleId: 'com.dartnexuslab.swiftride',
   );
 
+  // NOTE: There is no dedicated macOS app registered in the Firebase project
+  // (console lists 2x Android, 2x iOS, 1x Web). macOS therefore mirrors the iOS
+  // registration, which is the existing convention in this repository. Register
+  // a macOS app and re-run `flutterfire configure` if you need true separation.
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME',
-    appId: '1:113634488038:ios:663fb9115aa9197f41d527',
+    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
-    iosBundleId: 'com.dartnexuslab.swiftri',
+    iosBundleId: 'com.dartnexuslab.swiftride',
   );
 }

@@ -1,6 +1,7 @@
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../core/constants/app_constants.dart';
 import '../core/utils/distance_calculator.dart';
 import 'location_service.dart';
 import 'polyline_service.dart';
@@ -9,14 +10,90 @@ class PlaceSuggestion {
   final String placeId;
   final String mainText;
   final String secondaryText;
-  final LatLng coordinates;
+
+  /// Resolved coordinates. Null for remote autocomplete predictions — those are
+  /// resolved on selection via [MapService.resolvePlace], because Places
+  /// Autocomplete does not return a location.
+  final LatLng? coordinates;
 
   const PlaceSuggestion({
     required this.placeId,
     required this.mainText,
     required this.secondaryText,
-    required this.coordinates,
+    this.coordinates,
   });
+}
+
+/// A stretch of the route with a given traffic speed, as reported by the
+/// Routes API `speedReadingIntervals`.
+class TrafficInterval {
+  final int startIndex;
+
+  /// Index of the last polyline point in this interval (inclusive).
+  /// Null means "to the end of the route".
+  final int? endIndex;
+
+  /// One of NORMAL, SLOW or TRAFFIC_JAM.
+  final String speed;
+
+  const TrafficInterval({
+    required this.startIndex,
+    this.endIndex,
+    required this.speed,
+  });
+
+  bool get isJam => speed == 'TRAFFIC_JAM';
+  bool get isSlow => speed == 'SLOW';
+  bool get isNormal => !isJam && !isSlow;
+
+  static List<TrafficInterval> listFrom(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((entry) => TrafficInterval(
+              startIndex: (entry['startIndex'] as num?)?.toInt() ?? 0,
+              endIndex: (entry['endIndex'] as num?)?.toInt(),
+              speed: (entry['speed'] as String?) ?? 'NORMAL',
+            ))
+        .toList();
+  }
+
+  /// Splits [points] into runs that share a traffic speed.
+  ///
+  /// Points are shared between adjacent runs so the drawn segments join up
+  /// without gaps.
+  static List<({List<LatLng> points, TrafficInterval? interval})> segment(
+    List<LatLng> points,
+    List<TrafficInterval> intervals,
+  ) {
+    if (points.length < 2) return const [];
+    if (intervals.isEmpty) {
+      return [(points: points, interval: null)];
+    }
+
+    final ordered = [...intervals]..sort((a, b) => a.startIndex.compareTo(b.startIndex));
+    final segments = <({List<LatLng> points, TrafficInterval? interval})>[];
+
+    final lastIndex = points.length - 1;
+
+    for (var i = 0; i < ordered.length; i++) {
+      final interval = ordered[i];
+
+      // Clamp both ends into range independently. Clamping the end with a lower
+      // bound of `start + 1` threw whenever `start` was already the last index
+      // (lower bound above upper bound).
+      final start = interval.startIndex.clamp(0, lastIndex);
+      final end = (interval.endIndex ?? lastIndex).clamp(0, lastIndex);
+      if (end <= start) continue;
+
+      segments.add((
+        points: points.sublist(start, end + 1),
+        interval: interval,
+      ));
+    }
+
+    return segments.isEmpty ? [(points: points, interval: null)] : segments;
+  }
 }
 
 class RouteDetails {
@@ -25,11 +102,22 @@ class RouteDetails {
   final double durationMin;
   final String trafficLevel;
 
+  /// Per-segment traffic, used to colour the drawn route. Empty when the
+  /// backend had no traffic data.
+  final List<TrafficInterval> trafficIntervals;
+
+  /// True when this geometry is a straight-line estimate rather than real road
+  /// geometry returned by the routing backend. The UI uses this to avoid
+  /// presenting an invented line as an actual driving route.
+  final bool isEstimated;
+
   const RouteDetails({
     required this.polylinePoints,
     required this.distanceKm,
     required this.durationMin,
     this.trafficLevel = 'NORMAL',
+    this.trafficIntervals = const [],
+    this.isEstimated = false,
   });
 }
 
@@ -190,8 +278,12 @@ class MapService {
     ),
   ];
 
-  /// Gets device's real GPS position or falls back to platform default.
-  Future<LatLng> getCurrentPosition() async {
+  /// Gets the device's real GPS position.
+  ///
+  /// Returns null when there is no fix (permission denied, GPS off, or timeout).
+  /// It deliberately does NOT substitute a hardcoded city centre — doing so
+  /// silently relocated users thousands of kilometres.
+  Future<LatLng?> getCurrentPosition() async {
     try {
       final loc = await LocationService().fetchCurrentPosition();
       if (loc != null) {
@@ -200,78 +292,162 @@ class MapService {
     } catch (e) {
       debugPrint('MapService.getCurrentPosition error: $e');
     }
-    return const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
+    return null;
   }
 
-  /// In-house reverse geocoder that maps coordinates to the closest sector,
-  /// hub, or neighborhood with zero external third-party geocoder dependencies.
+  /// Reverse-geocodes coordinates to a street address.
+  ///
+  /// Calls the `reverseGeocode` Cloud Function (Google Geocoding API). When the
+  /// address cannot be resolved it falls back to the raw coordinates, which is
+  /// honest, rather than the nearest entry from a hardcoded hub list — the old
+  /// behaviour returned plausible-looking street names that had nothing to do
+  /// with where the rider actually was.
   Future<String> reverseGeocode(double lat, double lng) async {
-    try {
-      PlaceSuggestion? closest;
-      double minDistance = double.infinity;
-
-      for (final hub in _knownLocations) {
-        final dist = DistanceCalculator.haversineDistance(
-          lat,
-          lng,
-          hub.coordinates.latitude,
-          hub.coordinates.longitude,
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        final res = await FirebaseFunctions.instance.httpsCallable('reverseGeocode').call(
+          <String, dynamic>{'latitude': lat, 'longitude': lng},
         );
-        if (dist < minDistance) {
-          minDistance = dist;
-          closest = hub;
-        }
+        final address = res.data['address'] as String?;
+        if (address != null && address.trim().isNotEmpty) return address;
+      } catch (e) {
+        debugPrint('[MapService] reverseGeocode failed: $e');
       }
-
-      if (closest != null) {
-        if (minDistance <= 1.5) {
-          return '${closest.mainText}, ${closest.secondaryText}';
-        } else if (minDistance <= 6.0) {
-          return 'Near ${closest.mainText} (${minDistance.toStringAsFixed(1)} km)';
-        }
-      }
-    } catch (e) {
-      debugPrint('MapService.reverseGeocode error: $e');
     }
 
     return 'Location (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
   }
 
-  /// Searches for places matching query with instant keyword matching and ranking.
+  /// Searches for places by query.
+  ///
+  /// Prefers the real Places Autocomplete backend. Falls back to the bundled
+  /// gazetteer of known local hubs — real named places with real coordinates —
+  /// when the backend is unavailable. It never invents a destination: a query
+  /// that matches nothing returns no results. Previously any unmatched query
+  /// produced a fabricated "Custom Destination, Islamabad" pin placed at an
+  /// arbitrary offset from the map centre.
   Future<List<PlaceSuggestion>> searchPlaces(String query, {LatLng? near}) async {
-    final results = <PlaceSuggestion>[];
-    final trimmed = query.trim().toLowerCase();
-    if (trimmed.isEmpty) return results;
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return const [];
 
-    for (final hub in _knownLocations) {
-      final mainLower = hub.mainText.toLowerCase();
-      final secLower = hub.secondaryText.toLowerCase();
+    final remote = await _fetchAutocomplete(trimmed, near);
+    if (remote.isNotEmpty) return remote;
 
-      if (mainLower.contains(trimmed) || secLower.contains(trimmed)) {
-        results.add(hub);
-      }
-    }
-
-    // If query has no exact match, create a custom search target for the rider
-    if (results.isEmpty) {
-      final centerLat = near?.latitude ?? AppConstants.defaultLat;
-      final centerLng = near?.longitude ?? AppConstants.defaultLng;
-
-      results.add(
-        PlaceSuggestion(
-          placeId: 'custom_${query.hashCode}',
-          mainText: query.trim(),
-          secondaryText: 'Custom Destination, Islamabad',
-          coordinates: LatLng(centerLat + 0.015, centerLng + 0.015),
-        ),
-      );
-    }
-
-    return results;
+    return _searchLocalGazetteer(trimmed);
   }
 
-  /// Calculates driving route details with realistic curvature points.
-  RouteDetails calculateRoute(LatLng origin, LatLng destination) {
+  Future<List<PlaceSuggestion>> _fetchAutocomplete(String query, LatLng? near) async {
+    if (Firebase.apps.isEmpty) return const [];
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('getAutocomplete').call(
+        <String, dynamic>{
+          'query': query,
+          if (near != null)
+            'location': {'latitude': near.latitude, 'longitude': near.longitude},
+        },
+      );
+
+      final predictions = res.data['predictions'];
+      if (predictions is! List) return const [];
+
+      return predictions
+          .whereType<Map>()
+          .map((p) => PlaceSuggestion(
+                placeId: (p['placeId'] as String?) ?? '',
+                mainText: (p['mainText'] as String?) ?? '',
+                secondaryText: (p['secondaryText'] as String?) ?? '',
+              ))
+          .where((p) => p.placeId.isNotEmpty)
+          .toList();
+    } catch (e) {
+      debugPrint('[MapService] autocomplete failed: $e');
+      return const [];
+    }
+  }
+
+  List<PlaceSuggestion> _searchLocalGazetteer(String query) {
+    final needle = query.toLowerCase();
+    return _knownLocations
+        .where((h) =>
+            h.mainText.toLowerCase().contains(needle) ||
+            h.secondaryText.toLowerCase().contains(needle))
+        .toList();
+  }
+
+  /// Resolves a [placeId] to coordinates via the `getPlaceDetails` function.
+  ///
+  /// Returns null when the place cannot be resolved, so the caller can tell the
+  /// user instead of being handed a stand-in location.
+  Future<LatLng?> resolvePlace(String placeId) async {
+    if (Firebase.apps.isEmpty || placeId.isEmpty) return null;
+
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('getPlaceDetails')
+          .call(<String, dynamic>{'placeId': placeId});
+
+      final lat = (res.data['lat'] as num?)?.toDouble();
+      final lng = (res.data['lng'] as num?)?.toDouble();
+      if (lat == null || lng == null) return null;
+      return LatLng(lat, lng);
+    } catch (e) {
+      debugPrint('[MapService] resolvePlace failed: $e');
+      return null;
+    }
+  }
+
+  /// Fetches a real road route from the `getRoute` Cloud Function.
+  ///
+  /// Returns null when the backend is unreachable or no route could be
+  /// computed, so the caller decides how to present that — rather than being
+  /// handed invented road geometry.
+  Future<RouteDetails?> fetchRoute(LatLng origin, LatLng destination) async {
+    if (Firebase.apps.isEmpty) return null;
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('getRoute').call({
+        'origin': {'latitude': origin.latitude, 'longitude': origin.longitude},
+        'destination': {
+          'latitude': destination.latitude,
+          'longitude': destination.longitude,
+        },
+      });
+
+      final data = res.data as Map<String, dynamic>;
+      final distanceKm = (data['distanceKm'] as num?)?.toDouble();
+      final durationMin = (data['durationMin'] as num?)?.toDouble();
+      if (distanceKm == null || durationMin == null) return null;
+
+      final encoded = (data['encodedPolyline'] as String?) ?? '';
+      final isEstimated = (data['isEstimated'] as bool?) ?? encoded.isEmpty;
+
+      // No road geometry -> a straight line, explicitly marked as an estimate.
+      final points = encoded.isEmpty
+          ? <LatLng>[origin, destination]
+          : decodePolyline(encoded);
+
+      if (points.length < 2) return null;
+
+      return RouteDetails(
+        polylinePoints: points,
+        distanceKm: distanceKm,
+        durationMin: durationMin,
+        trafficLevel: (data['trafficLevel'] as String?) ?? 'NORMAL',
+        trafficIntervals: TrafficInterval.listFrom(data['trafficIntervals']),
+        isEstimated: isEstimated,
+      );
+    } catch (e) {
+      debugPrint('[MapService.fetchRoute] failed: $e');
+      return null;
+    }
+  }
+
+  /// Local straight-line estimate used only when the routing backend is
+  /// unreachable. Always flagged [RouteDetails.isEstimated] — this is not a
+  /// road route. Previously this method invented bend points at fixed fractions
+  /// (0.33/0.15/0.66/0.85) so the line merely *looked* like a road.
+  RouteDetails estimateStraightLineRoute(LatLng origin, LatLng destination) {
     final distanceKm = DistanceCalculator.estimatedDrivingDistance(
       origin.latitude,
       origin.longitude,
@@ -279,26 +455,12 @@ class MapService {
       destination.longitude,
     );
 
-    final durationMin = DistanceCalculator.estimatedDurationMinutes(distanceKm);
-
-    // Generate realistic road curvature polyline points between origin & destination
-    final points = <LatLng>[origin];
-
-    final midLat1 = origin.latitude + (destination.latitude - origin.latitude) * 0.33;
-    final midLng1 = origin.longitude + (destination.longitude - origin.longitude) * 0.15;
-
-    final midLat2 = origin.latitude + (destination.latitude - origin.latitude) * 0.66;
-    final midLng2 = origin.longitude + (destination.longitude - origin.longitude) * 0.85;
-
-    points.add(LatLng(midLat1, midLng1));
-    points.add(LatLng(midLat2, midLng2));
-    points.add(destination);
-
     return RouteDetails(
-      polylinePoints: points,
+      polylinePoints: <LatLng>[origin, destination],
       distanceKm: distanceKm,
-      durationMin: durationMin,
+      durationMin: DistanceCalculator.estimatedDurationMinutes(distanceKm),
       trafficLevel: 'NORMAL',
+      isEstimated: true,
     );
   }
 

@@ -11,7 +11,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE.md)
 
 <p align="center">
-  <b>Package ID / Bundle Identifier:</b> <code>com.dartnexuslab.swiftri</code><br>
+  <b>Package ID / Bundle Identifier:</b> <code>com.dartnexuslab.swiftride</code><br>
   <b>Platforms:</b> iOS 15.0+ • Android 8.0+ (API 26+) • Web Admin
 </p>
 
@@ -113,7 +113,7 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
 ```
 SwiftRide/
 ├── .github/workflows/          # GitHub Actions CI/CD (iOS Release & TestFlight)
-├── android/                    # Android Project (com.dartnexuslab.swiftri)
+├── android/                    # Android Project (com.dartnexuslab.swiftride)
 ├── assets/                     # Master Branding Assets & App Icons
 ├── codemagic.yaml              # Codemagic CI/CD Pipeline (iOS, Android, PR checks)
 ├── functions/                  # Cloud Functions Gen 2 (TypeScript)
@@ -124,7 +124,7 @@ SwiftRide/
 │   │   ├── modules/rides/      # Bidding & ride dispatch engine
 │   │   └── modules/safety/     # SOS and trip sharing
 │   └── tests/                  # Vitest backend test suite
-├── ios/                        # iOS Project (com.dartnexuslab.swiftri, iOS 15.0+)
+├── ios/                        # iOS Project (com.dartnexuslab.swiftride, iOS 15.0+)
 │   ├── Runner/
 │   │   ├── AppDelegate.swift   # Native MethodChannels, APNs & GMSServices
 │   │   ├── Info.plist          # Transparent iOS permissions, GMSApiKey
@@ -200,7 +200,7 @@ flutter run -d emulator-5554
 
 ## 🍏 iOS Release Build & App Store Distribution
 
-The project is pre-configured with Bundle ID **`com.dartnexuslab.swiftri`**, display name **`Swift Ride`**, and complete privacy manifests.
+The project is pre-configured with Bundle ID **`com.dartnexuslab.swiftride`**, display name **`Swift Ride`**, and complete privacy manifests.
 
 ### Building the Release IPA
 ```bash
@@ -231,8 +231,8 @@ SwiftRide uses `google_maps_flutter` for client rendering combined with Cloud Fu
 
 1. **Enable APIs in Google Cloud Console:** Maps SDK for iOS, Maps SDK for Android, Routes API, Places API, Geocoding API, Distance Matrix API.
 2. **Configure Native Keys:**
-   - **iOS:** Add your key restricted to bundle `com.dartnexuslab.swiftri` into `ios/Runner/Info.plist` (`GMSApiKey`).
-   - **Android:** Add your key restricted to package `com.dartnexuslab.swiftri` into `android/app/src/main/AndroidManifest.xml` (`com.google.android.geo.API_KEY`).
+   - **iOS:** Add your key restricted to bundle `com.dartnexuslab.swiftride` into `ios/Runner/Info.plist` (`GMSApiKey`).
+   - **Android:** Add your key restricted to package `com.dartnexuslab.swiftride` into `android/app/src/main/AndroidManifest.xml` (`com.google.android.geo.API_KEY`).
 3. **Configure Backend Server Key:**
    - Store in Google Cloud Secret Manager:
      ```bash

@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
@@ -19,6 +20,86 @@ class FirestoreSafetyService {
       }
     } catch (_) {}
     return null;
+  }
+
+  /// Creates a server-side share token for [rideId] via the `shareTrip` Cloud
+  /// Function, and returns the public tracking URL.
+  ///
+  /// Returns null when the token could not be created. Tokens MUST come from the
+  /// server: `getSharedTrip` resolves them from the `shared_trips` collection, so
+  /// a locally invented token produces a link that always reports as expired.
+  Future<String?> createShareLink(String rideId) async {
+    if (Firebase.apps.isEmpty) return null;
+
+    try {
+      final res = await FirebaseFunctions.instance
+          .httpsCallable('shareTrip')
+          .call(<String, dynamic>{'rideId': rideId});
+
+      final data = res.data as Map<String, dynamic>;
+      final token = data['shareToken'] as String?;
+      if (token == null || token.isEmpty) return null;
+
+      return (data['shareUrl'] as String?) ??
+          'https://swiftride.app/track?token=$token';
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreSafetyService] shareTrip failed: ${e.code} ${e.message}');
+      return null;
+    } catch (e) {
+      debugPrint('[FirestoreSafetyService] shareTrip failed: $e');
+      return null;
+    }
+  }
+
+  /// Honest outcome of an SOS dispatch attempt.
+  ///
+  /// [reachedAnyone] is false when no device could be notified — the UI must not
+  /// claim help is coming in that case.
+  Future<SosDispatchResult> triggerSos({
+    required String rideId,
+    required double latitude,
+    required double longitude,
+    String? message,
+  }) async {
+    if (Firebase.apps.isEmpty) {
+      return const SosDispatchResult.failed(
+        'SOS needs an internet connection to reach your contacts. Call local '
+        'emergency services now.',
+      );
+    }
+
+    try {
+      final res = await FirebaseFunctions.instance.httpsCallable('triggerSos').call(
+        <String, dynamic>{
+          'rideId': rideId,
+          'location': {'latitude': latitude, 'longitude': longitude},
+          'message': ?message,
+        },
+      );
+
+      final data = res.data as Map<String, dynamic>;
+      return SosDispatchResult(
+        reachedAnyone: (data['reachedAnyone'] as bool?) ?? false,
+        delivered: (data['delivered'] as num?)?.toInt() ?? 0,
+        notifiedContacts: (data['notifiedContacts'] as num?)?.toInt() ?? 0,
+        unreachablePhones:
+            (data['unreachablePhones'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
+                const [],
+        message: (data['emergencyNotice'] as String?) ??
+            'Emergency alert recorded.',
+        eventId: data['eventId'] as String?,
+      );
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreSafetyService] triggerSos failed: ${e.code} ${e.message}');
+      return const SosDispatchResult.failed(
+        'We could not reach the safety service. Call local emergency services now.',
+      );
+    } catch (e) {
+      debugPrint('[FirestoreSafetyService] triggerSos failed: $e');
+      return const SosDispatchResult.failed(
+        'We could not send your emergency alert. Call local emergency services now.',
+      );
+    }
   }
 
   final Map<String, SafetyEvent> _memoryEvents = {};
@@ -45,6 +126,33 @@ class FirestoreSafetyService {
   }
 
   /// Streams safety events for a specific ride.
+  /// Closes an open emergency alert.
+  ///
+  /// Returns null on success, or a message explaining the refusal. Nothing could
+  /// resolve an alert before this, so once an SOS fired the assigned driver's
+  /// banner never cleared.
+  Future<String?> resolveSos(String eventId, {String? note}) async {
+    if (Firebase.apps.isEmpty) {
+      return 'Closing an alert needs an internet connection.';
+    }
+
+    try {
+      await FirebaseFunctions.instance.httpsCallable('resolveSos').call(
+        <String, dynamic>{
+          'eventId': eventId,
+          if (note != null && note.isNotEmpty) 'note': note,
+        },
+      );
+      return null;
+    } on FirebaseFunctionsException catch (e) {
+      debugPrint('[FirestoreSafetyService] resolveSos: ${e.code} ${e.message}');
+      return e.message ?? 'We could not close the alert.';
+    } catch (e) {
+      debugPrint('[FirestoreSafetyService] resolveSos failed: $e');
+      return 'We could not close the alert.';
+    }
+  }
+
   /// Utilizes composite index: `safety_events (rideId ASC, createdAt DESC)`.
   Stream<List<SafetyEvent>> streamEventsForRide(String rideId) {
     final fs = _firestore;
@@ -162,3 +270,31 @@ class FirestoreSafetyService {
   }
 }
 
+
+
+/// Outcome of an SOS dispatch, as reported by the `triggerSos` Cloud Function.
+class SosDispatchResult {
+  final bool reachedAnyone;
+  final int delivered;
+  final int notifiedContacts;
+  final List<String> unreachablePhones;
+  final String message;
+  final String? eventId;
+
+  const SosDispatchResult({
+    required this.reachedAnyone,
+    required this.delivered,
+    required this.notifiedContacts,
+    required this.unreachablePhones,
+    required this.message,
+    this.eventId,
+  });
+
+  const SosDispatchResult.failed(String reason)
+      : reachedAnyone = false,
+        delivered = 0,
+        notifiedContacts = 0,
+        unreachablePhones = const [],
+        message = reason,
+        eventId = null;
+}

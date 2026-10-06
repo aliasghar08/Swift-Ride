@@ -11,6 +11,7 @@ import 'providers/location_provider.dart';
 import 'providers/ride_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider; // <-- ADDED IMPORT
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
@@ -21,9 +22,6 @@ import 'ai/ai.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Registered before runApp and outside any try/catch: a message arriving while
-  // the app is terminated is delivered on its own isolate, which needs this
-  // handler to exist from process start.
   if (!kIsWeb) {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
@@ -33,9 +31,14 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // Offline-first Firestore: keep a local cache so a rider or driver on a
-    // patchy connection still sees their last-known trip state instead of an
-    // empty screen. Not supported on web, where the SDK manages this itself.
+    // --- NEW: Ensure an authenticated session exists for Cloud Functions ---
+    // This prevents the 'unauthenticated' HttpsError when calling getAutocomplete
+    if (FirebaseAuth.instance.currentUser == null) {
+      debugPrint('[Auth] No active session found. Signing in anonymously...');
+      await FirebaseAuth.instance.signInAnonymously();
+    }
+    // -----------------------------------------------------------------------
+
     if (!kIsWeb) {
       FirebaseFirestore.instance.settings = const Settings(
         persistenceEnabled: true,
@@ -43,7 +46,6 @@ Future<void> main() async {
       );
     }
 
-    // App Check: Use debug provider in debug/simulator mode, and attestation in release
     if (kDebugMode) {
       await FirebaseAppCheck.instance.activate(
         providerAndroid: const AndroidDebugProvider(),

@@ -16,59 +16,12 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>Swft Ride</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-
-	<!-- Location Permissions -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Swift Ride needs your location to show nearby drivers and track your ride in real time.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Swift Ride needs background location access to track your ride even when the app is in the background.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Swift Ride needs background location access for ride tracking.</string>
-
-	<!-- Camera & Photo Library Permissions -->
-	<key>NSCameraUsageDescription</key>
-	<string>Swift Ride needs camera access to photograph your vehicle and upload required verification documents.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Swift Ride needs photo library access to upload your driver documents and vehicle photos.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Swift Ride needs permission to save trip receipts and photos to your library.</string>
-
-	<!-- Audio & Speech Recognition Permissions -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Swift Ride needs microphone access for in-app voice chat and the AI assistant.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Swift Ride uses speech recognition to let you talk to the AI assistant hands-free.</string>
-
-	<!-- Motion & Safety Sensors -->
-	<key>NSMotionUsageDescription</key>
-	<string>Swift Ride uses motion data for crash detection and safety monitoring during rides.</string>
-
-	<!-- Contacts Permission -->
-	<key>NSContactsUsageDescription</key>
-	<string>Swift Ride needs contacts access to let you quickly add trusted contacts for trip sharing and SOS alerts.</string>
-
-	<!-- Bluetooth Permission -->
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Swift Ride uses Bluetooth to connect to in-car devices for enhanced navigation.</string>
-
-	<!-- Background Modes -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>fetch</string>
-		<string>remote-notification</string>
-		<string>location</string>
-	</array>
-
-	<!-- Google Maps Platform API Key
-	     Injected at build time from ios/Flutter/Secrets.xcconfig (git-ignored).
-	     Local dev: copy Secrets.xcconfig.example -> Secrets.xcconfig
-	     CI:        codemagic.yaml injects it from GOOGLE_MAPS_IOS_API_KEY. -->
-	<key>GMSApiKey</key>
-	<string>$(GMS_API_KEY)</string>
-
-	<!-- URL Schemes (Deep Linking, Google Auth) -->
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -84,16 +37,36 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(FLUTTER_BUILD_NAME)</string>
-	<key>CFBundleSignature</key>
-	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GMSApiKey</key>
+	<string>$(GMS_API_KEY)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Swift Ride uses Bluetooth to connect to in-car devices for enhanced navigation.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Swift Ride needs camera access to photograph your vehicle and upload required verification documents.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Swift Ride needs contacts access to let you quickly add trusted contacts for trip sharing and SOS alerts.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Swift Ride needs background location access to track your ride even when the app is in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Swift Ride needs background location access for ride tracking.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Swift Ride needs your location to show nearby drivers and track your ride in real time.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Swift Ride needs microphone access for in-app voice chat and the AI assistant.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Swift Ride uses motion data for crash detection and safety monitoring during rides.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Swift Ride needs permission to save trip receipts and photos to your library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Swift Ride needs photo library access to upload your driver documents and vehicle photos.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Swift Ride uses speech recognition to let you talk to the AI assistant hands-free.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -117,6 +90,12 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

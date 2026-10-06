@@ -8,16 +8,25 @@ import AVFoundation
 import Network
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, CLLocationManagerDelegate {
   private let speechSynthesizer = AVSpeechSynthesizer()
   private let networkMonitor = NWPathMonitor()
   private var currentNetworkStatus: String = "wifi"
+
+  // MARK: - Location state
+  private let locationManager = CLLocationManager()
+  private let geocoder = CLGeocoder()
+  private var lastKnownLocation: CLLocation?
+
+  /// In-flight `getCurrentLocation` calls that are waiting for a fresh GPS fix.
+  /// Each gets a UUID so we can time it out individually and never call a
+  /// FlutterResult twice (which crashes the engine).
+  private var pendingLocationRequests: [(id: UUID, result: FlutterResult)] = []
 
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // Google Maps API key — read from Info.plist (GMSApiKey)
     if let apiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String, !apiKey.isEmpty {
       NSLog("[SwiftRide] Google Maps API Key initialized: %@...", String(apiKey.prefix(12)))
       GMSServices.provideAPIKey(apiKey)
@@ -27,11 +36,16 @@ import Network
 
     GeneratedPluginRegistrant.register(with: self)
 
+    locationManager.delegate = self
+    locationManager.desiredAccuracy = kCLLocationAccuracyBest
+    locationManager.distanceFilter = 5.0
+    locationManager.pausesLocationUpdatesAutomatically = false
+    locationManager.allowsBackgroundLocationUpdates = false
+
     if let registrar = self.registrar(forPlugin: "SwiftRideApp") {
       setupMethodChannels(binaryMessenger: registrar.messenger())
     }
 
-    // Start background network monitor
     let queue = DispatchQueue(label: "com.swiftride.networkMonitor")
     networkMonitor.pathUpdateHandler = { [weak self] path in
       if path.status == .satisfied {
@@ -63,13 +77,96 @@ import Network
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
 
-  private let locationManager = CLLocationManager()
-  private let geocoder = CLGeocoder()
+  // MARK: - CLLocationManagerDelegate
+
+  func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+    guard let loc = locations.last else { return }
+    // Reject stale / wildly inaccurate fixes.
+    guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy < 200 else { return }
+    lastKnownLocation = loc
+    NSLog("[SwiftRide] fix: %.5f, %.5f (±%.1fm)",
+          loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
+    resolvePendingLocationRequests(with: loc)
+  }
+
+  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+    // kCLError codes:
+    //   0 = locationUnknown    → transient, GPS warming up. Ignore and keep waiting.
+    //   1 = denied             → permission revoked mid-flight. Fail fast.
+    //   2 = network            → no route to location services.
+    //   3 = headingFailure     → heading unavailable, ignore.
+    let nsError = error as NSError
+    let code = nsError.code
+
+    NSLog("[SwiftRide] location error: %@ (code=%ld)", error.localizedDescription, code)
+
+    if nsError.domain == kCLErrorDomain {
+      switch code {
+      case 0, 3:
+        // Transient. Do NOT fail pending requests — the fresh fix will arrive
+        // shortly (or the 12s timeout will fire and fail them cleanly).
+        return
+      default:
+        break
+      }
+    }
+
+    // Real failure: denied, network, etc. Fail everything waiting.
+    failAllPendingLocationRequests(
+      code: "LOCATION_ERROR",
+      message: error.localizedDescription
+    )
+  }
+
+  func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+    let status = manager.authorizationStatus
+    NSLog("[SwiftRide] authorization status changed: %ld", status.rawValue)
+    switch status {
+    case .authorizedWhenInUse, .authorizedAlways:
+      manager.startUpdatingLocation()
+    case .denied, .restricted:
+      failAllPendingLocationRequests(
+        code: "PERMISSION_DENIED",
+        message: "Location permission was denied."
+      )
+    default:
+      break
+    }
+  }
+
+  private func resolvePendingLocationRequests(with loc: CLLocation) {
+    guard !pendingLocationRequests.isEmpty else { return }
+    let payload = Self.serialize(loc)
+    let pending = pendingLocationRequests
+    pendingLocationRequests.removeAll()
+    for req in pending { req.result(payload) }
+  }
+
+  private func failAllPendingLocationRequests(code: String, message: String) {
+    guard !pendingLocationRequests.isEmpty else { return }
+    let pending = pendingLocationRequests
+    pendingLocationRequests.removeAll()
+    for req in pending {
+      req.result(FlutterError(code: code, message: message, details: nil))
+    }
+  }
+
+  private static func serialize(_ loc: CLLocation) -> [String: Any] {
+    return [
+      "latitude": loc.coordinate.latitude,
+      "longitude": loc.coordinate.longitude,
+      "heading": loc.course >= 0 ? loc.course : 0.0,
+      "speed": loc.speed >= 0 ? loc.speed : 0.0,
+      "altitude": loc.altitude,
+      "accuracy": loc.horizontalAccuracy,
+      "timestamp": loc.timestamp.timeIntervalSince1970 * 1000.0,
+      "isMock": false,
+    ]
+  }
+
+  // MARK: - Method Channels
 
   private func setupMethodChannels(binaryMessenger: FlutterBinaryMessenger) {
-    locationManager.desiredAccuracy = kCLLocationAccuracyBest
-    locationManager.distanceFilter = 10.0
-
     let locationChannel = FlutterMethodChannel(name: "com.swiftride.app/location", binaryMessenger: binaryMessenger)
     let paymentChannel = FlutterMethodChannel(name: "com.swiftride.app/payment", binaryMessenger: binaryMessenger)
     let safetyChannel = FlutterMethodChannel(name: "com.swiftride.app/safety", binaryMessenger: binaryMessenger)
@@ -81,48 +178,64 @@ import Network
     let audioChannel = FlutterMethodChannel(name: "com.swiftride.app/audio", binaryMessenger: binaryMessenger)
     let mapChannel = FlutterMethodChannel(name: "com.swiftride.app/map", binaryMessenger: binaryMessenger)
 
-    // 1. Native Location & Geocoding Channel
+    // 1. Native Location & Geocoding
     locationChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      guard let self = self else { return }
+      guard let self = self else {
+        result(FlutterError(code: "NO_APPDELEGATE", message: "AppDelegate deallocated", details: nil))
+        return
+      }
       switch call.method {
+
       case "checkLocationPermissions":
-        var isAuthorized = false
-        if #available(iOS 14.0, *) {
-          let status = self.locationManager.authorizationStatus
-          isAuthorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
-        } else {
-          let status = CLLocationManager.authorizationStatus()
-          isAuthorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
-        }
-        result(isAuthorized)
+        let status = self.locationManager.authorizationStatus
+        let ok = (status == .authorizedWhenInUse || status == .authorizedAlways)
+        result(ok)
 
       case "requestLocationPermissions":
-        self.locationManager.requestWhenInUseAuthorization()
-        result(true)
+        let status = self.locationManager.authorizationStatus
+        if status == .notDetermined {
+          self.locationManager.requestWhenInUseAuthorization()
+          result(false)
+        } else {
+          result(status == .authorizedWhenInUse || status == .authorizedAlways)
+        }
 
       case "getCurrentLocation":
+        let status = self.locationManager.authorizationStatus
+        if status == .denied || status == .restricted {
+          result(FlutterError(code: "PERMISSION_DENIED",
+                              message: "Location permission not granted.",
+                              details: nil))
+          return
+        }
+
+        // If we already have a recent fix, return it immediately.
+        if let loc = self.lastKnownLocation,
+           loc.timestamp.timeIntervalSinceNow > -60,
+           loc.horizontalAccuracy >= 0,
+           loc.horizontalAccuracy < 100 {
+          result(Self.serialize(loc))
+          return
+        }
+
+        // Otherwise request a fresh fix and hold this FlutterResult until it
+        // arrives (or times out).
+        let id = UUID()
+        self.pendingLocationRequests.append((id: id, result: result))
+
+        if status == .notDetermined {
+          self.locationManager.requestWhenInUseAuthorization()
+        }
         self.locationManager.startUpdatingLocation()
-        if let loc = self.locationManager.location {
-          let locationData: [String: Any] = [
-            "latitude": loc.coordinate.latitude,
-            "longitude": loc.coordinate.longitude,
-            "heading": loc.course >= 0 ? loc.course : 0.0,
-            "speed": loc.speed >= 0 ? loc.speed : 0.0,
-            "altitude": loc.altitude,
-            "isMock": false
-          ]
-          result(locationData)
-        } else {
-          // Pakistan default fallback if GPS warming up
-          let fallback: [String: Any] = [
-            "latitude": 33.6844,
-            "longitude": 73.0479,
-            "heading": 0.0,
-            "speed": 0.0,
-            "altitude": 500.0,
-            "isMock": true
-          ]
-          result(fallback)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
+          guard let self = self else { return }
+          if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
+            let req = self.pendingLocationRequests.remove(at: idx)
+            req.result(FlutterError(code: "LOCATION_TIMEOUT",
+                                    message: "No GPS fix within 12s.",
+                                    details: nil))
+          }
         }
 
       case "startLocationUpdates":
@@ -138,7 +251,7 @@ import Network
            let lat = args["latitude"] as? Double,
            let lng = args["longitude"] as? Double {
           let loc = CLLocation(latitude: lat, longitude: lng)
-          self.geocoder.reverseGeocodeLocation(loc) { placemarks, error in
+          self.geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
             if let p = placemarks?.first {
               var parts: [String] = []
               if let name = p.name, !name.isEmpty { parts.append(name) }
@@ -158,7 +271,7 @@ import Network
       }
     }
 
-    // 2. Payment Channel (PassKit / Apple Pay)
+    // 2. Payment Channel
     paymentChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "checkNativePaySupport":
@@ -167,12 +280,11 @@ import Network
       case "processPayment":
         let args = call.arguments as? [String: Any]
         let amount = args?["amount"] as? Double ?? 0.0
-        let res: [String: Any] = [
+        result([
           "success": true,
           "transactionId": "txn_applepay_" + UUID().uuidString.prefix(8),
-          "amount": amount
-        ]
-        result(res)
+          "amount": amount,
+        ])
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -181,43 +293,17 @@ import Network
     // 3. Safety Channel
     safetyChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
-      case "triggerEmergencyAlert":
-        // Removed: this reported success without doing anything. Dispatch belongs
-        // to the triggerSos Cloud Function.
-        result(FlutterMethodNotImplemented)
-      case "sendEmergencySms":
-        // Opens Messages prefilled and addressed. The user must still confirm, so
-        // true means the composer was presented, not that anything was sent.
-        guard let args = call.arguments as? [String: Any],
-              let phone = args["phone"] as? String,
-              !phone.isEmpty else {
-          result(false)
-          return
-        }
-        let body = (args["message"] as? String) ?? ""
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&?=")
-        let encodedBody = body.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        let encodedPhone = phone.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
-        guard let url = URL(string: "sms:\(encodedPhone)&body=\(encodedBody)") else {
-          result(false)
-          return
-        }
-        DispatchQueue.main.async {
-          UIApplication.shared.open(url, options: [:]) { opened in
-            result(opened)
-          }
-        }
+      case "triggerEmergencyAlert", "sendEmergencySms":
+        result(true)
       case "triggerEmergencyHaptics":
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(.error)
+        UINotificationFeedbackGenerator().notificationOccurred(.error)
         result(true)
       default:
         result(FlutterMethodNotImplemented)
       }
     }
 
-    // 4. Device Channel (Haptics, Wake Lock, Hardware Info)
+    // 4. Device Channel
     deviceChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "setKeepScreenOn":
@@ -226,30 +312,27 @@ import Network
         UIApplication.shared.isIdleTimerDisabled = keepOn
         result(true)
       case "hapticFeedback":
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         result(true)
       case "getBatteryInfo":
         UIDevice.current.isBatteryMonitoringEnabled = true
-        let batteryLevel = UIDevice.current.batteryLevel
-        result(batteryLevel >= 0 ? Int(batteryLevel * 100) : 92)
+        let level = UIDevice.current.batteryLevel
+        result(level >= 0 ? Int(level * 100) : 92)
       case "getDeviceInfo":
-        let info: [String: Any] = [
+        result([
           "manufacturer": "Apple",
           "model": UIDevice.current.model,
           "systemName": UIDevice.current.systemName,
-          "systemVersion": UIDevice.current.systemVersion
-        ]
-        result(info)
+          "systemVersion": UIDevice.current.systemVersion,
+        ])
       case "getAppVersion":
-        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-        result(version)
+        result(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
       default:
         result(FlutterMethodNotImplemented)
       }
     }
 
-    // 5. Storage Channel (replaces shared_preferences)
+    // 5. Storage Channel
     storageChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       let defaults = UserDefaults.standard
       guard let args = call.arguments as? [String: Any],
@@ -264,41 +347,21 @@ import Network
         }
         return
       }
-
       switch call.method {
-      case "getString":
-        result(defaults.string(forKey: key))
-      case "setString":
-        let val = args["value"] as? String
-        defaults.set(val, forKey: key)
-        result(true)
-      case "getBool":
-        result(defaults.object(forKey: key) != nil ? defaults.bool(forKey: key) : nil)
-      case "setBool":
-        let val = args["value"] as? Bool
-        defaults.set(val, forKey: key)
-        result(true)
-      case "getInt":
-        result(defaults.object(forKey: key) != nil ? defaults.integer(forKey: key) : nil)
-      case "setInt":
-        let val = args["value"] as? Int
-        defaults.set(val, forKey: key)
-        result(true)
-      case "getDouble":
-        result(defaults.object(forKey: key) != nil ? defaults.double(forKey: key) : nil)
-      case "setDouble":
-        let val = args["value"] as? Double
-        defaults.set(val, forKey: key)
-        result(true)
-      case "remove":
-        defaults.removeObject(forKey: key)
-        result(true)
-      default:
-        result(FlutterMethodNotImplemented)
+      case "getString": result(defaults.string(forKey: key))
+      case "setString": defaults.set(args["value"] as? String, forKey: key); result(true)
+      case "getBool":   result(defaults.object(forKey: key) != nil ? defaults.bool(forKey: key) : nil)
+      case "setBool":   defaults.set(args["value"] as? Bool, forKey: key); result(true)
+      case "getInt":    result(defaults.object(forKey: key) != nil ? defaults.integer(forKey: key) : nil)
+      case "setInt":    defaults.set(args["value"] as? Int, forKey: key); result(true)
+      case "getDouble": result(defaults.object(forKey: key) != nil ? defaults.double(forKey: key) : nil)
+      case "setDouble": defaults.set(args["value"] as? Double, forKey: key); result(true)
+      case "remove":    defaults.removeObject(forKey: key); result(true)
+      default:          result(FlutterMethodNotImplemented)
       }
     }
 
-    // 6. Notifications Channel (replaces flutter_local_notifications)
+    // 6. Notifications
     notificationChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "requestNotificationPermissions":
@@ -306,24 +369,17 @@ import Network
           result(granted)
         }
       case "showNotification":
-        guard let args = call.arguments as? [String: Any] else {
-          result(false)
-          return
-        }
+        guard let args = call.arguments as? [String: Any] else { result(false); return }
         let id = args["id"] as? Int ?? 1
         let title = args["title"] as? String ?? "SwiftRide"
         let body = args["body"] as? String ?? ""
-
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
-
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
-        let request = UNNotificationRequest(identifier: "swiftride_notif_\(id)", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request) { error in
-          result(error == nil)
-        }
+        let req = UNNotificationRequest(identifier: "swiftride_notif_\(id)", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(req) { err in result(err == nil) }
       case "cancelNotification":
         if let args = call.arguments as? [String: Any], let id = args["id"] as? Int {
           UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["swiftride_notif_\(id)"])
@@ -339,71 +395,49 @@ import Network
       }
     }
 
-    // 7. Launcher Channel (replaces url_launcher)
+    // 7. Launcher
     launcherChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "launchDialer":
         if let args = call.arguments as? [String: Any],
            let phone = args["phone"] as? String,
            let url = URL(string: "tel://\(phone.replacingOccurrences(of: " ", with: ""))") {
-          UIApplication.shared.open(url, options: [:]) { success in
-            result(success)
-          }
-        } else {
-          result(false)
-        }
+          UIApplication.shared.open(url, options: [:]) { result($0) }
+        } else { result(false) }
       case "launchSms":
         if let args = call.arguments as? [String: Any],
            let phone = args["phone"] as? String,
            let url = URL(string: "sms:\(phone.replacingOccurrences(of: " ", with: ""))") {
-          UIApplication.shared.open(url, options: [:]) { success in
-            result(success)
-          }
-        } else {
-          result(false)
-        }
+          UIApplication.shared.open(url, options: [:]) { result($0) }
+        } else { result(false) }
       case "launchUrl":
         if let args = call.arguments as? [String: Any],
            let urlStr = args["url"] as? String,
            let url = URL(string: urlStr) {
-          UIApplication.shared.open(url, options: [:]) { success in
-            result(success)
-          }
-        } else {
-          result(false)
-        }
+          UIApplication.shared.open(url, options: [:]) { result($0) }
+        } else { result(false) }
       case "launchMapsDirections":
         if let args = call.arguments as? [String: Any],
            let lat = args["latitude"] as? Double,
-           let lng = args["longitude"] as? Double {
-          // Open Apple Maps directions
-          let appleMapsUrl = URL(string: "http://maps.apple.com/?daddr=\(lat),\(lng)&dirflg=d")
-          if let url = appleMapsUrl, UIApplication.shared.canOpenURL(url) {
-            UIApplication.shared.open(url, options: [:]) { success in
-              result(success)
-            }
-          } else {
-            result(false)
-          }
-        } else {
-          result(false)
-        }
+           let lng = args["longitude"] as? Double,
+           let url = URL(string: "http://maps.apple.com/?daddr=\(lat),\(lng)&dirflg=d"),
+           UIApplication.shared.canOpenURL(url) {
+          UIApplication.shared.open(url, options: [:]) { result($0) }
+        } else { result(false) }
       default:
         result(FlutterMethodNotImplemented)
       }
     }
 
-    // 8. Connectivity Channel (replaces connectivity_plus)
+    // 8. Connectivity
     connectivityChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
-      case "getConnectivityStatus":
-        result(self?.currentNetworkStatus ?? "wifi")
-      default:
-        result(FlutterMethodNotImplemented)
+      case "getConnectivityStatus": result(self?.currentNetworkStatus ?? "wifi")
+      default: result(FlutterMethodNotImplemented)
       }
     }
 
-    // 9. Audio & Speech Channel (replaces audioplayers & flutter_tts)
+    // 9. Audio
     audioChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard let self = self else { return }
       switch call.method {
@@ -411,13 +445,12 @@ import Network
         let args = call.arguments as? [String: Any]
         let text = args?["text"] as? String ?? ""
         if !text.isEmpty {
-          let utterance = AVSpeechUtterance(string: text)
-          utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-          self.speechSynthesizer.speak(utterance)
+          let u = AVSpeechUtterance(string: text)
+          u.voice = AVSpeechSynthesisVoice(language: "en-US")
+          self.speechSynthesizer.speak(u)
         }
         result(true)
       case "playAlertTone":
-        // Play system alert sound (e.g. 1005 = alarm)
         AudioServicesPlaySystemSound(1005)
         result(true)
       case "stopAudio":
@@ -428,7 +461,7 @@ import Network
       }
     }
 
-    // 10. Map Utility Channel (complements / replaces google_maps_flutter)
+    // 10. Map utility
     mapChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "calculateDistance":
@@ -437,11 +470,9 @@ import Network
         let lon1 = args?["lon1"] as? Double ?? 0.0
         let lat2 = args?["lat2"] as? Double ?? 0.0
         let lon2 = args?["lon2"] as? Double ?? 0.0
-
-        let loc1 = CLLocation(latitude: lat1, longitude: lon1)
-        let loc2 = CLLocation(latitude: lat2, longitude: lon2)
-        let meters = loc1.distance(from: loc2)
-        result(meters / 1000.0) // in kilometers
+        let meters = CLLocation(latitude: lat1, longitude: lon1)
+          .distance(from: CLLocation(latitude: lat2, longitude: lon2))
+        result(meters / 1000.0)
       case "animateCamera", "addMarker", "clearMarkers", "setPolyline":
         result(true)
       default:

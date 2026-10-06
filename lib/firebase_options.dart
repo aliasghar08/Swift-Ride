@@ -62,7 +62,7 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    apiKey: 'AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME',
     appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
@@ -75,7 +75,7 @@ class DefaultFirebaseOptions {
   // registration, which is the existing convention in this repository. Register
   // a macOS app and re-run `flutterfire configure` if you need true separation.
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    apiKey: 'AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME',
     appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',

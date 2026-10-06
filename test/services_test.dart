@@ -7,7 +7,7 @@ import 'package:swiftride/domain/models/subscription_model.dart';
 import 'package:swiftride/domain/models/vehicle_info_model.dart';
 import 'package:swiftride/services/admin_service.dart';
 import 'package:swiftride/services/driver_service.dart';
-import 'package:swiftride/services/location_service.dart';
+import 'package:swiftride/services/location_service_io.dart';
 import 'package:swiftride/services/ride_service.dart';
 import 'package:swiftride/services/safety_service.dart';
 

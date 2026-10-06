@@ -5,18 +5,11 @@ import { assertAuthenticated } from '../../middleware/auth';
 import { validateInput, LatLngSchema } from '../../middleware/validation';
 import { z } from 'zod';
 
-/**
- * Server-side Maps key. Must be declared and bound — this function previously
- * read `process.env.GOOGLE_MAPS_API_KEY` with no `secrets:` binding, so the key
- * was always undefined and every rider was served fabricated suggestions like
- * "<query> Central Station, Downtown".
- */
 const mapsKey = defineSecret('GOOGLE_MAPS_SERVER_KEY');
 
 const AutocompleteSchema = z.object({
   query: z.string().min(1).max(100),
   location: LatLngSchema.optional(),
-  /// Groups keystrokes into one Autocomplete session for billing.
   sessionToken: z.string().min(8).max(64).optional(),
 });
 
@@ -28,8 +21,6 @@ export const getAutocomplete = onCall(
 
     const apiKey = mapsKey.value();
     if (!apiKey) {
-      // No invented suggestions. An empty list is the honest answer, and
-      // `available: false` lets the client explain why.
       return { predictions: [], available: false };
     }
 
@@ -37,12 +28,13 @@ export const getAutocomplete = onCall(
       const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
       url.searchParams.set('input', data.query);
       url.searchParams.set('key', apiKey);
+      
       if (data.location) {
+        // --- NEW: Using locationbias instead of strict radius ---
         url.searchParams.set(
-          'location',
-          `${data.location.latitude},${data.location.longitude}`
+          'locationbias',
+          `circle:50000@${data.location.latitude},${data.location.longitude}`
         );
-        url.searchParams.set('radius', '15000');
       }
       if (data.sessionToken) {
         url.searchParams.set('sessiontoken', data.sessionToken);

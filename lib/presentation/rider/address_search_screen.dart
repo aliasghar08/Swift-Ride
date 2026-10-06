@@ -1,10 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
+import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/location_point_model.dart';
+import '../../providers/location_provider.dart';
 import '../../services/map_service.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
@@ -29,12 +32,15 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   List<PlaceSuggestion> _suggestions = [];
   bool _isLoading = false;
   Timer? _debounce;
+  bool _hasSearched = false;
 
   @override
   void initState() {
     super.initState();
     _searchController.text = widget.initialQuery;
-    _fetchSuggestions(widget.initialQuery);
+    if (widget.initialQuery.trim().isNotEmpty) {
+      _fetchSuggestions(widget.initialQuery);
+    }
   }
 
   @override
@@ -51,31 +57,46 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     });
   }
 
+  LatLng? _riderLatLng() {
+    try {
+      final loc = CustomChangeNotifierProvider.read<LocationProvider>(context);
+      if (loc.hasRealFix) {
+        return LatLng(loc.latitude, loc.longitude);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<void> _fetchSuggestions(String query) async {
-    setState(() => _isLoading = true);
-    final results = await _mapService.searchPlaces(query);
-    if (mounted) {
-      setState(() {
-        _suggestions = results;
-        _isLoading = false;
-      });
-    }
+    final q = query.trim();
+
+    setState(() {
+      _isLoading = true;
+      _hasSearched = true;
+    });
+
+    final results = q.isEmpty
+        ? <PlaceSuggestion>[]
+        : await _mapService.searchPlaces(q, near: _riderLatLng());
+
+    if (!mounted) return;
+    setState(() {
+      _suggestions = results;
+      _isLoading = false;
+    });
   }
 
   Future<void> _selectPlace(PlaceSuggestion place) async {
     var coords = place.coordinates;
-
-    // Remote autocomplete predictions carry no location, so resolve it before
-    // returning. This used to be impossible because every suggestion came with
-    // invented coordinates baked in.
     if (coords == null) {
       setState(() => _isLoading = true);
       coords = await _mapService.resolvePlace(place.placeId);
       if (mounted) setState(() => _isLoading = false);
     }
 
+    if (!mounted) return;
+
     if (coords == null) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('We could not load that place. Please try another.'),
@@ -85,15 +106,16 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
       return;
     }
 
-    if (!mounted) return;
+    final address = [
+      place.mainText,
+      place.secondaryText,
+    ].where((s) => s.trim().isNotEmpty).join(', ');
+
     Navigator.of(context).pop(
       LocationPoint(
         latitude: coords.latitude,
         longitude: coords.longitude,
-        address: [
-          place.mainText,
-          place.secondaryText,
-        ].where((s) => s.trim().isNotEmpty).join(', '),
+        address: address,
       ),
     );
   }
@@ -101,6 +123,8 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
+    final trimmed = _searchController.text.trim();
+
     return Scaffold(
       backgroundColor: c.mapChromeStrong,
       appBar: AppBar(
@@ -131,6 +155,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
             children: [
               // Search Input Box
               GlassContainer(
+                backgroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 4,
@@ -148,14 +173,14 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                         controller: _searchController,
                         autofocus: true,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: Colors.black87,
                           fontSize: 16,
                         ),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           hintText:
                               'Search street, area, landmark in Pakistan...',
                           hintStyle: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
+                            color: Colors.black54,
                             fontSize: 14,
                           ),
                           border: InputBorder.none,
@@ -163,17 +188,21 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                         onChanged: _onQueryChanged,
                       ),
                     ),
-                    if (_searchController.text.isNotEmpty)
+                    if (trimmed.isNotEmpty)
                       IconButton(
                         tooltip: 'Clear search',
                         icon: const Icon(
                           Icons.close,
-                          color: Colors.white70,
+                          color: Colors.black54,
                           size: 18,
                         ),
                         onPressed: () {
                           _searchController.clear();
-                          _fetchSuggestions('');
+                          _debounce?.cancel();
+                          setState(() {
+                            _suggestions = [];
+                            _hasSearched = false;
+                          });
                         },
                       ),
                   ],
@@ -195,8 +224,6 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
               Expanded(
                 child: _suggestions.isEmpty
                     ? (_isLoading
-                          // Show the shape of the results while they load, rather
-                          // than a bare "Searching..." label.
                           ? ListView.separated(
                               itemCount: 4,
                               separatorBuilder: (_, index) =>
@@ -204,40 +231,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                               itemBuilder: (context, index) =>
                                   const _SuggestionSkeletonRow(),
                             )
-                          : Center(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      _searchController.text.trim().isEmpty
-                                          ? Icons.search
-                                          : Icons.location_off_outlined,
-                                      color: Colors.white.withValues(
-                                        alpha: 0.4,
-                                      ),
-                                      size: 32,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _searchController.text.trim().isEmpty
-                                          ? 'Type a destination or area name'
-                                          : 'No places matched "${_searchController.text.trim()}"',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.6,
-                                        ),
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ))
+                          : _buildEmptyState(trimmed))
                     : ListView.separated(
                         itemCount: _suggestions.length,
                         separatorBuilder: (_, index) => Divider(
@@ -289,9 +283,52 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
       ),
     );
   }
+
+  Widget _buildEmptyState(String trimmed) {
+    final IconData icon;
+    final String message;
+
+    if (trimmed.isEmpty && !_hasSearched) {
+      icon = Icons.search;
+      message = 'Type a destination or area name';
+    } else if (trimmed.isEmpty) {
+      icon = Icons.travel_explore;
+      message = 'Type at least 2 characters to search';
+    } else if (trimmed.length < 2) {
+      icon = Icons.more_horiz;
+      message = 'Keep typing…';
+    } else {
+      icon = Icons.location_off_outlined;
+      message = 'No places matched "$trimmed"';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: Colors.white.withValues(alpha: 0.4),
+              size: 32,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// Placeholder row matching a suggestion ListTile, tinted for the dark overlay.
 class _SuggestionSkeletonRow extends StatelessWidget {
   const _SuggestionSkeletonRow();
 

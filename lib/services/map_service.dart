@@ -1,19 +1,17 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // <-- ADDED IMPORT
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:swiftride/services/location_service_io.dart';
 import '../core/utils/distance_calculator.dart';
-import 'location_service.dart';
 import 'polyline_service.dart';
+import 'admin_service.dart';
 
 class PlaceSuggestion {
   final String placeId;
   final String mainText;
   final String secondaryText;
-
-  /// Resolved coordinates. Null for remote autocomplete predictions — those are
-  /// resolved on selection via [MapService.resolvePlace], because Places
-  /// Autocomplete does not return a location.
   final LatLng? coordinates;
 
   const PlaceSuggestion({
@@ -24,16 +22,9 @@ class PlaceSuggestion {
   });
 }
 
-/// A stretch of the route with a given traffic speed, as reported by the
-/// Routes API `speedReadingIntervals`.
 class TrafficInterval {
   final int startIndex;
-
-  /// Index of the last polyline point in this interval (inclusive).
-  /// Null means "to the end of the route".
   final int? endIndex;
-
-  /// One of NORMAL, SLOW or TRAFFIC_JAM.
   final String speed;
 
   const TrafficInterval({
@@ -58,10 +49,6 @@ class TrafficInterval {
         .toList();
   }
 
-  /// Splits [points] into runs that share a traffic speed.
-  ///
-  /// Points are shared between adjacent runs so the drawn segments join up
-  /// without gaps.
   static List<({List<LatLng> points, TrafficInterval? interval})> segment(
     List<LatLng> points,
     List<TrafficInterval> intervals,
@@ -73,15 +60,10 @@ class TrafficInterval {
 
     final ordered = [...intervals]..sort((a, b) => a.startIndex.compareTo(b.startIndex));
     final segments = <({List<LatLng> points, TrafficInterval? interval})>[];
-
     final lastIndex = points.length - 1;
 
     for (var i = 0; i < ordered.length; i++) {
       final interval = ordered[i];
-
-      // Clamp both ends into range independently. Clamping the end with a lower
-      // bound of `start + 1` threw whenever `start` was already the last index
-      // (lower bound above upper bound).
       final start = interval.startIndex.clamp(0, lastIndex);
       final end = (interval.endIndex ?? lastIndex).clamp(0, lastIndex);
       if (end <= start) continue;
@@ -101,14 +83,7 @@ class RouteDetails {
   final double distanceKm;
   final double durationMin;
   final String trafficLevel;
-
-  /// Per-segment traffic, used to colour the drawn route. Empty when the
-  /// backend had no traffic data.
   final List<TrafficInterval> trafficIntervals;
-
-  /// True when this geometry is a straight-line estimate rather than real road
-  /// geometry returned by the routing backend. The UI uses this to avoid
-  /// presenting an invented line as an actual driving route.
   final bool isEstimated;
 
   const RouteDetails({
@@ -121,168 +96,53 @@ class RouteDetails {
   });
 }
 
-/// In-house SwiftRide Map & Geocoding Service.
-/// Provides device GPS location, reverse geocoding, intelligent address search,
-/// and route polyline calculations with zero external geocoding dependencies.
 class MapService {
   static final MapService _instance = MapService._internal();
   factory MapService() => _instance;
   MapService._internal();
 
-  /// Comprehensive in-house geographic database of Pakistan landmarks and hubs.
+  static List<PlaceSuggestion> _searchLocalGazetteer(String query) {
+    final needle = query.toLowerCase();
+    return _knownLocations
+        .where((h) =>
+            h.mainText.toLowerCase().contains(needle) ||
+            h.secondaryText.toLowerCase().contains(needle))
+        .toList();
+  }
+
   static const List<PlaceSuggestion> _knownLocations = [
     // Islamabad
-    PlaceSuggestion(
-      placeId: 'isb_blue_area',
-      mainText: 'Blue Area Commercial Center',
-      secondaryText: 'Jinnah Avenue, Islamabad',
-      coordinates: LatLng(33.7128, 73.0642),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_centaurus',
-      mainText: 'The Centaurus Mall',
-      secondaryText: 'Jinnah Ave, Sector F-8/4, Islamabad',
-      coordinates: LatLng(33.7078, 73.0501),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_airport',
-      mainText: 'Islamabad International Airport (ISB)',
-      secondaryText: 'Airport Road, Islamabad',
-      coordinates: LatLng(33.5605, 72.8518),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_f9_park',
-      mainText: 'Fatima Jinnah Park (F-9 Park)',
-      secondaryText: 'Sector F-9, Islamabad',
-      coordinates: LatLng(33.7032, 73.0232),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_f6_super',
-      mainText: 'Super Market (F-6 Markaz)',
-      secondaryText: 'School Road, Sector F-6, Islamabad',
-      coordinates: LatLng(33.7297, 73.0746),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_f7_jinnah',
-      mainText: 'Jinnah Super Market (F-7 Markaz)',
-      secondaryText: 'College Road, Sector F-7, Islamabad',
-      coordinates: LatLng(33.7208, 73.0573),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_f10_markaz',
-      mainText: 'F-10 Markaz',
-      secondaryText: 'Sector F-10, Islamabad',
-      coordinates: LatLng(33.6934, 73.0116),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_g9_karachi_co',
-      mainText: 'Karachi Company (G-9 Markaz)',
-      secondaryText: 'Manghopir Road, Sector G-9, Islamabad',
-      coordinates: LatLng(33.6874, 73.0305),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_i8_markaz',
-      mainText: 'I-8 Markaz Business Hub',
-      secondaryText: 'Sector I-8, Islamabad',
-      coordinates: LatLng(33.6685, 73.0760),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_faisal_mosque',
-      mainText: 'Faisal Mosque',
-      secondaryText: 'Shah Faisal Avenue, E-8, Islamabad',
-      coordinates: LatLng(33.7298, 73.0372),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_daman_e_koh',
-      mainText: 'Daman-e-Koh Viewpoint',
-      secondaryText: 'Margalla Hills, Islamabad',
-      coordinates: LatLng(33.7438, 73.0694),
-    ),
+    PlaceSuggestion(placeId: 'isb_blue_area', mainText: 'Blue Area Commercial Center', secondaryText: 'Jinnah Avenue, Islamabad', coordinates: LatLng(33.7128, 73.0642)),
+    PlaceSuggestion(placeId: 'isb_centaurus', mainText: 'The Centaurus Mall', secondaryText: 'Jinnah Ave, Sector F-8/4, Islamabad', coordinates: LatLng(33.7078, 73.0501)),
+    PlaceSuggestion(placeId: 'isb_airport', mainText: 'Islamabad International Airport (ISB)', secondaryText: 'Airport Road, Islamabad', coordinates: LatLng(33.5605, 72.8518)),
+    PlaceSuggestion(placeId: 'isb_f9_park', mainText: 'Fatima Jinnah Park (F-9 Park)', secondaryText: 'Sector F-9, Islamabad', coordinates: LatLng(33.7032, 73.0232)),
+    PlaceSuggestion(placeId: 'isb_f6_super', mainText: 'Super Market (F-6 Markaz)', secondaryText: 'School Road, Sector F-6, Islamabad', coordinates: LatLng(33.7297, 73.0746)),
+    PlaceSuggestion(placeId: 'isb_f7_jinnah', mainText: 'Jinnah Super Market (F-7 Markaz)', secondaryText: 'College Road, Sector F-7, Islamabad', coordinates: LatLng(33.7208, 73.0573)),
+    PlaceSuggestion(placeId: 'isb_f10_markaz', mainText: 'F-10 Markaz', secondaryText: 'Sector F-10, Islamabad', coordinates: LatLng(33.6934, 73.0116)),
+    PlaceSuggestion(placeId: 'isb_g9_karachi_co', mainText: 'Karachi Company (G-9 Markaz)', secondaryText: 'Manghopir Road, Sector G-9, Islamabad', coordinates: LatLng(33.6874, 73.0305)),
+    PlaceSuggestion(placeId: 'isb_i8_markaz', mainText: 'I-8 Markaz Business Hub', secondaryText: 'Sector I-8, Islamabad', coordinates: LatLng(33.6685, 73.0760)),
+    PlaceSuggestion(placeId: 'isb_faisal_mosque', mainText: 'Faisal Mosque', secondaryText: 'Shah Faisal Avenue, E-8, Islamabad', coordinates: LatLng(33.7298, 73.0372)),
+    PlaceSuggestion(placeId: 'isb_daman_e_koh', mainText: 'Daman-e-Koh Viewpoint', secondaryText: 'Margalla Hills, Islamabad', coordinates: LatLng(33.7438, 73.0694)),
 
     // Rawalpindi
-    PlaceSuggestion(
-      placeId: 'rwp_saddar',
-      mainText: 'Saddar Rawalpindi Commercial Center',
-      secondaryText: 'The Mall, Saddar, Rawalpindi',
-      coordinates: LatLng(33.5936, 73.0531),
-    ),
-    PlaceSuggestion(
-      placeId: 'rwp_bahria_town',
-      mainText: 'Bahria Town Phase 4 Civic Center',
-      secondaryText: 'Civic Center, Bahria Town, Rawalpindi',
-      coordinates: LatLng(33.5350, 73.1020),
-    ),
-    PlaceSuggestion(
-      placeId: 'rwp_dha_phase1',
-      mainText: 'DHA Phase 1 Commercial',
-      secondaryText: 'Grand Trunk Road, Rawalpindi',
-      coordinates: LatLng(33.5412, 73.1235),
-    ),
-    PlaceSuggestion(
-      placeId: 'rwp_chandni_chowk',
-      mainText: 'Chandni Chowk Murree Road',
-      secondaryText: 'Murree Road, Rawalpindi',
-      coordinates: LatLng(33.6267, 73.0715),
-    ),
+    PlaceSuggestion(placeId: 'rwp_saddar', mainText: 'Saddar Rawalpindi Commercial Center', secondaryText: 'The Mall, Saddar, Rawalpindi', coordinates: LatLng(33.5936, 73.0531)),
+    PlaceSuggestion(placeId: 'rwp_bahria_town', mainText: 'Bahria Town Phase 4 Civic Center', secondaryText: 'Civic Center, Bahria Town, Rawalpindi', coordinates: LatLng(33.5350, 73.1020)),
+    PlaceSuggestion(placeId: 'rwp_dha_phase1', mainText: 'DHA Phase 1 Commercial', secondaryText: 'Grand Trunk Road, Rawalpindi', coordinates: LatLng(33.5412, 73.1235)),
+    PlaceSuggestion(placeId: 'rwp_chandni_chowk', mainText: 'Chandni Chowk Murree Road', secondaryText: 'Murree Road, Rawalpindi', coordinates: LatLng(33.6267, 73.0715)),
 
     // Lahore
-    PlaceSuggestion(
-      placeId: 'lhr_gulberg',
-      mainText: 'Main Boulevard Gulberg',
-      secondaryText: 'Gulberg III, Lahore',
-      coordinates: LatLng(31.5126, 74.3444),
-    ),
-    PlaceSuggestion(
-      placeId: 'lhr_dha_phase5',
-      mainText: 'DHA Phase 5 Commercial',
-      secondaryText: 'DHA, Lahore',
-      coordinates: LatLng(31.4674, 74.4023),
-    ),
-    PlaceSuggestion(
-      placeId: 'lhr_airport',
-      mainText: 'Allama Iqbal International Airport (LHE)',
-      secondaryText: 'Airport Road, Cantt, Lahore',
-      coordinates: LatLng(31.5216, 74.4036),
-    ),
-    PlaceSuggestion(
-      placeId: 'lhr_liberty_market',
-      mainText: 'Liberty Market Gulberg',
-      secondaryText: 'Noor Jehan Road, Gulberg III, Lahore',
-      coordinates: LatLng(31.5103, 74.3431),
-    ),
+    PlaceSuggestion(placeId: 'lhr_gulberg', mainText: 'Main Boulevard Gulberg', secondaryText: 'Gulberg III, Lahore', coordinates: LatLng(31.5126, 74.3444)),
+    PlaceSuggestion(placeId: 'lhr_dha_phase5', mainText: 'DHA Phase 5 Commercial', secondaryText: 'DHA, Lahore', coordinates: LatLng(31.4674, 74.4023)),
+    PlaceSuggestion(placeId: 'lhr_airport', mainText: 'Allama Iqbal International Airport (LHE)', secondaryText: 'Airport Road, Cantt, Lahore', coordinates: LatLng(31.5216, 74.4036)),
+    PlaceSuggestion(placeId: 'lhr_liberty_market', mainText: 'Liberty Market Gulberg', secondaryText: 'Noor Jehan Road, Gulberg III, Lahore', coordinates: LatLng(31.5103, 74.3431)),
 
     // Karachi
-    PlaceSuggestion(
-      placeId: 'khi_clifton',
-      mainText: 'Clifton Beach & Sea View',
-      secondaryText: 'Block 4, Clifton, Karachi',
-      coordinates: LatLng(24.8138, 67.0300),
-    ),
-    PlaceSuggestion(
-      placeId: 'khi_dha_phase6',
-      mainText: 'DHA Phase 6 Commercial',
-      secondaryText: 'Khayaban-e-Shahbaz, DHA, Karachi',
-      coordinates: LatLng(24.8052, 67.0620),
-    ),
-    PlaceSuggestion(
-      placeId: 'khi_airport',
-      mainText: 'Jinnah International Airport (KHI)',
-      secondaryText: 'Airport Road, Karachi',
-      coordinates: LatLng(24.9065, 67.1608),
-    ),
-    PlaceSuggestion(
-      placeId: 'khi_shahrah_faisal',
-      mainText: 'Shahrah-e-Faisal Business Corridor',
-      secondaryText: 'Shahrah-e-Faisal, Karachi',
-      coordinates: LatLng(24.8716, 67.0673),
-    ),
+    PlaceSuggestion(placeId: 'khi_clifton', mainText: 'Clifton Beach & Sea View', secondaryText: 'Block 4, Clifton, Karachi', coordinates: LatLng(24.8138, 67.0300)),
+    PlaceSuggestion(placeId: 'khi_dha_phase6', mainText: 'DHA Phase 6 Commercial', secondaryText: 'Khayaban-e-Shahbaz, DHA, Karachi', coordinates: LatLng(24.8052, 67.0620)),
+    PlaceSuggestion(placeId: 'khi_airport', mainText: 'Jinnah International Airport (KHI)', secondaryText: 'Airport Road, Karachi', coordinates: LatLng(24.9065, 67.1608)),
+    PlaceSuggestion(placeId: 'khi_shahrah_faisal', mainText: 'Shahrah-e-Faisal Business Corridor', secondaryText: 'Shahrah-e-Faisal, Karachi', coordinates: LatLng(24.8716, 67.0673)),
   ];
 
-  /// Gets the device's real GPS position.
-  ///
-  /// Returns null when there is no fix (permission denied, GPS off, or timeout).
-  /// It deliberately does NOT substitute a hardcoded city centre — doing so
-  /// silently relocated users thousands of kilometres.
   Future<LatLng?> getCurrentPosition() async {
     try {
       final loc = await LocationService().fetchCurrentPosition();
@@ -295,15 +155,9 @@ class MapService {
     return null;
   }
 
-  /// Reverse-geocodes coordinates to a street address.
-  ///
-  /// Calls the `reverseGeocode` Cloud Function (Google Geocoding API). When the
-  /// address cannot be resolved it falls back to the raw coordinates, which is
-  /// honest, rather than the nearest entry from a hardcoded hub list — the old
-  /// behaviour returned plausible-looking street names that had nothing to do
-  /// with where the rider actually was.
   Future<String> reverseGeocode(double lat, double lng) async {
-    if (Firebase.apps.isNotEmpty) {
+    // --- NEW: Added auth guard ---
+    if (Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null) {
       try {
         final res = await FirebaseFunctions.instance.httpsCallable('reverseGeocode').call(
           <String, dynamic>{'latitude': lat, 'longitude': lng},
@@ -318,14 +172,6 @@ class MapService {
     return 'Location (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
   }
 
-  /// Searches for places by query.
-  ///
-  /// Prefers the real Places Autocomplete backend. Falls back to the bundled
-  /// gazetteer of known local hubs — real named places with real coordinates —
-  /// when the backend is unavailable. It never invents a destination: a query
-  /// that matches nothing returns no results. Previously any unmatched query
-  /// produced a fabricated "Custom Destination, Islamabad" pin placed at an
-  /// arbitrary offset from the map centre.
   Future<List<PlaceSuggestion>> searchPlaces(String query, {LatLng? near}) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
@@ -336,8 +182,14 @@ class MapService {
     return _searchLocalGazetteer(trimmed);
   }
 
+  
+
   Future<List<PlaceSuggestion>> _fetchAutocomplete(String query, LatLng? near) async {
-    if (Firebase.apps.isEmpty) return const [];
+    // --- NEW: Added auth guard to gracefully fail if logged out ---
+    if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) {
+      debugPrint('[MapService] Skipping remote autocomplete: User not authenticated.');
+      return const [];
+    }
 
     try {
       final res = await FirebaseFunctions.instance.httpsCallable('getAutocomplete').call(
@@ -366,21 +218,9 @@ class MapService {
     }
   }
 
-  List<PlaceSuggestion> _searchLocalGazetteer(String query) {
-    final needle = query.toLowerCase();
-    return _knownLocations
-        .where((h) =>
-            h.mainText.toLowerCase().contains(needle) ||
-            h.secondaryText.toLowerCase().contains(needle))
-        .toList();
-  }
-
-  /// Resolves a [placeId] to coordinates via the `getPlaceDetails` function.
-  ///
-  /// Returns null when the place cannot be resolved, so the caller can tell the
-  /// user instead of being handed a stand-in location.
   Future<LatLng?> resolvePlace(String placeId) async {
-    if (Firebase.apps.isEmpty || placeId.isEmpty) return null;
+    // --- NEW: Added auth guard ---
+    if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null || placeId.isEmpty) return null;
 
     try {
       final res = await FirebaseFunctions.instance
@@ -397,13 +237,9 @@ class MapService {
     }
   }
 
-  /// Fetches a real road route from the `getRoute` Cloud Function.
-  ///
-  /// Returns null when the backend is unreachable or no route could be
-  /// computed, so the caller decides how to present that — rather than being
-  /// handed invented road geometry.
   Future<RouteDetails?> fetchRoute(LatLng origin, LatLng destination) async {
-    if (Firebase.apps.isEmpty) return null;
+    // --- NEW: Added auth guard ---
+    if (Firebase.apps.isEmpty || FirebaseAuth.instance.currentUser == null) return null;
 
     try {
       final res = await FirebaseFunctions.instance.httpsCallable('getRoute').call({
@@ -422,7 +258,6 @@ class MapService {
       final encoded = (data['encodedPolyline'] as String?) ?? '';
       final isEstimated = (data['isEstimated'] as bool?) ?? encoded.isEmpty;
 
-      // No road geometry -> a straight line, explicitly marked as an estimate.
       final points = encoded.isEmpty
           ? <LatLng>[origin, destination]
           : decodePolyline(encoded);
@@ -443,10 +278,6 @@ class MapService {
     }
   }
 
-  /// Local straight-line estimate used only when the routing backend is
-  /// unreachable. Always flagged [RouteDetails.isEstimated] — this is not a
-  /// road route. Previously this method invented bend points at fixed fractions
-  /// (0.33/0.15/0.66/0.85) so the line merely *looked* like a road.
   RouteDetails estimateStraightLineRoute(LatLng origin, LatLng destination) {
     final distanceKm = DistanceCalculator.estimatedDrivingDistance(
       origin.latitude,
@@ -464,12 +295,10 @@ class MapService {
     );
   }
 
-  /// Decodes encoded polylines using in-house PolylineService.
   List<LatLng> decodePolyline(String encoded) {
     return PolylineService.decodePolyline(encoded);
   }
 
-  /// Encodes polylines using in-house PolylineService.
   String encodePolyline(List<LatLng> points) {
     return PolylineService.encodePolyline(points);
   }

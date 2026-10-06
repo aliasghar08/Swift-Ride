@@ -25,10 +25,6 @@ class RiderViewModel extends ChangeNotifier {
   final MapService _mapService = MapService();
   final FirestoreSafetyService _safetyEvents = FirestoreSafetyService();
 
-  // Start empty. These used to be pre-filled with a hardcoded Islamabad demo
-  // trip ("Blue Area Commercial Center" -> "Islamabad International Airport",
-  // PKR 1750, 31.2 km), so the app opened showing a journey the rider never
-  // chose and would happily request.
   final TextEditingController pickupController = TextEditingController();
   final TextEditingController dropoffController = TextEditingController();
   final TextEditingController fareController = TextEditingController();
@@ -49,6 +45,11 @@ class RiderViewModel extends ChangeNotifier {
   bool _isPinMode = false;
   PaymentRail _selectedRail = PaymentRail.fallback;
 
+  /// True once a real GPS-backed pickup has been set (either from the platform
+  /// fix or from the user's own pin/search). False means "we don't actually
+  /// know where the rider is" and callers must handle that.
+  bool _hasPickupFromGps = false;
+
   RiderViewModel({
     NativeDeviceService? deviceService,
     NativeSafetyService? safetyService,
@@ -59,45 +60,55 @@ class RiderViewModel extends ChangeNotifier {
         _safetyService = safetyService ?? NativeSafetyService(),
         _notificationService = notificationService ?? NativeNotificationService(),
         _audioService = audioService ?? NativeAudioService(),
-        _launcherService = launcherService ?? NativeLauncherService() {
-    _recalculateRouteIfPossible();
-  }
+        _launcherService = launcherService ?? NativeLauncherService();
 
   bool get isPinMode => _isPinMode;
   PaymentRail get selectedRail => _selectedRail;
-
-  /// Label for the selected rail, e.g. "Payment: Cash to Driver".
   String get selectedPaymentMethod => _selectedRail.label;
   double get estimatedDistanceKm => _estimatedDistanceKm;
   double get estimatedDurationMin => _estimatedDurationMin;
   List<LatLng> get routePolyline => _routePolyline;
-
-  /// Per-segment traffic for the current route, for colouring the polyline.
   List<TrafficInterval> get routeTraffic => _routeTraffic;
   LocationPoint? get pickupLocation => _pickupLocation;
   LocationPoint? get dropoffLocation => _dropoffLocation;
 
+  /// True once a genuine GPS (or explicit user-chosen) pickup exists.
+  bool get hasPickupFromGps => _hasPickupFromGps;
+
   double get suggestedFare =>
       DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
 
-
-  /// Initializes pickup address from real device coordinates
+  /// Sets the pickup address from a real device fix.
+  ///
+  /// Callers must pass actual coordinates obtained from
+  /// `LocationProvider.waitForFirstFix()`. This method does NOT substitute
+  /// invented coordinates — if the caller couldn't get a fix, it should not
+  /// call this at all.
   Future<void> initializeFromCoordinates(double lat, double lng) async {
-    // If simulator returns Cupertino / San Francisco coordinates, snap to Islamabad
-    final isSimulatorDefault = (lat > 37.0 && lat < 38.0) && (lng < -121.0 && lng > -123.0);
-    final targetLat = isSimulatorDefault ? 33.7128 : lat;
-    final targetLng = isSimulatorDefault ? 73.0642 : lng;
-
+    // Accept the coordinates verbatim. Previously this rewrote anything that
+    // matched a Cupertino/SF bounding box to Islamabad, which broke for any
+    // real user actually in that region.
     _pickupLocation = LocationPoint(
-      latitude: targetLat,
-      longitude: targetLng,
-      address: isSimulatorDefault ? 'Blue Area Commercial Center' : 'Current Location',
+      latitude: lat,
+      longitude: lng,
+      address: 'Current Location',
     );
-    final realAddress = await _mapService.reverseGeocode(targetLat, targetLng);
-    pickupController.text = realAddress;
-    _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
-    _recalculateRouteIfPossible();
+    _hasPickupFromGps = true;
     notifyListeners();
+
+    // Reverse geocode in the background; if it fails, leave the generic
+    // "Current Location" string alone rather than inventing a place name.
+    try {
+      final realAddress = await _mapService.reverseGeocode(lat, lng);
+      if (realAddress.isNotEmpty) {
+        pickupController.text = realAddress;
+        _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+        _recalculateRouteIfPossible();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[RiderViewModel] reverseGeocode failed: $e');
+    }
   }
 
   void togglePinMode() {
@@ -112,9 +123,16 @@ class RiderViewModel extends ChangeNotifier {
       longitude: lng,
       address: 'Locating...',
     );
-    final realAddress = await _mapService.reverseGeocode(lat, lng);
-    pickupController.text = realAddress;
-    _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+    _hasPickupFromGps = true;
+    notifyListeners();
+
+    try {
+      final realAddress = await _mapService.reverseGeocode(lat, lng);
+      pickupController.text = realAddress;
+      _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+    } catch (e) {
+      debugPrint('[RiderViewModel] reverseGeocode failed: $e');
+    }
 
     _recalculateRouteIfPossible();
     notifyListeners();
@@ -123,6 +141,7 @@ class RiderViewModel extends ChangeNotifier {
   void setPickup(LocationPoint point) {
     _pickupLocation = point;
     pickupController.text = point.address;
+    _hasPickupFromGps = true;
     _recalculateRouteIfPossible();
     notifyListeners();
   }
@@ -134,10 +153,6 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Debounced route lookup.
-  ///
-  /// This used to recompute a synthetic polyline synchronously on every
-  /// keystroke and overwrite whatever fare the rider had typed.
   void _recalculateRouteIfPossible() {
     final pickup = _pickupLocation;
     final dropoff = _dropoffLocation;
@@ -162,11 +177,8 @@ class RiderViewModel extends ChangeNotifier {
       debugPrint('[RiderViewModel] route fetch failed: $e');
     }
 
-    // Drop out-of-order responses from a superseded lookup.
     if (requestId != _routeRequestId) return;
 
-    // Fall back to an explicitly-flagged straight-line estimate, never invented
-    // "road" geometry.
     route ??= _mapService.estimateStraightLineRoute(origin, dest);
 
     _routePolyline = route.polylinePoints;
@@ -175,7 +187,6 @@ class RiderViewModel extends ChangeNotifier {
     _estimatedDistanceKm = double.parse(route.distanceKm.toStringAsFixed(1));
     _estimatedDurationMin = double.parse(route.durationMin.toStringAsFixed(0));
 
-    // Only auto-fill the fare while the rider has not set it themselves.
     if (!_fareTouchedByUser) {
       fareController.text = suggestedFare.toInt().toString();
     }
@@ -191,38 +202,25 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Call when the rider types their own fare, so route recalculation stops
-  /// overwriting it.
   void markFareEditedByUser() {
     _fareTouchedByUser = true;
   }
 
-  /// True when the drawn route is a straight-line estimate rather than real road
-  /// geometry.
   bool get routeIsEstimated => _routeIsEstimated;
 
   void selectPaymentMethod(PaymentRail rail) {
-    // Unconfigured rails are not selectable, so the rider is never told a card
-    // payment is set up when no provider is connected.
     if (!rail.isConfigured) return;
     _selectedRail = rail;
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
 
-  /// Submits the ride request to the backend.
-  ///
-  /// Returns true when the server actually created the ride. Nothing is
-  /// fabricated locally: the ride id, PIN and suggested fare all come from the
-  /// server.
   Future<bool> submitRideRequest({
     required RideProvider rideProv,
   }) async {
     final fare = double.tryParse(fareController.text) ?? suggestedFare;
     _deviceService.triggerHaptic('medium');
 
-    // Never invent a pickup or dropoff. These previously defaulted to hardcoded
-    // Islamabad coordinates, silently matching riders to trips they never chose.
     final pickup = _pickupLocation;
     final dropoff = _dropoffLocation;
     if (pickup == null || dropoff == null) {
@@ -263,12 +261,6 @@ class RiderViewModel extends ChangeNotifier {
     _audioService.speak('Driver confirmed your ride.');
   }
 
-  /// Dispatches an emergency alert and returns what actually happened.
-  ///
-  /// Local siren, haptics and the on-device notification fire first so they work
-  /// without connectivity. The remote fan-out then reports honestly whether any
-  /// contact or the driver was actually reached — the caller must not claim help
-  /// is on the way when [SosDispatchResult.reachedAnyone] is false.
   Future<SosDispatchResult> dispatchSos({
     required SafetyProvider safetyProv,
     required String rideId,
@@ -285,7 +277,6 @@ class RiderViewModel extends ChangeNotifier {
       channelId: 'swiftride_emergency',
     );
 
-    // Server-side fan-out: FCM to the trip counterparty and trusted contacts.
     final result = await _safetyEvents.triggerSos(
       rideId: rideId,
       latitude: latitude,
@@ -304,10 +295,6 @@ class RiderViewModel extends ChangeNotifier {
     return result;
   }
 
-  /// Opens the SMS composer addressed to [recipientPhone].
-  ///
-  /// Returns true only when the composer was presented — the user still has to
-  /// send it, so callers must not claim a message was delivered.
   Future<bool> sendEmergencySms({
     required String recipientPhone,
     required String messageText,
@@ -318,27 +305,15 @@ class RiderViewModel extends ChangeNotifier {
     );
   }
 
-  /// Calls the driver via the native phone dialer.
-  ///
-  /// [phone] is required: this used to default to a hardcoded
-  /// '+92 300 9876543' belonging to nobody, so tapping "Call Driver" always
-  /// dialled a stranger.
   Future<bool> callDriver(String phone) async {
     if (phone.trim().isEmpty) return false;
     return await _launcherService.launchDialer(phone);
   }
 
-  /// Calls emergency police (15 in Pakistan) via native phone dialer
   Future<bool> callPolice() async {
     return await _launcherService.launchDialer('15');
   }
 
-  /// Creates a public tracking link for the active trip.
-  ///
-  /// Returns null when the link could not be created — the caller must say so
-  /// rather than presenting a link that will not work. This previously invented
-  /// a token on-device, so every shared link resolved to "invalid or expired"
-  /// because the server had never heard of it.
   Future<String?> generateShareLink({
     required SafetyProvider safetyProv,
     required RideProvider rideProv,

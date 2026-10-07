@@ -1,4 +1,5 @@
 // SwiftRide Cloud Functions Gen 2 Main Export
+// Force redeploy & refresh IAM policies: 2026-10-07
 
 // 1. Auth Module
 export { registerUser, verifyOtp, setUserRole } from './modules/auth';
@@ -66,4 +67,3 @@ export {
   weeklyMaintenanceSchedule,
   routeOptimizer,
 } from './modules/ai';
-

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
@@ -13,7 +14,9 @@ import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../services/ride_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
+
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
@@ -61,14 +64,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _rideProv = ride;
     loc.onLocationUpdate = _publishTelemetry;
 
-    // Drivers must see incoming requests: this stream had no subscriber, so a
-    // rider's request never reached anyone.
+    // Drivers must see incoming requests: watch stream for matching
     ride.watchAvailableRides();
   }
 
-  /// Sends the driver's real position to the backend while a trip is active, so
-  /// the rider's car marker reflects the actual vehicle instead of the rider's
-  /// own GPS.
+  /// Sends the driver's real position to the backend while a trip is active.
   void _publishTelemetry(double latitude, double longitude, double heading) {
     final activeRide = _rideProv?.activeRide;
     if (activeRide == null) return;
@@ -91,12 +91,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _riderPhoneForRiderId = riderId;
     _riderPhone = null;
 
-    FirestoreUserService().getUser(riderId).then((user) {
-      if (!mounted || _riderPhoneForRiderId != riderId) return;
-      setState(() => _riderPhone = user?.phone);
-    }).catchError((Object e) {
-      debugPrint('[DriverHome] rider phone lookup failed: $e');
-    });
+    FirestoreUserService()
+        .getUser(riderId)
+        .then((user) {
+          if (!mounted || _riderPhoneForRiderId != riderId) return;
+          setState(() => _riderPhone = user?.phone);
+        })
+        .catchError((Object e) {
+          debugPrint('[DriverHome] rider phone lookup failed: $e');
+        });
   }
 
   @override
@@ -117,8 +120,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final currentRide = rideProv.currentRide;
     final driver = driverProv.driverProfile;
 
-    // Resolve the rider's real phone number for the Call Rider action. The
-    // button used to dial a hardcoded +92 300 1234567 belonging to nobody.
     _ensureRiderPhone(currentRide?.riderId);
 
     return ListenableBuilder(
@@ -145,23 +146,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     heading: locProv.heading,
                   ),
                   if (currentRide != null) ...[
-                    MapMarkers.pickup(LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude)),
-                    MapMarkers.dropoff(LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude)),
+                    MapMarkers.pickup(
+                      LatLng(
+                        currentRide.pickup.latitude,
+                        currentRide.pickup.longitude,
+                      ),
+                      id: 'driver_ride_pickup',
+                    ),
+                    MapMarkers.dropoff(
+                      LatLng(
+                        currentRide.dropoff.latitude,
+                        currentRide.dropoff.longitude,
+                      ),
+                      id: 'driver_ride_dropoff',
+                    ),
                   ],
                 },
-                // No surge overlay: this used to draw "high-demand surge zones"
-                // as circles anchored to the driver's own position, which was
-                // pure decoration presented as demand data. Real surge needs a
-                // backend demand aggregation; until that exists we draw nothing
-                // rather than imply where the money is.
                 polylines: {
                   if (currentRide != null) ...[
                     Polyline(
                       polylineId: const PolylineId('driver_route_casing'),
                       points: [
                         LatLng(locProv.latitude, locProv.longitude),
-                        LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
-                        LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
+                        LatLng(
+                          currentRide.pickup.latitude,
+                          currentRide.pickup.longitude,
+                        ),
+                        LatLng(
+                          currentRide.dropoff.latitude,
+                          currentRide.dropoff.longitude,
+                        ),
                       ],
                       color: AppTheme.primaryNavy,
                       width: 9,
@@ -170,8 +184,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       polylineId: const PolylineId('driver_route'),
                       points: [
                         LatLng(locProv.latitude, locProv.longitude),
-                        LatLng(currentRide.pickup.latitude, currentRide.pickup.longitude),
-                        LatLng(currentRide.dropoff.latitude, currentRide.dropoff.longitude),
+                        LatLng(
+                          currentRide.pickup.latitude,
+                          currentRide.pickup.longitude,
+                        ),
+                        LatLng(
+                          currentRide.dropoff.latitude,
+                          currentRide.dropoff.longitude,
+                        ),
                       ],
                       color: AppTheme.amberWarning,
                       width: 5,
@@ -180,11 +200,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 },
               ),
 
-              // 1b. Active emergency alert on this trip.
-              //
-              // The backend writes safety_events and pushes to the counterparty,
-              // but nothing subscribed: a driver got a notification with no
-              // in-app surface and no way to act on it.
+              // 1b. Active emergency alert banner
               if (rideProv.activeSos != null)
                 Positioned(
                   left: 0,
@@ -197,7 +213,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         vertical: layout.scale(8),
                       ),
                       child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
+                        constraints: BoxConstraints(
+                          maxWidth: layout.maxCardWidth,
+                        ),
                         child: _buildSosBanner(layout, rideProv, locProv),
                       ),
                     ),
@@ -226,7 +244,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             vertical: layout.scale(12),
                           ),
                           shadows: driverProv.isOnline
-                              ? AppTheme.glowShadow(AppTheme.emeraldGreen, opacity: 0.25, blur: 16)
+                              ? AppTheme.glowShadow(
+                                  AppTheme.emeraldGreen,
+                                  opacity: 0.25,
+                                  blur: 16,
+                                )
                               : AppTheme.darkElevation,
                           child: Row(
                             children: [
@@ -235,12 +257,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       glowColor: AppTheme.emeraldGreen,
                                       child: const CircleAvatar(
                                         backgroundColor: AppTheme.emeraldGreen,
-                                        child: Icon(Icons.drive_eta, color: Colors.white),
+                                        child: Icon(
+                                          Icons.drive_eta,
+                                          color: Colors.white,
+                                        ),
                                       ),
                                     )
                                   : CircleAvatar(
-                                      backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                                      child: const Icon(Icons.drive_eta, color: Colors.grey),
+                                      backgroundColor: Colors.grey.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      child: const Icon(
+                                        Icons.drive_eta,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -249,16 +279,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Text(
-                                      driverProv.isOnline ? 'ONLINE (Broadcasting RTDB)' : 'OFFLINE',
+                                      driverProv.isOnline
+                                          ? 'ONLINE (Broadcasting RTDB)'
+                                          : 'OFFLINE',
                                       style: TextStyle(
-                                        color: driverProv.isOnline ? AppTheme.emeraldGreen : Colors.grey,
+                                        color: driverProv.isOnline
+                                            ? AppTheme.emeraldGreen
+                                            : Colors.grey,
                                         fontWeight: FontWeight.w800,
                                         fontSize: layout.fontSize(13),
                                       ),
                                     ),
                                     Text(
                                       'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 0% Fee',
-                                      style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12)),
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: layout.fontSize(12),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -284,19 +321,34 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               ),
                               const SizedBox(width: 8),
                               InkWell(
-                                onTap: () => Navigator.of(context).pushNamed('/earnings-advisor'),
+                                onTap: () =>
+                                    Navigator.of(context)
+                                        .pushNamed('/earnings-advisor'),
                                 borderRadius: BorderRadius.circular(10),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 6,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: AppTheme.accentTeal.withValues(alpha: 0.2),
+                                    color: AppTheme.accentTeal.withValues(
+                                      alpha: 0.2,
+                                    ),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: AppTheme.accentTeal.withValues(alpha: 0.45)),
+                                    border: Border.all(
+                                      color: AppTheme.accentTeal.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                    ),
                                   ),
                                   child: const Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      Icon(Icons.psychology, size: 14, color: AppTheme.accentTeal),
+                                      Icon(
+                                        Icons.psychology,
+                                        size: 14,
+                                        color: AppTheme.accentTeal,
+                                      ),
                                       SizedBox(width: 4),
                                       Text(
                                         'AI',
@@ -337,11 +389,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         layout.horizontalPadding,
                         14,
                         layout.horizontalPadding,
-                        layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
+                        layout.safePadding.bottom > 0
+                            ? layout.safePadding.bottom + 8
+                            : 20,
                       ),
                       child: currentRide == null
-                          ? _buildWaitingOrEarningsCard(layout, driver, driverProv, rideProv, authProv)
-                          : _buildActiveDriverRideCard(layout, currentRide, rideProv, driverProv, authProv),
+                          ? _buildWaitingOrEarningsCard(
+                              layout,
+                              driver,
+                              driverProv,
+                              rideProv,
+                              authProv,
+                            )
+                          : _buildActiveDriverRideCard(
+                              layout,
+                              currentRide,
+                              rideProv,
+                              driverProv,
+                              authProv,
+                            ),
                     ),
                   ),
                 ),
@@ -357,7 +423,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               backgroundColor: AppTheme.primaryNavy,
               foregroundColor: AppTheme.accentCyan,
               icon: const Icon(Icons.auto_awesome, size: 20),
-              label: const Text('AI Assistant', style: TextStyle(fontWeight: FontWeight.bold)),
+              label: const Text(
+                'AI Assistant',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         );
@@ -365,7 +434,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  /// Unmissable banner shown while the rider has an unresolved emergency alert.
   Widget _buildSosBanner(
     ResponsiveLayoutHelper layout,
     RideProvider rideProv,
@@ -373,7 +441,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   ) {
     final sos = rideProv.activeSos!;
     final age = DateTime.now().difference(sos.createdAt);
-    final ageLabel = age.inMinutes < 1 ? 'just now' : '${age.inMinutes} min ago';
+    final ageLabel = age.inMinutes < 1
+        ? 'just now'
+        : '${age.inMinutes} min ago';
 
     return Semantics(
       liveRegion: true,
@@ -383,7 +453,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         decoration: BoxDecoration(
           color: AppTheme.sunsetCoral,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: AppTheme.glowShadow(AppTheme.sunsetCoral, opacity: 0.5, blur: 18),
+          boxShadow: AppTheme.glowShadow(
+            AppTheme.sunsetCoral,
+            opacity: 0.5,
+            blur: 18,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -408,7 +482,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                       Text(
                         'The rider raised an alert $ageLabel.',
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -427,7 +504,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         foregroundColor: AppTheme.sunsetCoral,
                       ),
                       icon: const Icon(Icons.phone, size: 16),
-                      label: const Text('Call rider', style: TextStyle(fontSize: 12.5)),
+                      label: const Text(
+                        'Call rider',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
                       onPressed: _riderPhone == null
                           ? null
                           : () => _viewModel.callRider(_riderPhone!),
@@ -444,7 +524,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         side: const BorderSide(color: Colors.white70),
                       ),
                       icon: const Icon(Icons.local_police, size: 16),
-                      label: const Text('Call 15', style: TextStyle(fontSize: 12.5)),
+                      label: const Text(
+                        'Call 15',
+                        style: TextStyle(fontSize: 12.5),
+                      ),
                       onPressed: () => _viewModel.callEmergencyServices(),
                     ),
                   ),
@@ -471,10 +554,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
-  /// Stands down the open alert after explicit confirmation.
-  ///
-  /// Confirmed rather than one-tap: closing an emergency alert by accident would
-  /// hide a real one. The event is never deleted, so the record survives.
   Future<void> _closeSos(RideProvider rideProv) async {
     final confirmed = await confirmAction(
       context,
@@ -493,7 +572,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(error ?? 'Alert closed. Thank you for confirming.'),
-        backgroundColor: error == null ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+        backgroundColor: error == null
+            ? AppTheme.emeraldGreen
+            : AppTheme.sunsetCoral,
       ),
     );
   }
@@ -505,7 +586,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     RideProvider rideProv,
     AuthProvider authProv,
   ) {
-    final requests = driverProv.isOnline ? rideProv.availableRides : const <RideModel>[];
+    final requests = driverProv.isOnline
+        ? rideProv.availableRides
+        : const <RideModel>[];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -515,13 +598,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           child: Container(
             width: 36,
             height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ),
         SizedBox(height: layout.scale(12)),
 
-        // Incoming ride requests. Without this list a rider's request reached
-        // nobody, so no trip could ever be matched.
         if (driverProv.isOnline) ...[
           if (requests.isEmpty)
             Container(
@@ -535,7 +619,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   const SizedBox(
                     width: 14,
                     height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentCyan),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.accentCyan,
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -544,7 +631,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       label: 'Waiting for ride requests nearby',
                       child: Text(
                         'Waiting for ride requests nearby…',
-                        style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12)),
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: layout.fontSize(12),
+                        ),
                       ),
                     ),
                   ),
@@ -559,14 +649,20 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.accentCyan.withValues(alpha: 0.10),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.accentCyan.withValues(alpha: 0.35)),
+                  border: Border.all(
+                    color: AppTheme.accentCyan.withValues(alpha: 0.35),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.local_taxi, color: AppTheme.accentCyan, size: 16),
+                        const Icon(
+                          Icons.local_taxi,
+                          color: AppTheme.accentCyan,
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Semantics(
@@ -591,7 +687,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       request.pickup.address.isEmpty
                           ? '${request.distanceKm.toStringAsFixed(1)} km trip'
                           : request.pickup.address,
-                      style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(11)),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: layout.fontSize(11),
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
@@ -601,7 +700,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           child: SizedBox(
                             height: layout.touchTarget(44),
                             child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                              ),
                               onPressed: () => _viewModel.submitCounterOffer(
                                 rideProv: rideProv,
                                 driver: driver,
@@ -621,7 +722,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           child: SizedBox(
                             height: layout.touchTarget(44),
                             child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(foregroundColor: AppTheme.accentCyan),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.accentCyan,
+                              ),
                               onPressed: () => _viewModel.submitCounterOffer(
                                 rideProv: rideProv,
                                 driver: driver,
@@ -629,7 +732,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 rideId: request.id,
                                 fare: request.offeredFare + 50.0,
                               ),
-                              child: const Text('Counter +50', style: TextStyle(fontSize: 12)),
+                              child: const Text(
+                                'Counter +50',
+                                style: TextStyle(fontSize: 12),
+                              ),
                             ),
                           ),
                         ),
@@ -647,7 +753,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             Expanded(
               child: Text(
                 'Driver Dashboard',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: layout.fontSize(16)),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: layout.fontSize(16),
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -660,7 +770,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
               child: Text(
                 'Year 1: PKR 0 Fee',
-                style: TextStyle(color: AppTheme.emeraldGreen, fontWeight: FontWeight.w700, fontSize: layout.fontSize(11)),
+                style: TextStyle(
+                  color: AppTheme.emeraldGreen,
+                  fontWeight: FontWeight.w700,
+                  fontSize: layout.fontSize(11),
+                ),
               ),
             ),
           ],
@@ -670,20 +784,41 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         // Quick Stats Row
         Row(
           children: [
-            _buildStatBox(layout, 'Total Rides', '${driver.totalRides}', Icons.check_circle_outline, 0),
+            _buildStatBox(
+              layout,
+              'Total Rides',
+              '${driver.totalRides}',
+              Icons.check_circle_outline,
+              0,
+            ),
             const SizedBox(width: 8),
-            _buildStatBox(layout, 'Rating', '★ ${driver.rating}', Icons.star_border, 1),
+            _buildStatBox(
+              layout,
+              'Rating',
+              '★ ${driver.rating}',
+              Icons.star_border,
+              1,
+            ),
             const SizedBox(width: 8),
-            _buildStatBox(layout, 'Saved Fees', CurrencyFormatter.format(driver.totalEarnings * 0.13), Icons.savings_outlined, 2),
+            _buildStatBox(
+              layout,
+              'Saved Fees',
+              CurrencyFormatter.format(driver.totalEarnings * 0.13),
+              Icons.savings_outlined,
+              2,
+            ),
           ],
         ),
         SizedBox(height: layout.scale(14)),
 
-        // Withdraw earnings to a Pakistani payout rail.
+        // Withdraw earnings
         SizedBox(
           height: layout.touchTarget(48),
           child: ElevatedButton.icon(
-            icon: const Icon(Icons.account_balance_wallet, color: AppTheme.primaryNavy),
+            icon: const Icon(
+              Icons.account_balance_wallet,
+              color: AppTheme.primaryNavy,
+            ),
             label: Text(
               'Withdraw Earnings (${CurrencyFormatter.format(driverProv.availablePayoutBalance)})',
             ),
@@ -691,24 +826,45 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               backgroundColor: AppTheme.accentCyan,
               foregroundColor: AppTheme.primaryNavy,
             ),
-            onPressed: _viewModel.isProcessingPayout ||
+            onPressed:
+                _viewModel.isProcessingPayout ||
                     driverProv.availablePayoutBalance <= 0
                 ? null
-                : () => _showPayoutSheet(driver, driverProv.availablePayoutBalance),
+                : () => _showPayoutSheet(
+                    driver,
+                    driverProv.availablePayoutBalance,
+                  ),
           ),
         ),
       ],
     );
   }
 
-  /// Lets the driver choose a payout rail and destination, then submits to the
-  /// backend ledger. Nothing is credited locally — the server owns the balance.
-  Future<void> _showPayoutSheet(DriverProfile driver, double availableBalance) async {
+  Future<void> _showPayoutSheet(
+    DriverProfile driver,
+    double availableBalance,
+  ) async {
     const rails = <({String id, String label, String hint})>[
-      (id: 'jazzcash', label: 'JazzCash wallet', hint: 'Mobile number, e.g. 03001234567'),
-      (id: 'easypaisa', label: 'Easypaisa wallet', hint: 'Mobile number, e.g. 03451234567'),
-      (id: 'raast', label: 'Raast / bank transfer', hint: 'IBAN, e.g. PK36SCBL0000001123456702'),
-      (id: 'manual', label: 'Manual settlement', hint: 'Account note for our team'),
+      (
+        id: 'jazzcash',
+        label: 'JazzCash wallet',
+        hint: 'Mobile number, e.g. 03001234567',
+      ),
+      (
+        id: 'easypaisa',
+        label: 'Easypaisa wallet',
+        hint: 'Mobile number, e.g. 03451234567',
+      ),
+      (
+        id: 'raast',
+        label: 'Raast / bank transfer',
+        hint: 'IBAN, e.g. PK36SCBL0000001123456702',
+      ),
+      (
+        id: 'manual',
+        label: 'Manual settlement',
+        hint: 'Account note for our team',
+      ),
     ];
 
     var selectedRail = rails.first.id;
@@ -733,7 +889,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               children: [
                 Text(
                   'Withdraw ${CurrencyFormatter.format(availableBalance)}',
-                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: c.textPrimary),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 17,
+                    color: c.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -749,7 +909,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       selectedRail == rail.id
                           ? Icons.radio_button_checked
                           : Icons.radio_button_unchecked,
-                      color: selectedRail == rail.id ? AppTheme.primaryBlue : c.textMuted,
+                      color: selectedRail == rail.id
+                          ? AppTheme.primaryBlue
+                          : c.textMuted,
                     ),
                     title: Text(
                       rail.label,
@@ -761,7 +923,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   controller: destinationController,
                   decoration: InputDecoration(
                     labelText: 'Destination',
-                    hintText: rails.firstWhere((r) => r.id == selectedRail).hint,
+                    hintText: rails
+                        .firstWhere((r) => r.id == selectedRail)
+                        .hint,
                   ),
                 ),
                 const SizedBox(height: 18),
@@ -800,13 +964,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(result.message),
-        backgroundColor: result.accepted ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+        backgroundColor: result.accepted
+            ? AppTheme.emeraldGreen
+            : AppTheme.sunsetCoral,
         duration: Duration(seconds: result.accepted ? 4 : 8),
       ),
     );
   }
 
-  Widget _buildStatBox(ResponsiveLayoutHelper layout, String label, String value, IconData icon, int index) {
+  Widget _buildStatBox(
+    ResponsiveLayoutHelper layout,
+    String label,
+    String value,
+    IconData icon,
+    int index,
+  ) {
     final c = AppColors.of(layout.context);
     return Expanded(
       child: StaggeredEntryWidget(
@@ -829,8 +1001,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             children: [
               Icon(icon, color: AppTheme.accentCyan, size: layout.scale(18)),
               const SizedBox(height: 6),
-              Text(value, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: layout.fontSize(14))),
-              Text(label, style: TextStyle(color: Colors.white60, fontSize: layout.fontSize(10))),
+              Text(
+                value,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: layout.fontSize(14),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: layout.fontSize(10),
+                ),
+              ),
             ],
           ),
         ),
@@ -853,12 +1038,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           child: Container(
             width: 36,
             height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ),
         SizedBox(height: layout.scale(10)),
 
-        // Ride Status Banner
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -873,37 +1060,55 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 label: 'Trip status: ${ride.status.displayName}',
                 child: Text(
                   ride.status.displayName,
-                  style: TextStyle(color: AppTheme.accentCyan, fontWeight: FontWeight.w700, fontSize: layout.fontSize(12)),
+                  style: TextStyle(
+                    color: AppTheme.accentCyan,
+                    fontWeight: FontWeight.w700,
+                    fontSize: layout.fontSize(12),
+                  ),
                 ),
               ),
             ),
             Text(
               'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (0% Fee)',
-              style: TextStyle(color: AppTheme.emeraldGreen, fontWeight: FontWeight.w800, fontSize: layout.fontSize(15)),
+              style: TextStyle(
+                color: AppTheme.emeraldGreen,
+                fontWeight: FontWeight.w800,
+                fontSize: layout.fontSize(15),
+              ),
             ),
           ],
         ),
         SizedBox(height: layout.scale(10)),
 
-        // Pickup / Dropoff text
         Text(
           'Pickup: ${ride.pickup.address}',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: layout.fontSize(13)),
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: layout.fontSize(13),
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         Text(
           'Dropoff: ${ride.dropoff.address}',
-          style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12)),
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: layout.fontSize(12),
+          ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         SizedBox(height: layout.scale(12)),
 
-        // Status Lifecycle Controls
         if (ride.status == RideStatus.requested) ...[
-          // Incoming request: Driver can submit counter-offer or accept rider proposed fare
-          Text('Counter-Offer (inDrive Bidding):', style: TextStyle(color: Colors.white70, fontSize: layout.fontSize(12))),
+          Text(
+            'Counter-Offer (inDrive Bidding):',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: layout.fontSize(12),
+            ),
+          ),
           const SizedBox(height: 6),
           Row(
             children: [
@@ -911,7 +1116,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 child: SizedBox(
                   height: layout.touchTarget(48),
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                    ),
                     onPressed: () => _viewModel.submitCounterOffer(
                       rideProv: rideProv,
                       driver: driverProv.driverProfile,
@@ -919,7 +1126,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       rideId: ride.id,
                       fare: ride.offeredFare,
                     ),
-                    child: Text('Match ${CurrencyFormatter.format(ride.offeredFare)}'),
+                    child: Text(
+                      'Match ${CurrencyFormatter.format(ride.offeredFare)}',
+                    ),
                   ),
                 ),
               ),
@@ -928,7 +1137,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 child: SizedBox(
                   height: layout.touchTarget(48),
                   child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(foregroundColor: AppTheme.accentCyan),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.accentCyan,
+                    ),
                     onPressed: () => _viewModel.submitCounterOffer(
                       rideProv: rideProv,
                       driver: driverProv.driverProfile,
@@ -943,14 +1154,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ],
           ),
         ] else if (ride.status == RideStatus.accepted) ...[
-          // Driver on the way to pickup
           Row(
             children: [
               Expanded(
                 child: SizedBox(
                   height: layout.touchTarget(48),
                   child: ElevatedButton.icon(
-                    icon: const Icon(Icons.near_me, color: AppTheme.primaryNavy),
+                    icon: const Icon(
+                      Icons.near_me,
+                      color: AppTheme.primaryNavy,
+                    ),
                     label: const Text('Arrived at Pickup'),
                     onPressed: () => _viewModel.signalArrival(rideProv),
                   ),
@@ -962,11 +1175,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 width: layout.touchTarget(48),
                 child: IconButton(
                   style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.accentCyan.withValues(alpha: 0.15),
+                    backgroundColor: AppTheme.accentCyan.withValues(
+                      alpha: 0.15,
+                    ),
                     foregroundColor: AppTheme.accentCyan,
                   ),
                   icon: const Icon(Icons.phone),
-                  tooltip: _riderPhone == null ? 'Rider phone unavailable' : 'Call Rider',
+                  tooltip: _riderPhone == null
+                      ? 'Rider phone unavailable'
+                      : 'Call Rider',
                   onPressed: _riderPhone == null
                       ? null
                       : () => _viewModel.callRider(_riderPhone!),
@@ -992,13 +1209,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ],
           ),
         ] else if (ride.status == RideStatus.driverArrived) ...[
-          // Arrived: Driver enters rider's 4-digit PIN to start trip
           GlassContainer(
             isDark: true,
             borderRadius: 16,
             blur: 16,
             padding: const EdgeInsets.all(12),
-            shadows: AppTheme.glowShadow(AppTheme.accentCyan, opacity: 0.15, blur: 12),
+            shadows: AppTheme.glowShadow(
+              AppTheme.accentCyan,
+              opacity: 0.15,
+              blur: 12,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1008,7 +1228,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     const SizedBox(width: 6),
                     Text(
                       'Ask Rider for 4-Digit Verification PIN:',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: layout.fontSize(12)),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: layout.fontSize(12),
+                      ),
                     ),
                   ],
                 ),
@@ -1023,11 +1247,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           keyboardType: TextInputType.number,
                           maxLength: 4,
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white, fontSize: layout.fontSize(18), letterSpacing: 8, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: layout.fontSize(18),
+                            letterSpacing: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
                           decoration: const InputDecoration(
                             counterText: '',
                             hintText: 'PIN',
-                            hintStyle: TextStyle(color: Colors.white30, letterSpacing: 4),
+                            hintStyle: TextStyle(
+                              color: Colors.white30,
+                              letterSpacing: 4,
+                            ),
                           ),
                         ),
                       ),
@@ -1036,13 +1268,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     SizedBox(
                       height: layout.touchTarget(48),
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.emeraldGreen,
+                        ),
                         onPressed: () async {
-                          final success = await _viewModel.verifyPinAndStartTrip(rideProv);
+                          final success = await _viewModel
+                              .verifyPinAndStartTrip(rideProv);
                           if (!success && mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(_viewModel.pinErrorMessage ?? 'Invalid verification PIN.'),
+                                content: Text(
+                                  _viewModel.pinErrorMessage ??
+                                      'Invalid verification PIN.',
+                                ),
                                 backgroundColor: AppTheme.sunsetCoral,
                               ),
                             );
@@ -1057,13 +1295,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
           ),
         ] else if (ride.status == RideStatus.inProgress) ...[
-          // In Progress: Driver finishes trip
           SizedBox(
             height: layout.touchTarget(48),
             child: ElevatedButton.icon(
               icon: const Icon(Icons.flag, color: AppTheme.primaryNavy),
               label: const Text('Complete Trip & Settle Fare'),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.emeraldGreen,
+              ),
               onPressed: () async {
                 await _viewModel.completeActiveTrip(
                   rideProv: rideProv,
@@ -1073,8 +1312,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    // Not "earnings added" — the rider still has to pay.
-                    content: Text('Trip completed. Collect payment from the rider.'),
+                    content: Text(
+                      'Trip completed. Collect payment from the rider.',
+                    ),
                     backgroundColor: AppTheme.emeraldGreen,
                   ),
                 );
@@ -1083,22 +1323,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
         ] else if (ride.status == RideStatus.completed &&
             ride.paymentStatus != 'paid') ...[
-          // Cash settlement. Without this the trip stayed unpaid forever: the
-          // rider's "Cash" choice was local-only and nothing ever recorded
-          // receipt. The amount is derived server-side.
           Container(
             padding: EdgeInsets.all(layout.scale(12)),
             decoration: BoxDecoration(
               color: AppTheme.amberWarning.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.amberWarning.withValues(alpha: 0.4)),
+              border: Border.all(
+                color: AppTheme.amberWarning.withValues(alpha: 0.4),
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.payments_outlined, color: AppTheme.amberWarning, size: 16),
+                    const Icon(
+                      Icons.payments_outlined,
+                      color: AppTheme.amberWarning,
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -1117,7 +1360,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   width: double.infinity,
                   height: layout.touchTarget(48),
                   child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.emeraldGreen,
+                    ),
                     onPressed: _viewModel.isConfirmingCash
                         ? null
                         : () async {
@@ -1139,14 +1384,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             );
 
                             if (error == null) {
-                              await driverProv.loadForUser(authProv.currentUser.id);
+                              await driverProv.loadForUser(
+                                authProv.currentUser.id,
+                              );
                             }
                           },
                     child: _viewModel.isConfirmingCash
                         ? const SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Text('Confirm cash received'),
                   ),

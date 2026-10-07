@@ -34,6 +34,9 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   Timer? _debounce;
   bool _hasSearched = false;
 
+  // ---> NEW: Tracks if we are showing the fallback UI
+  bool _isShowingFallback = false;
+
   @override
   void initState() {
     super.initState();
@@ -73,6 +76,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     setState(() {
       _isLoading = true;
       _hasSearched = true;
+      _isShowingFallback = false;
     });
 
     final results = q.isEmpty
@@ -80,8 +84,16 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         : await _mapService.searchPlaces(q, near: _riderLatLng());
 
     if (!mounted) return;
+
     setState(() {
-      _suggestions = results;
+      // ---> NEW: If live search + local gazetteer both failed, trigger fallback
+      if (results.isEmpty && q.length >= 2) {
+        _suggestions = MapService.fallbackLocations;
+        _isShowingFallback = true;
+      } else {
+        _suggestions = results;
+        _isShowingFallback = false;
+      }
       _isLoading = false;
     });
   }
@@ -202,6 +214,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                           setState(() {
                             _suggestions = [];
                             _hasSearched = false;
+                            _isShowingFallback = false;
                           });
                         },
                       ),
@@ -219,6 +232,43 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                 ),
 
               const SizedBox(height: 8),
+
+              // ---> NEW: Fallback Banner
+              if (_isShowingFallback)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppTheme.amberWarning.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.amberWarning.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.offline_bolt,
+                        color: AppTheme.amberWarning,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Live search unavailable. Showing offline fallback data.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Suggestions list
               Expanded(
@@ -308,11 +358,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              color: Colors.white.withValues(alpha: 0.4),
-              size: 32,
-            ),
+            Icon(icon, color: Colors.white.withValues(alpha: 0.4), size: 32),
             const SizedBox(height: 12),
             Text(
               message,

@@ -1,9 +1,11 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart' as fmap;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:latlong2/latlong.dart' as ll;
+
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
@@ -15,13 +17,6 @@ import 'map_marker_icons.dart';
 enum MapMode { viewOnly, pinPicker, navigation, liveTracking }
 
 /// State-of-the-art Dual-Engine Map View for SwiftRide.
-///
-/// Features:
-/// 1. **Live Cartography Engine** (via OpenStreetMap / CartoDB): Renders 100% real streets,
-///    labels, sectors (G-9, F-8, Blue Area, Islamabad Airport), and buildings immediately
-///    with zero API keys or billing required.
-/// 2. **Google Maps SDK Engine**: Uses native GMSMapView when configured with a valid Google Cloud API key.
-/// 3. Seamless one-tap toggle between engines for development, testing, and production.
 class RealMapView extends StatefulWidget {
   final LatLng initialCenter;
   final double initialZoom;
@@ -46,15 +41,10 @@ class RealMapView extends StatefulWidget {
   final void Function(GoogleMapController controller)? onMapCreated;
   final void Function(GoogleMapController controller)? onControllerCreated;
 
-  /// Inset used so map content is not hidden behind the top card and bottom
-  /// sheet. Ignored in [MapMode.pinPicker], which needs a symmetric viewport so
-  /// the centre pin matches the reported coordinate.
+  /// Inset used so map content is not hidden behind top/bottom chrome.
   final EdgeInsets mapPadding;
 
   /// Screen-reader description of what this map is showing.
-  ///
-  /// A map is otherwise opaque to assistive technology, so callers should
-  /// describe the trip ("Map showing your driver approaching the pickup").
   final String? semanticsLabel;
 
   const RealMapView({
@@ -83,15 +73,8 @@ class RealMapView extends StatefulWidget {
 }
 
 class _RealMapViewState extends State<RealMapView> {
-  // Engine switch: both iOS and Android now ship a build-injected Maps SDK key.
-  //   iOS     -> ios/Runner/Info.plist $(GMS_API_KEY)  <- ios/Flutter/Secrets.xcconfig
-  //   Android -> AndroidManifest ${googleMapsApiKey}   <- android/local.properties
-  // If a key is missing the Google surface renders blank; the badge below
-  // switches back to the always-available cartography (OSM) engine.
-  // Google Maps is used on every platform we ship, including web (where the
-  // JavaScript API is loaded from web/index.html). It falls back to the
-  // always-available cartography engine if the Google surface fails to load.
-  bool _useGoogleMaps = defaultTargetPlatform == TargetPlatform.iOS ||
+  bool _useGoogleMaps =
+      defaultTargetPlatform == TargetPlatform.iOS ||
       defaultTargetPlatform == TargetPlatform.android ||
       kIsWeb;
 
@@ -124,7 +107,6 @@ class _RealMapViewState extends State<RealMapView> {
   {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0e1626"}]}
 ]''';
 
-  /// Fit camera to pickup/dropoff/driver markers like Uber's route preview.
   void _fitGoogleBounds() {
     final c = _googleMapController;
     if (c == null || widget.markers.length < 2) return;
@@ -137,22 +119,24 @@ class _RealMapViewState extends State<RealMapView> {
       if (p.longitude < minLng) minLng = p.longitude;
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
-    c.animateCamera(CameraUpdate.newLatLngBounds(
-      LatLngBounds(southwest: LatLng(minLat, minLng), northeast: LatLng(maxLat, maxLng)),
-      80,
-    ));
+    c.animateCamera(
+      CameraUpdate.newLatLngBounds(
+        LatLngBounds(
+          southwest: LatLng(minLat, minLng),
+          northeast: LatLng(maxLat, maxLng),
+        ),
+        80,
+      ),
+    );
   }
 
   @override
   void didUpdateWidget(covariant RealMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Auto-fit only when it genuinely helps: not in navigation (the camera
-    // should follow the heading instead), not while the user is panning, and
-    // not on every GPS tick. Previously this re-fit the camera on every marker
-    // update, so the map fought the user every few seconds.
     if (!_useGoogleMaps) return;
-    if (widget.mode == MapMode.pinPicker || widget.mode == MapMode.navigation) return;
+    if (widget.mode == MapMode.pinPicker || widget.mode == MapMode.navigation)
+      return;
 
     final lastPan = _lastUserPan;
     if (lastPan != null &&
@@ -168,13 +152,12 @@ class _RealMapViewState extends State<RealMapView> {
 
     final hadRoute = oldWidget.polylines.isNotEmpty;
     final hasRoute = widget.polylines.isNotEmpty;
-    final routeChanged = hadRoute != hasRoute ||
+    final routeChanged =
+        hadRoute != hasRoute ||
         (hasRoute &&
             oldWidget.polylines.first.points.length !=
                 widget.polylines.first.points.length);
 
-    // Fit on a route change, or when only the endpoints moved (not on the
-    // driver's live position ticks).
     if (routeChanged || widget.markers.length <= 2) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fitGoogleBounds();
@@ -182,8 +165,6 @@ class _RealMapViewState extends State<RealMapView> {
     }
   }
 
-  /// Rotates and tilts the camera to match [heading] — the heading-up, 3D view
-  /// used while driving.
   void followHeading(double heading, {double zoom = 17, double tilt = 50}) {
     final c = _googleMapController;
     if (c == null || !_useGoogleMaps) return;
@@ -199,29 +180,22 @@ class _RealMapViewState extends State<RealMapView> {
     );
   }
 
-  // Google Maps Controller
   GoogleMapController? _googleMapController;
-
-  // Flutter Map Controller
   final fmap.MapController _flutterMapController = fmap.MapController();
 
-  LatLng _currentCenter = const LatLng(AppConstants.defaultLat, AppConstants.defaultLng);
+  LatLng _currentCenter = const LatLng(
+    AppConstants.defaultLat,
+    AppConstants.defaultLng,
+  );
   bool _cameraMoving = false;
   Timer? _debounce;
   bool _isLocating = false;
 
-  /// Unique per instance: the previous tag embedded the centre latitude, so two
-  /// maps with the same mode and latitude collided with a duplicate Hero tag.
   static int _instanceSeq = 0;
   late final String _locateHeroTag = 'swiftride_locate_${_instanceSeq++}';
 
-  /// When the user last panned. Auto-fit is suppressed for a short window
-  /// afterwards so the map stops yanking itself back while they explore.
   DateTime? _lastUserPan;
   static const Duration _autoFitCooldown = Duration(seconds: 10);
-
-  /// True while a finger is on the map. `onCameraMove` fires for programmatic
-  /// moves too, so this is what distinguishes a real gesture from an animation.
   bool _userTouching = false;
 
   @override
@@ -229,7 +203,6 @@ class _RealMapViewState extends State<RealMapView> {
     super.initState();
     _currentCenter = widget.initialCenter;
 
-    // Render the Uber-style glyphs once, then rebuild so markers pick them up.
     MapMarkerIcons.ensureLoaded().then((_) {
       if (mounted) setState(() {});
     });
@@ -270,7 +243,6 @@ class _RealMapViewState extends State<RealMapView> {
     try {
       final target = await MapService().getCurrentPosition();
 
-      // No fix: say so instead of silently jumping to a hardcoded city.
       if (target == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -288,7 +260,6 @@ class _RealMapViewState extends State<RealMapView> {
 
       _currentCenter = target;
 
-      // Keep the user's current zoom rather than snapping to a fixed level.
       final zoom = _useGoogleMaps && _googleMapController != null
           ? await _googleMapController!.getZoomLevel()
           : _flutterMapController.camera.zoom;
@@ -327,7 +298,8 @@ class _RealMapViewState extends State<RealMapView> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = widget.darkMode || Theme.of(context).brightness == Brightness.dark;
+    final isDark =
+        widget.darkMode || Theme.of(context).brightness == Brightness.dark;
     final c = AppColors.of(context);
 
     return Stack(
@@ -336,7 +308,8 @@ class _RealMapViewState extends State<RealMapView> {
         Positioned.fill(
           child: Semantics(
             container: true,
-            label: widget.semanticsLabel ??
+            label:
+                widget.semanticsLabel ??
                 (widget.markers.isEmpty
                     ? 'Map'
                     : 'Map showing ${widget.markers.length} locations'),
@@ -346,25 +319,22 @@ class _RealMapViewState extends State<RealMapView> {
           ),
         ),
 
-        // 2. Center Pin in Pin-Picker Mode
+        // 2. Compact Center Pin in Pin-Picker Mode
         if (widget.mode == MapMode.pinPicker)
           IgnorePointer(
             child: Center(
-              // The glyph's tip is at the bottom of its box, so lift it by half
-              // its height to land the tip exactly on the map centre — which is
-              // the coordinate reported back to the caller. The previous layout
-              // offset the pin by 42px while the camera used asymmetric padding,
-              // so the pin never matched the location it returned.
               child: Transform.translate(
-                offset: const Offset(0, -25),
-                child: const Icon(Icons.location_pin, size: 50, color: Colors.redAccent),
+                offset: const Offset(0, -18),
+                child: const Icon(
+                  Icons.location_pin,
+                  size: 38,
+                  color: AppTheme.sunsetCoral,
+                ),
               ),
             ),
           ),
 
-        // 3. Floating Engine Switcher Badge — DEBUG ONLY.
-        // This is developer tooling. In production it collided with the rider's
-        // address card and exposed internal engine names to end users.
+        // 3. Floating Engine Switcher Badge (Debug Only)
         if (kDebugMode)
           Positioned(
             top: 108,
@@ -373,7 +343,10 @@ class _RealMapViewState extends State<RealMapView> {
               child: GlassContainer(
                 isDark: isDark,
                 borderRadius: 20,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 borderColor: AppTheme.accentCyan.withValues(alpha: 0.4),
                 child: InkWell(
                   onTap: () {
@@ -384,9 +357,7 @@ class _RealMapViewState extends State<RealMapView> {
                         duration: const Duration(seconds: 2),
                         backgroundColor: AppTheme.primaryNavy,
                         content: Text(
-                          _useGoogleMaps
-                              ? 'Switched to Google Maps SDK'
-                              : 'Switched to Real Cartography Engine (100% Visible Tiles)',
+                          _useGoogleMaps ? 'Switched to Google Maps SDK' : 'Switched to Real Cartography Engine (100% Visible Tiles)',
                           style: const TextStyle(fontSize: 12.5),
                         ),
                       ),
@@ -399,7 +370,9 @@ class _RealMapViewState extends State<RealMapView> {
                       Icon(
                         _useGoogleMaps ? Icons.public : Icons.map_outlined,
                         size: 15,
-                        color: _useGoogleMaps ? Colors.amberAccent : AppTheme.accentCyan,
+                        color: _useGoogleMaps
+                            ? Colors.amberAccent
+                            : AppTheme.accentCyan,
                       ),
                       const SizedBox(width: 5),
                       Text(
@@ -411,7 +384,11 @@ class _RealMapViewState extends State<RealMapView> {
                         ),
                       ),
                       const SizedBox(width: 3),
-                      const Icon(Icons.sync_alt, size: 12, color: Colors.white60),
+                      const Icon(
+                        Icons.sync_alt,
+                        size: 12,
+                        color: Colors.white60,
+                      ),
                     ],
                   ),
                 ),
@@ -433,7 +410,10 @@ class _RealMapViewState extends State<RealMapView> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.cyanAccent,
+                      ),
                     )
                   : const Icon(Icons.my_location, size: 20),
             ),
@@ -442,14 +422,11 @@ class _RealMapViewState extends State<RealMapView> {
     );
   }
 
-  // --- Real OpenStreetMap / CartoDB Engine (Zero API Key Needed) ---
   Widget _buildCartographyEngine(bool isDark) {
-    // High-resolution Retina map tiles with clear street names and sector markers
     final tileUrl = isDark
         ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
         : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png';
 
-    // Convert markers to flutter_map markers
     final convertedMarkers = widget.markers.map((m) {
       return fmap.Marker(
         point: ll.LatLng(m.position.latitude, m.position.longitude),
@@ -459,16 +436,16 @@ class _RealMapViewState extends State<RealMapView> {
       );
     }).toList();
 
-    // Convert polylines to flutter_map polylines
     final convertedPolylines = widget.polylines.map((p) {
       return fmap.Polyline(
-        points: p.points.map((pt) => ll.LatLng(pt.latitude, pt.longitude)).toList(),
+        points: p.points
+            .map((pt) => ll.LatLng(pt.latitude, pt.longitude))
+            .toList(),
         color: p.color,
         strokeWidth: p.width.toDouble().clamp(3.0, 7.0),
       );
     }).toList();
 
-    // Convert circles
     final convertedCircles = widget.circles.map((c) {
       return fmap.CircleMarker(
         point: ll.LatLng(c.center.latitude, c.center.longitude),
@@ -483,7 +460,10 @@ class _RealMapViewState extends State<RealMapView> {
     return fmap.FlutterMap(
       mapController: _flutterMapController,
       options: fmap.MapOptions(
-        initialCenter: ll.LatLng(widget.initialCenter.latitude, widget.initialCenter.longitude),
+        initialCenter: ll.LatLng(
+          widget.initialCenter.latitude,
+          widget.initialCenter.longitude,
+        ),
         initialZoom: widget.initialZoom,
         onTap: (tapPosition, point) {
           widget.onMapTap?.call(LatLng(point.latitude, point.longitude));
@@ -543,19 +523,21 @@ class _RealMapViewState extends State<RealMapView> {
             shape: BoxShape.circle,
             boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 4)],
           ),
-          child: const Icon(Icons.navigation, color: AppTheme.primaryNavy, size: 20),
+          child: const Icon(
+            Icons.navigation,
+            color: AppTheme.primaryNavy,
+            size: 20,
+          ),
         ),
       );
     }
     return const Icon(Icons.location_pin, color: Colors.blueAccent, size: 34);
   }
 
-  // --- Official Google Maps Engine (Uses GMSMapView) ---
   Widget _buildGoogleMapsEngine(bool isDark) {
-    // Pin-picker needs a symmetric viewport: the reported coordinate is the
-    // camera centre, so asymmetric padding put the pin somewhere else entirely.
-    final padding =
-        widget.mode == MapMode.pinPicker ? EdgeInsets.zero : widget.mapPadding;
+    final padding = widget.mode == MapMode.pinPicker
+        ? EdgeInsets.zero
+        : widget.mapPadding;
     final navigating = widget.mode == MapMode.navigation;
 
     return Listener(
@@ -568,7 +550,6 @@ class _RealMapViewState extends State<RealMapView> {
         initialCameraPosition: CameraPosition(
           target: widget.initialCenter,
           zoom: widget.initialZoom,
-          // A tilted, heading-up view while driving; flat otherwise.
           tilt: navigating ? 50 : 0,
         ),
         onMapCreated: (c) {
@@ -589,7 +570,8 @@ class _RealMapViewState extends State<RealMapView> {
         markers: widget.markers,
         polylines: widget.polylines,
         circles: widget.circles,
-        myLocationEnabled: widget.mode != MapMode.viewOnly,
+        // Always enable native Google location blue puck
+        myLocationEnabled: true,
         myLocationButtonEnabled: false,
         compassEnabled: navigating,
         trafficEnabled: widget.showTraffic,

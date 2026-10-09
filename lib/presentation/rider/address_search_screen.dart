@@ -34,9 +34,6 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   Timer? _debounce;
   bool _hasSearched = false;
 
-  // ---> NEW: Tracks if we are showing the fallback UI
-  bool _isShowingFallback = false;
-
   @override
   void initState() {
     super.initState();
@@ -76,7 +73,6 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     setState(() {
       _isLoading = true;
       _hasSearched = true;
-      _isShowingFallback = false;
     });
 
     final results = q.isEmpty
@@ -86,14 +82,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     if (!mounted) return;
 
     setState(() {
-      // ---> NEW: If live search + local gazetteer both failed, trigger fallback
-      if (results.isEmpty && q.length >= 2) {
-        _suggestions = MapService.fallbackLocations;
-        _isShowingFallback = true;
-      } else {
-        _suggestions = results;
-        _isShowingFallback = false;
-      }
+      _suggestions = results;
       _isLoading = false;
     });
   }
@@ -135,26 +124,27 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   @override
   Widget build(BuildContext context) {
     final c = AppColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final trimmed = _searchController.text.trim();
 
     return Scaffold(
-      backgroundColor: c.mapChromeStrong,
+      backgroundColor: c.canvas,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
           widget.title,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w700,
             fontSize: 18,
-            color: Colors.white,
+            color: c.textPrimary,
           ),
         ),
         leading: IconButton(
           tooltip: 'Back',
-          icon: const Icon(
+          icon: Icon(
             Icons.arrow_back_ios_new,
-            color: Colors.white,
+            color: c.textPrimary,
             size: 20,
           ),
           onPressed: () => Navigator.of(context).pop(),
@@ -167,16 +157,18 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
             children: [
               // Search Input Box
               GlassContainer(
-                backgroundColor: Colors.white,
+                backgroundColor: isDark ? c.surfaceRaised : c.surface,
+                borderColor: c.border,
+                isDark: isDark,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 4,
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.search,
-                      color: AppTheme.accentCyan,
+                      color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                       size: 22,
                     ),
                     const SizedBox(width: 10),
@@ -184,15 +176,15 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                       child: TextField(
                         controller: _searchController,
                         autofocus: true,
-                        style: const TextStyle(
-                          color: Colors.black87,
+                        style: TextStyle(
+                          color: c.textPrimary,
                           fontSize: 16,
                         ),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           hintText:
                               'Search street, area, landmark in Pakistan...',
                           hintStyle: TextStyle(
-                            color: Colors.black54,
+                            color: c.textMuted,
                             fontSize: 14,
                           ),
                           border: InputBorder.none,
@@ -203,9 +195,9 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                     if (trimmed.isNotEmpty)
                       IconButton(
                         tooltip: 'Clear search',
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close,
-                          color: Colors.black54,
+                          color: c.textMuted,
                           size: 18,
                         ),
                         onPressed: () {
@@ -214,7 +206,6 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                           setState(() {
                             _suggestions = [];
                             _hasSearched = false;
-                            _isShowingFallback = false;
                           });
                         },
                       ),
@@ -225,50 +216,13 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
               const SizedBox(height: 12),
 
               if (_isLoading)
-                const LinearProgressIndicator(
+                LinearProgressIndicator(
                   backgroundColor: Colors.transparent,
-                  color: AppTheme.accentCyan,
+                  color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                   minHeight: 2,
                 ),
 
               const SizedBox(height: 8),
-
-              // ---> NEW: Fallback Banner
-              if (_isShowingFallback)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppTheme.amberWarning.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppTheme.amberWarning.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.offline_bolt,
-                        color: AppTheme.amberWarning,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Live search unavailable. Showing offline fallback data.',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.9),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
 
               // Suggestions list
               Expanded(
@@ -281,11 +235,11 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                               itemBuilder: (context, index) =>
                                   const _SuggestionSkeletonRow(),
                             )
-                          : _buildEmptyState(trimmed))
+                          : _buildEmptyState(trimmed, c))
                     : ListView.separated(
                         itemCount: _suggestions.length,
                         separatorBuilder: (_, index) => Divider(
-                          color: Colors.white.withValues(alpha: 0.1),
+                          color: c.border,
                           height: 1,
                         ),
                         itemBuilder: (context, index) {
@@ -298,30 +252,32 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                             leading: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.1),
+                                color: isDark ? c.surfaceRaised : c.surfaceMuted,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.location_on,
-                                color: AppTheme.accentCyan,
+                                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                 size: 20,
                               ),
                             ),
                             title: Text(
                               item.mainText,
-                              style: const TextStyle(
-                                color: Colors.white,
+                              style: TextStyle(
+                                color: c.textPrimary,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
                             ),
-                            subtitle: Text(
-                              item.secondaryText,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 12,
-                              ),
-                            ),
+                            subtitle: item.secondaryText.isNotEmpty
+                                ? Text(
+                                    item.secondaryText,
+                                    style: TextStyle(
+                                      color: c.textSecondary,
+                                      fontSize: 12,
+                                    ),
+                                  )
+                                : null,
                             onTap: () => _selectPlace(item),
                           );
                         },
@@ -334,22 +290,43 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     );
   }
 
-  Widget _buildEmptyState(String trimmed) {
-    final IconData icon;
-    final String message;
-
+  Widget _buildEmptyState(String trimmed, AppColors c) {
     if (trimmed.isEmpty && !_hasSearched) {
-      icon = Icons.search;
-      message = 'Type a destination or area name';
-    } else if (trimmed.isEmpty) {
-      icon = Icons.travel_explore;
-      message = 'Type at least 2 characters to search';
-    } else if (trimmed.length < 2) {
-      icon = Icons.more_horiz;
-      message = 'Keep typing…';
-    } else {
-      icon = Icons.location_off_outlined;
-      message = 'No places matched "$trimmed"';
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.search, color: c.textMuted, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'Type a destination or area name',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (trimmed.isEmpty || trimmed.length < 2) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.travel_explore, color: c.textMuted, size: 32),
+              const SizedBox(height: 12),
+              Text(
+                'Type at least 2 characters to search',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: c.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Center(
@@ -358,15 +335,28 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.white.withValues(alpha: 0.4), size: 32),
+            Icon(Icons.location_off_outlined, color: c.textMuted, size: 32),
             const SizedBox(height: 12),
             Text(
-              message,
+              'No places found for "$trimmed"',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
+                color: c.textPrimary,
+                fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try a different street name or city.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: c.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Retry Search'),
+              onPressed: () => _fetchSuggestions(trimmed),
             ),
           ],
         ),
@@ -380,7 +370,6 @@ class _SuggestionSkeletonRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = Colors.white.withValues(alpha: 0.08);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: Row(
@@ -388,17 +377,16 @@ class _SuggestionSkeletonRow extends StatelessWidget {
           SkeletonBox(
             width: 36,
             height: 36,
-            baseColor: base,
             borderRadius: BorderRadius.circular(18),
           ),
           const SizedBox(width: 12),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SkeletonBox(height: 12, baseColor: base),
-                const SizedBox(height: 6),
-                SkeletonBox(height: 10, width: 140, baseColor: base),
+                SkeletonBox(height: 12),
+                SizedBox(height: 6),
+                SkeletonBox(height: 10, width: 140),
               ],
             ),
           ),

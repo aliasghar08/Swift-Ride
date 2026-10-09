@@ -5,6 +5,7 @@ export const APP_CONSTANTS = {
   FARE_PER_KM: 45.00,
   FARE_PER_MIN: 5.00,
   COMMISSION_RATE_YEAR_ONE: 0.0, // Free 0% commission for first year
+  COMMISSION_RATE_YEAR_TWO: 0.13,
 
   // Cancellation fees (PKR)
   CANCELLATION_FEE_BEFORE_ACCEPT: 0.0,
@@ -48,6 +49,15 @@ export const APP_CONSTANTS = {
     RIDE_TRACKING: 'ride_tracking',
   },
 };
+
+export const VEHICLE_ECONOMICS = {
+  CAR: {
+    fuelRatePerKmPkr: 22.0,        // ~14 km/l at PKR 300/l
+    maintenanceRatePerKmPkr: 4.0,  // tyres, oil, wear
+  },
+} as const;
+
+export type VehicleType = keyof typeof VEHICLE_ECONOMICS;
 
 /**
  * Calculates suggested fare in PKR rounded to the nearest 10.

@@ -1,7 +1,7 @@
 import { onCall } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import { APP_CONSTANTS } from '../../config/constants';
-import { assertAuthenticated } from '../../middleware/auth';
+import { assertHasToken } from '../../middleware/auth';
 import { validateInput, LatLngSchema } from '../../middleware/validation';
 import { z } from 'zod';
 
@@ -14,23 +14,83 @@ const AutocompleteSchema = z.object({
 });
 
 export const getAutocomplete = onCall(
-  { region: APP_CONSTANTS.REGION, secrets: [mapsKey] },
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: false, cors: true, secrets: [mapsKey] },
   async (request) => {
-    await assertAuthenticated(request);
+    assertHasToken(request);
     const data = validateInput(AutocompleteSchema, request.data);
 
     const apiKey = mapsKey.value();
     if (!apiKey) {
+      console.warn('[getAutocomplete] Google Maps server key is empty');
       return { predictions: [], available: false };
     }
 
+    // 1. Try Places API (New) Autocomplete with Pakistan region filter & GPS bias
+    try {
+      const newPlacesBody: Record<string, any> = {
+        input: data.query,
+        includedRegionCodes: ['pk'],
+      };
+
+      if (data.location) {
+        newPlacesBody.locationBias = {
+          circle: {
+            center: {
+              latitude: data.location.latitude,
+              longitude: data.location.longitude,
+            },
+            radius: 50000.0,
+          },
+        };
+      }
+
+      if (data.sessionToken) {
+        newPlacesBody.sessionToken = data.sessionToken;
+      }
+
+      const newRes = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+        },
+        body: JSON.stringify(newPlacesBody),
+      });
+
+      if (newRes.ok) {
+        const newJson = await newRes.json();
+        const suggestions = newJson.suggestions || [];
+        if (suggestions.length > 0) {
+          const predictions = suggestions
+            .map((s: any) => {
+              const p = s.placePrediction;
+              if (!p) return null;
+              return {
+                placeId: p.placeId || (p.place ? p.place.replace(/^places\//, '') : ''),
+                description: p.text?.text || '',
+                mainText: p.structuredFormat?.mainText?.text || p.text?.text || '',
+                secondaryText: p.structuredFormat?.secondaryText?.text || '',
+              };
+            })
+            .filter((p: any) => p && p.placeId);
+
+          return { available: true, predictions };
+        }
+      } else {
+        console.warn('[getAutocomplete] Places API (New) returned status', newRes.status, await newRes.text());
+      }
+    } catch (newErr) {
+      console.warn('[getAutocomplete] Places API (New) failed, attempting legacy fallback:', newErr);
+    }
+
+    // 2. Legacy Autocomplete fallback
     try {
       const url = new URL('https://maps.googleapis.com/maps/api/place/autocomplete/json');
       url.searchParams.set('input', data.query);
       url.searchParams.set('key', apiKey);
-      
+      url.searchParams.set('components', 'country:pk');
+
       if (data.location) {
-        // --- NEW: Using locationbias instead of strict radius ---
         url.searchParams.set(
           'locationbias',
           `circle:50000@${data.location.latitude},${data.location.longitude}`
@@ -44,7 +104,7 @@ export const getAutocomplete = onCall(
       const json = await res.json();
 
       if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
-        console.warn('Places Autocomplete returned', json.status, json.error_message);
+        console.warn('[getAutocomplete] Legacy Places Autocomplete returned', json.status, json.error_message);
         return { predictions: [], available: false };
       }
 
@@ -58,7 +118,7 @@ export const getAutocomplete = onCall(
         })),
       };
     } catch (err) {
-      console.warn('Places Autocomplete failed', err);
+      console.warn('[getAutocomplete] Places Autocomplete failed completely', err);
       return { predictions: [], available: false };
     }
   }

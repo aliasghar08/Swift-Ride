@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:swiftride/services/location_models.dart';
-import 'package:swiftride/services/location_service_io.dart';
+import 'package:swiftride/services/location_service.dart';
 import '../core/constants/app_constants.dart';
 
 /// Streams live driver coordinates, calculates heading rotations, and drives

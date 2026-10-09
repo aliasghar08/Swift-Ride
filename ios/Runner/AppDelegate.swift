@@ -209,17 +209,25 @@ import Network
           return
         }
 
-        // If we already have a recent fix, return it immediately.
+        // Fast path 1: If we have an existing valid fix, return it immediately.
+        // Never discard fixes for stationary devices just because time elapsed without 5m movement.
         if let loc = self.lastKnownLocation,
-           loc.timestamp.timeIntervalSinceNow > -60,
            loc.horizontalAccuracy >= 0,
-           loc.horizontalAccuracy < 100 {
+           loc.horizontalAccuracy < 200 {
           result(Self.serialize(loc))
           return
         }
 
-        // Otherwise request a fresh fix and hold this FlutterResult until it
-        // arrives (or times out).
+        // Fast path 2: Check locationManager.location if lastKnownLocation was not yet assigned.
+        if let loc = self.locationManager.location,
+           loc.horizontalAccuracy >= 0,
+           loc.horizontalAccuracy < 200 {
+          self.lastKnownLocation = loc
+          result(Self.serialize(loc))
+          return
+        }
+
+        // Slow path: Request fresh location and hold FlutterResult until fix arrives or times out.
         let id = UUID()
         self.pendingLocationRequests.append((id: id, result: result))
 
@@ -227,14 +235,22 @@ import Network
           self.locationManager.requestWhenInUseAuthorization()
         }
         self.locationManager.startUpdatingLocation()
+        if status == .authorizedWhenInUse || status == .authorizedAlways {
+          self.locationManager.requestLocation()
+        }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
           guard let self = self else { return }
           if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
             let req = self.pendingLocationRequests.remove(at: idx)
-            req.result(FlutterError(code: "LOCATION_TIMEOUT",
-                                    message: "No GPS fix within 12s.",
-                                    details: nil))
+            if let fallback = self.lastKnownLocation ?? self.locationManager.location,
+               fallback.horizontalAccuracy >= 0, fallback.horizontalAccuracy < 200 {
+              req.result(Self.serialize(fallback))
+            } else {
+              req.result(FlutterError(code: "LOCATION_TIMEOUT",
+                                      message: "No GPS fix within 12s.",
+                                      details: nil))
+            }
           }
         }
 

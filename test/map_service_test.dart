@@ -13,32 +13,12 @@ void main() {
       expect(results, isEmpty);
     });
 
-    test('still matches the bundled local gazetteer with real coordinates', () async {
+    test('returns empty when backend is unreachable instead of falling back to stale data', () async {
       final results = await MapService().searchPlaces('blue area');
 
-      expect(results, isNotEmpty);
-      // Gazetteer entries carry real coordinates; remote predictions resolve
-      // theirs later via getPlaceDetails.
-      expect(results.first.coordinates, isNotNull);
-      expect(results.first.placeId, isNotEmpty);
-    });
-  });
-
-  group('MapService.estimateStraightLineRoute', () {
-    test('is explicitly flagged as an estimate and keeps both endpoints', () {
-      final route = MapService().estimateStraightLineRoute(
-        const LatLng(33.70, 73.05),
-        const LatLng(33.56, 72.85),
-      );
-
-      // The route is a straight line between two real points — never the old
-      // invented bend points that merely looked like a road.
-      expect(route.isEstimated, isTrue);
-      expect(route.polylinePoints.length, 2);
-      expect(route.polylinePoints.first, const LatLng(33.70, 73.05));
-      expect(route.polylinePoints.last, const LatLng(33.56, 72.85));
-      expect(route.distanceKm, greaterThan(0));
-      expect(route.durationMin, greaterThan(0));
+      // Verified removal of bundled local gazetteer: when remote backend is uninitialized
+      // or returns empty, MapService returns empty rather than substituting hardcoded landmarks.
+      expect(results, isEmpty);
     });
   });
 }

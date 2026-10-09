@@ -18,6 +18,7 @@ import '../../services/firestore/firestore_driver_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
 import '../../services/map_service.dart';
 
+import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../common/confirm_action.dart';
@@ -28,6 +29,7 @@ import '../common/staggered_animation.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../view_models/rider_view_model.dart';
 import 'address_search_screen.dart';
+import 'route_preview_screen.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -53,10 +55,36 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   bool _isTopCardMinimized = false;
   bool _isBottomSheetMinimized = false;
 
+  bool _userMovedMap = false;
+  String? _lastRouteId;
+
+  void _fitSelectedRoute() {
+    final sel = _viewModel.selectedRoute;
+    final ctrl = _mapController;
+    if (sel == null || sel.polylinePoints.isEmpty || ctrl == null) return;
+    final points = sel.polylinePoints;
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    final bounds = LatLngBounds(
+      southwest: LatLng(minLat, minLng),
+      northeast: LatLng(maxLat, maxLng),
+    );
+    ctrl.animateCamera(CameraUpdate.newLatLngBounds(bounds, 60));
+  }
+
   @override
   void initState() {
     super.initState();
     _viewModel = RiderViewModel();
+    MapMarkers.ensureOriginDot();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final locProv = CustomChangeNotifierProvider.of<LocationProvider>(
@@ -71,6 +99,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       if (fix != null) {
         _viewModel.initializeFromCoordinates(fix.latitude, fix.longitude);
         setState(() => _waitingForGps = false);
+        _viewModel.setDropoff(
+          const LocationPoint(
+            latitude: 31.2681,
+            longitude: 72.3181,
+            address: 'Jhang, Punjab, Pakistan',
+          ),
+        );
       } else {
         setState(() => _waitingForGps = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -181,7 +216,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           final ctrl = _mapController;
           if (ctrl == null || currentRide != null) return;
           ctrl.animateCamera(
-            CameraUpdate.newLatLng(LatLng(locProv.latitude, locProv.longitude)),
+            CameraUpdate.newLatLngZoom(
+              LatLng(locProv.latitude, locProv.longitude),
+              16.8,
+            ),
           );
         });
 
@@ -257,15 +295,64 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                   ],
                 },
-                polylines: {
-                  if (_viewModel.routePolyline.isNotEmpty) ...[
+                polylines: () {
+                  final polylines = <Polyline>{
+                  if (_viewModel.routeError == null) ...[
+                    if (_viewModel.routes.isNotEmpty) ...[
+                    for (var i = 0; i < _viewModel.routes.length; i++)
+                      if (i != _viewModel.selectedRouteIndex)
+                        Polyline(
+                          polylineId: PolylineId('rider_route_$i'),
+                          points: _viewModel.routes[i].polylinePoints,
+                          color: AppTheme.slateMuted.withValues(alpha: 0.5),
+                          width: 4,
+                          zIndex: 1,
+                        ),
+                    if (_viewModel.selectedRoute != null) ...[
+                      Polyline(
+                        polylineId: PolylineId(
+                          'rider_route_${_viewModel.selectedRouteIndex}_casing',
+                        ),
+                        points: _viewModel.selectedRoute!.polylinePoints,
+                        color: AppTheme.primaryNavy,
+                        width: 14,
+                        zIndex: 2,
+                      ),
+                      if (_viewModel.selectedRoute!.trafficIntervals.isEmpty)
+                        Polyline(
+                          polylineId: PolylineId(
+                            'rider_route_${_viewModel.selectedRouteIndex}',
+                          ),
+                          points: _viewModel.selectedRoute!.polylinePoints,
+                          color: AppTheme.accentCyan,
+                          width: 8,
+                          zIndex: 3,
+                        )
+                      else
+                        ...TrafficInterval.segment(
+                          _viewModel.selectedRoute!.polylinePoints,
+                          _viewModel.selectedRoute!.trafficIntervals,
+                        ).asMap().entries.map((entry) {
+                          final interval = entry.value.interval;
+                          return Polyline(
+                            polylineId: PolylineId(
+                              'rider_route_${_viewModel.selectedRouteIndex}_traffic_${entry.key}',
+                            ),
+                            points: entry.value.points,
+                            color: _trafficColour(interval),
+                            width: 8,
+                            zIndex: 3,
+                          );
+                        }),
+                    ],
+                  ] else if (_viewModel.routePolyline.isNotEmpty) ...[
                     Polyline(
                       polylineId: const PolylineId(
                         'rider_preview_route_casing',
                       ),
                       points: _viewModel.routePolyline,
                       color: AppTheme.primaryNavy,
-                      width: 9,
+                      width: 14,
                     ),
                     ...TrafficInterval.segment(
                       _viewModel.routePolyline,
@@ -278,10 +365,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         ),
                         points: entry.value.points,
                         color: _trafficColour(interval),
-                        width: 5,
+                        width: 8,
                       );
                     }),
-                  ] else if (currentRide != null) ...[
+                  ],
+                ] else if (currentRide != null) ...[
                     Polyline(
                       polylineId: const PolylineId('rider_active_route_casing'),
                       points: [
@@ -305,7 +393,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         ),
                       ],
                       color: AppTheme.primaryNavy,
-                      width: 9,
+                      width: 14,
                     ),
                     Polyline(
                       polylineId: const PolylineId('rider_active_route'),
@@ -330,13 +418,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         ),
                       ],
                       color: AppTheme.accentCyan,
-                      width: 5,
+                      width: 8,
                     ),
                   ],
-                },
+                  };
+                  for (final p in polylines) {
+                    debugPrint(
+                      '[MAP-DEBUG] drawing polyline id=${p.polylineId.value} points=${p.points.length}',
+                    );
+                  }
+                  return polylines;
+                }(),
               ),
 
-              if (_waitingForGps && currentRide == null)
+              if (currentRide == null)
                 SafeArea(
                   child: Align(
                     alignment: Alignment.topCenter,
@@ -349,56 +444,16 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           horizontal: layout.horizontalPadding,
                           vertical: layout.scale(8),
                         ),
-                        child: GlassContainer(
-                          borderRadius: 16,
-                          blur: 14,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            children: [
-                              const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.accentCyan,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Finding your location…',
-                                  style: TextStyle(
-                                    color: AppColors.of(context).textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildAddressCard(layout),
+                            if (_waitingForGps) ...[
+                              SizedBox(height: layout.scale(6)),
+                              _buildGpsBanner(layout),
                             ],
-                          ),
+                          ],
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-
-              if (currentRide == null && !_waitingForGps)
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: layout.maxCardWidth,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: layout.horizontalPadding,
-                          vertical: layout.scale(8),
-                        ),
-                        child: _buildAddressCard(layout),
                       ),
                     ),
                   ),
@@ -555,6 +610,136 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     if (interval.isJam) return AppTheme.sunsetCoral;
     if (interval.isSlow) return AppTheme.amberWarning;
     return AppTheme.accentCyan;
+  }
+
+  static String _formatDriverNumber(double val) {
+    return val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
+  }
+
+  Widget _buildRouteSelector(ResponsiveLayoutHelper layout) {
+    if (_viewModel.routes.length <= 1) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: List.generate(_viewModel.routes.length, (i) {
+          final route = _viewModel.routes[i];
+          final isSelected = i == _viewModel.selectedRouteIndex;
+
+          final labelText = route.labels.isNotEmpty
+              ? route.labels.map((l) {
+                  switch (l.toUpperCase()) {
+                    case 'CHEAPEST':
+                      return 'Cheapest';
+                    case 'FASTEST':
+                      return 'Fastest';
+                    case 'BEST_DRIVER':
+                      return 'Best for Driver';
+                    default:
+                      return l;
+                  }
+                }).join(' · ')
+              : 'Alternative';
+
+          final distText = route.distanceKm % 1 == 0
+              ? route.distanceKm.toInt().toString()
+              : route.distanceKm.toStringAsFixed(1);
+          final fareText = route.economics.riderFare % 1 == 0
+              ? route.economics.riderFare.toInt().toString()
+              : route.economics.riderFare.toStringAsFixed(0);
+          final line2Text =
+              '$distText km · ${route.durationMin.round()} min · PKR $fareText';
+
+          return Padding(
+            padding: EdgeInsets.only(
+              right: i < _viewModel.routes.length - 1 ? 8.0 : 0,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _viewModel.selectRoute(i),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        isSelected ? AppTheme.primaryBlue : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primaryBlue,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        labelText,
+                        style: TextStyle(
+                          fontSize: layout.fontSize(12),
+                          fontWeight: FontWeight.bold,
+                          color:
+                              isSelected ? Colors.white : AppTheme.primaryBlue,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        line2Text,
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11),
+                          fontWeight: FontWeight.w500,
+                          color: isSelected
+                              ? Colors.white.withValues(alpha: 0.9)
+                              : AppTheme.primaryBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildGpsBanner(ResponsiveLayoutHelper layout) {
+    return GlassContainer(
+      borderRadius: 16,
+      blur: 14,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 10,
+      ),
+      child: Row(
+        children: [
+          const SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppTheme.accentCyan,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Finding your location…',
+              style: TextStyle(
+                color: AppColors.of(context).textPrimary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildAddressCard(ResponsiveLayoutHelper layout) {
@@ -741,7 +926,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     }
 
     final c = AppColors.of(layout.context);
-    final suggested = _viewModel.suggestedFare;
+    final displayedFare =
+        _viewModel.selectedEconomics?.riderFare ?? _viewModel.suggestedFare;
 
     return GestureDetector(
       onVerticalDragEnd: (details) {
@@ -802,7 +988,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      'Suggested: ${CurrencyFormatter.format(suggested)}',
+                      'Suggested: ${CurrencyFormatter.format(displayedFare)}',
                       style: TextStyle(
                         color: AppTheme.primaryBlue,
                         fontWeight: FontWeight.w700,
@@ -813,6 +999,59 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ],
               ),
             ),
+            if (_viewModel.routeError != null &&
+                _viewModel.dropoffLocation != null) ...[
+              SizedBox(height: layout.scale(10)),
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.symmetric(
+                  horizontal: layout.scale(14),
+                  vertical: layout.scale(10),
+                ),
+                decoration: BoxDecoration(
+                  color: AppTheme.sunsetCoral.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.sunsetCoral.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppTheme.sunsetCoral,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _viewModel.routeError!,
+                        style: TextStyle(
+                          color: AppTheme.sunsetCoral,
+                          fontSize: layout.fontSize(12),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (_viewModel.routes.length > 1) ...[
+              SizedBox(height: layout.scale(10)),
+              _buildRouteSelector(layout),
+              if (!_viewModel.fareTouchedByUser &&
+                  _viewModel.selectedEconomics != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Driver earns PKR ${_formatDriverNumber(_viewModel.selectedEconomics!.driverProfit)} (${_formatDriverNumber(_viewModel.selectedEconomics!.profitPerMin)} PKR/min)',
+                  style: const TextStyle(
+                    color: AppTheme.slateMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
             SizedBox(height: layout.scale(10)),
             StaggeredEntryWidget(
               index: 1,

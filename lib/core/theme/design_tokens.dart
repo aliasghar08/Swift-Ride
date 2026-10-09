@@ -130,7 +130,7 @@ class AppColors extends ThemeExtension<AppColors> {
     textMuted: Color(0xFF64748B),
     onBrand: Colors.white,
     mapChrome: Color(0xD9FFFFFF),
-    mapChromeStrong: Color(0xFF0F172A),
+    mapChromeStrong: Colors.white,
     success: Color(0xFF10B981),
     warning: Color(0xFFF59E0B),
     danger: Color(0xFFEF4444),

@@ -3,9 +3,10 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:swiftride/services/location_service_io.dart';
+import 'package:swiftride/services/location_service.dart';
 
 import '../core/utils/distance_calculator.dart';
+import '../core/constants/app_constants.dart';
 import 'polyline_service.dart';
 import 'admin_service.dart';
 
@@ -82,6 +83,123 @@ class TrafficInterval {
   }
 }
 
+class RouteEconomics {
+  final double fuelCost;
+  final double maintenanceCost;
+  final double tollCost;
+  final double driverCost;
+  final double riderFare;
+  final double commission;
+  final double driverProfit;
+  final double profitPerMin;
+
+  const RouteEconomics({
+    required this.fuelCost,
+    required this.maintenanceCost,
+    required this.tollCost,
+    required this.driverCost,
+    required this.riderFare,
+    required this.commission,
+    required this.driverProfit,
+    required this.profitPerMin,
+  });
+
+  factory RouteEconomics.fromJson(Map<dynamic, dynamic> json) {
+    return RouteEconomics(
+      fuelCost: (json['fuelCost'] as num?)?.toDouble() ?? 0.0,
+      maintenanceCost: (json['maintenanceCost'] as num?)?.toDouble() ?? 0.0,
+      tollCost: (json['tollCost'] as num?)?.toDouble() ?? 0.0,
+      driverCost: (json['driverCost'] as num?)?.toDouble() ?? 0.0,
+      riderFare: (json['riderFare'] as num?)?.toDouble() ?? 0.0,
+      commission: (json['commission'] as num?)?.toDouble() ?? 0.0,
+      driverProfit: (json['driverProfit'] as num?)?.toDouble() ?? 0.0,
+      profitPerMin: (json['profitPerMin'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'fuelCost': fuelCost,
+    'maintenanceCost': maintenanceCost,
+    'tollCost': tollCost,
+    'driverCost': driverCost,
+    'riderFare': riderFare,
+    'commission': commission,
+    'driverProfit': driverProfit,
+    'profitPerMin': profitPerMin,
+  };
+}
+
+class RouteOption {
+  final String id;
+  final List<LatLng> polylinePoints;
+  final double distanceKm;
+  final double durationMin;
+  final double staticDurationMin;
+  final String summary;
+  final List<String> labels;
+  final String trafficLevel;
+  final List<TrafficInterval> trafficIntervals;
+  final RouteEconomics economics;
+  final bool isEstimated;
+
+  const RouteOption({
+    required this.id,
+    required this.polylinePoints,
+    required this.distanceKm,
+    required this.durationMin,
+    required this.staticDurationMin,
+    required this.summary,
+    required this.labels,
+    required this.trafficLevel,
+    required this.trafficIntervals,
+    required this.economics,
+    this.isEstimated = false,
+  });
+
+  factory RouteOption.fromJson(
+    Map<dynamic, dynamic> json,
+    List<LatLng> points,
+  ) {
+    return RouteOption(
+      id: (json['id'] as String?) ?? '',
+      polylinePoints: points,
+      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      durationMin: (json['durationMin'] as num?)?.toDouble() ?? 0.0,
+      staticDurationMin:
+          (json['staticDurationMin'] as num?)?.toDouble() ?? 0.0,
+      summary: (json['summary'] as String?) ?? '',
+      labels: (json['labels'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      trafficLevel: (json['trafficLevel'] as String?) ?? 'NORMAL',
+      trafficIntervals: TrafficInterval.listFrom(json['trafficIntervals']),
+      economics: json['economics'] is Map
+          ? RouteEconomics.fromJson(json['economics'] as Map)
+          : const RouteEconomics(
+              fuelCost: 0,
+              maintenanceCost: 0,
+              tollCost: 0,
+              driverCost: 0,
+              riderFare: 0,
+              commission: 0,
+              driverProfit: 0,
+              profitPerMin: 0,
+            ),
+    );
+  }
+}
+
+class RoutePlan {
+  final List<RouteOption> routes;
+  final int defaultIndex;
+
+  const RoutePlan({
+    required this.routes,
+    this.defaultIndex = 0,
+  });
+}
+
 class RouteDetails {
   final List<LatLng> polylinePoints;
   final double distanceKm;
@@ -105,80 +223,7 @@ class MapService {
   factory MapService() => _instance;
   MapService._internal();
 
-  static List<PlaceSuggestion> get fallbackLocations => _knownLocations;
 
-  static List<PlaceSuggestion> _searchLocalGazetteer(String query) {
-    final needle = query.toLowerCase();
-    return _knownLocations
-        .where(
-          (h) =>
-              h.mainText.toLowerCase().contains(needle) ||
-              h.secondaryText.toLowerCase().contains(needle),
-        )
-        .toList();
-  }
-
-  static const List<PlaceSuggestion> _knownLocations = [
-    // Jhang & Regional Locations
-    PlaceSuggestion(
-      placeId: 'jhang_superior_college',
-      mainText: 'Superior College Jhang',
-      secondaryText: 'Gojra Road, Naya Shehar, Pakistan',
-      coordinates: LatLng(31.2781, 72.3317),
-    ),
-    PlaceSuggestion(
-      placeId: 'jhang_ayub_chowk',
-      mainText: 'Ayub Chowk Clock Tower',
-      secondaryText: 'Riaz Cinema Street, Gohar Shah Jhang, Pakistan',
-      coordinates: LatLng(31.2685, 72.3184),
-    ),
-    PlaceSuggestion(
-      placeId: 'jhang_satellite_town',
-      mainText: 'A Block Satellite Town Jhang',
-      secondaryText: 'Satellite Town Block A, Jhang, Pakistan',
-      coordinates: LatLng(31.2842, 72.3412),
-    ),
-    PlaceSuggestion(
-      placeId: 'jhang_sheikh_lahori',
-      mainText: 'Sheikh Lahori Bazaar',
-      secondaryText: 'Jhang Sadar Mohalla Sheikh Lahori, Jhang, Pakistan',
-      coordinates: LatLng(31.2650, 72.3150),
-    ),
-
-    // Islamabad
-    PlaceSuggestion(
-      placeId: 'isb_blue_area',
-      mainText: 'Blue Area Commercial Center',
-      secondaryText: 'Jinnah Avenue, Islamabad',
-      coordinates: LatLng(33.7128, 73.0642),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_centaurus',
-      mainText: 'The Centaurus Mall',
-      secondaryText: 'Jinnah Ave, Sector F-8/4, Islamabad',
-      coordinates: LatLng(33.7078, 73.0501),
-    ),
-    PlaceSuggestion(
-      placeId: 'isb_airport',
-      mainText: 'Islamabad International Airport (ISB)',
-      secondaryText: 'Airport Road, Islamabad',
-      coordinates: LatLng(33.5605, 72.8518),
-    ),
-
-    // Lahore
-    PlaceSuggestion(
-      placeId: 'lhr_gulberg',
-      mainText: 'Main Boulevard Gulberg',
-      secondaryText: 'Gulberg III, Lahore',
-      coordinates: LatLng(31.5126, 74.3444),
-    ),
-    PlaceSuggestion(
-      placeId: 'lhr_airport',
-      mainText: 'Allama Iqbal International Airport (LHE)',
-      secondaryText: 'Airport Road, Cantt, Lahore',
-      coordinates: LatLng(31.5216, 74.4036),
-    ),
-  ];
 
   Future<LatLng?> getCurrentPosition() async {
     try {
@@ -193,12 +238,23 @@ class MapService {
   }
 
   Future<String> reverseGeocode(double lat, double lng) async {
-    if (Firebase.apps.isNotEmpty && FirebaseAuth.instance.currentUser != null) {
+    if (Firebase.apps.isNotEmpty) {
+      if (FirebaseAuth.instance.currentUser == null) {
+        try {
+          await FirebaseAuth.instance.signInAnonymously();
+        } catch (_) {}
+      }
       try {
         final res = await FirebaseFunctions.instance
             .httpsCallable('reverseGeocode')
-            .call(<String, dynamic>{'latitude': lat, 'longitude': lng});
-        final address = res.data['address'] as String?;
+            .call(<String, dynamic>{
+              'latitude': lat,
+              'longitude': lng,
+              'lat': lat,
+              'lng': lng,
+            });
+        final address = (res.data['address'] as String?) ??
+            (res.data['formattedAddress'] as String?);
         if (address != null && address.trim().isNotEmpty) return address;
       } catch (e) {
         debugPrint('[MapService] reverseGeocode failed: $e');
@@ -215,10 +271,7 @@ class MapService {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
 
-    final remote = await _fetchAutocomplete(trimmed, near);
-    if (remote.isNotEmpty) return remote;
-
-    return _searchLocalGazetteer(trimmed);
+    return await _fetchAutocomplete(trimmed, near);
   }
 
   Future<List<PlaceSuggestion>> _fetchAutocomplete(
@@ -227,6 +280,14 @@ class MapService {
   ) async {
     try {
       if (Firebase.apps.isNotEmpty) {
+        if (FirebaseAuth.instance.currentUser == null) {
+          try {
+            await FirebaseAuth.instance.signInAnonymously();
+          } catch (authErr) {
+            debugPrint('[MapService] signInAnonymously failed: $authErr');
+          }
+        }
+
         final res = await FirebaseFunctions.instance
             .httpsCallable('getAutocomplete')
             .call(<String, dynamic>{
@@ -254,12 +315,10 @@ class MapService {
         }
       }
     } catch (e) {
-      debugPrint(
-        '[MapService] Remote autocomplete failed, falling back to local gazetteer: $e',
-      );
+      debugPrint('[MapService] Remote autocomplete failed: $e');
     }
 
-    return _searchLocalGazetteer(query);
+    return const [];
   }
 
   Future<LatLng?> resolvePlace(String placeId) async {
@@ -279,8 +338,16 @@ class MapService {
     return null;
   }
 
-  Future<RouteDetails?> fetchRoute(LatLng origin, LatLng destination) async {
+  Future<RoutePlan?> fetchRoute(LatLng origin, LatLng destination) async {
     if (Firebase.apps.isEmpty) return null;
+
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (authErr) {
+        debugPrint('[MapService] signInAnonymously failed: $authErr');
+      }
+    }
 
     try {
       final res = await FirebaseFunctions.instance
@@ -294,51 +361,40 @@ class MapService {
               'latitude': destination.latitude,
               'longitude': destination.longitude,
             },
+            'vehicleType': 'CAR',
+            'commissionRate': AppConstants.commissionRateYear1,
           });
 
-      final data = res.data as Map<String, dynamic>;
-      final distanceKm = (data['distanceKm'] as num?)?.toDouble();
-      final durationMin = (data['durationMin'] as num?)?.toDouble();
-      if (distanceKm == null || durationMin == null) return null;
+      final data = res.data as Map<dynamic, dynamic>;
+      final rawRoutes = data['routes'];
+      final defaultIndex = (data['defaultRouteIndex'] as num?)?.toInt() ?? 0;
 
-      final encoded = (data['encodedPolyline'] as String?) ?? '';
-      final isEstimated = (data['isEstimated'] as bool?) ?? encoded.isEmpty;
+      if (rawRoutes is List) {
+        final routes = <RouteOption>[];
+        for (final item in rawRoutes) {
+          if (item is Map) {
+            final encoded = (item['encodedPolyline'] as String?) ?? '';
+            final points = encoded.isNotEmpty
+                ? decodePolyline(encoded)
+                : <LatLng>[];
+            if (points.length >= 2) {
+              routes.add(RouteOption.fromJson(item, points));
+            }
+          }
+        }
 
-      final points = encoded.isEmpty
-          ? <LatLng>[origin, destination]
-          : decodePolyline(encoded);
-
-      if (points.length < 2) return null;
-
-      return RouteDetails(
-        polylinePoints: points,
-        distanceKm: distanceKm,
-        durationMin: durationMin,
-        trafficLevel: (data['trafficLevel'] as String?) ?? 'NORMAL',
-        trafficIntervals: TrafficInterval.listFrom(data['trafficIntervals']),
-        isEstimated: isEstimated,
-      );
+        return RoutePlan(
+          routes: routes,
+          defaultIndex: (defaultIndex >= 0 && defaultIndex < routes.length)
+              ? defaultIndex
+              : 0,
+        );
+      }
+      return const RoutePlan(routes: [], defaultIndex: 0);
     } catch (e) {
       debugPrint('[MapService.fetchRoute] failed: $e');
       return null;
     }
-  }
-
-  RouteDetails estimateStraightLineRoute(LatLng origin, LatLng destination) {
-    final distanceKm = DistanceCalculator.estimatedDrivingDistance(
-      origin.latitude,
-      origin.longitude,
-      destination.latitude,
-      destination.longitude,
-    );
-
-    return RouteDetails(
-      polylinePoints: <LatLng>[origin, destination],
-      distanceKm: distanceKm,
-      durationMin: DistanceCalculator.estimatedDurationMinutes(distanceKm),
-      trafficLevel: 'NORMAL',
-      isEstimated: true,
-    );
   }
 
   List<LatLng> decodePolyline(String encoded) {

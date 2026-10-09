@@ -192,6 +192,21 @@ class LocationService {
   Future<void> startLiveTracking() async {
     await _invokeSafe(NativeChannelConstants.methodStartLocationUpdates);
 
+    // Fetch immediately so callers do not wait 4s for the first tick
+    fetchCurrentPositionDetailed().then((r) {
+      if (r.isOk) {
+        _locationStreamController.add(
+          LocationUpdate(
+            latitude: _currentLat,
+            longitude: _currentLng,
+            heading: _currentHeading,
+            geohash: GeohashUtil.encode(_currentLat, _currentLng),
+            timestamp: DateTime.now(),
+          ),
+        );
+      }
+    });
+
     _pollingTimer?.cancel();
     _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
       final r = await fetchCurrentPositionDetailed();
@@ -207,6 +222,12 @@ class LocationService {
         );
       }
     });
+  }
+
+  void stopLiveTracking() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _invokeSafe(NativeChannelConstants.methodStopLocationUpdates);
   }
 
   void startBroadcasting({
@@ -261,9 +282,7 @@ class LocationService {
   void stopDriverLocationBroadcast() {
     _broadcastTimer?.cancel();
     _broadcastTimer = null;
-    _pollingTimer?.cancel();
-    _pollingTimer = null;
-    _invokeSafe(NativeChannelConstants.methodStopLocationUpdates);
+    stopLiveTracking();
     _isBroadcasting = false;
   }
 

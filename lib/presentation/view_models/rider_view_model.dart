@@ -32,6 +32,9 @@ class RiderViewModel extends ChangeNotifier {
   double _estimatedDistanceKm = 0;
   double _estimatedDurationMin = 0;
 
+  List<RouteOption> _routes = [];
+  int _selectedRouteIndex = 0;
+
   LocationPoint? _pickupLocation;
   LocationPoint? _dropoffLocation;
   List<LatLng> _routePolyline = [];
@@ -41,6 +44,7 @@ class RiderViewModel extends ChangeNotifier {
   int _routeRequestId = 0;
   bool _fareTouchedByUser = false;
   bool _routeIsEstimated = false;
+  String? _routeError;
 
   bool _isPinMode = false;
   PaymentRail _selectedRail = PaymentRail.fallback;
@@ -72,10 +76,21 @@ class RiderViewModel extends ChangeNotifier {
   LocationPoint? get pickupLocation => _pickupLocation;
   LocationPoint? get dropoffLocation => _dropoffLocation;
 
+  List<RouteOption> get routes => _routes;
+  int get selectedRouteIndex => _selectedRouteIndex;
+  RouteOption? get selectedRoute =>
+      (_selectedRouteIndex >= 0 && _selectedRouteIndex < _routes.length)
+          ? _routes[_selectedRouteIndex]
+          : null;
+  RouteEconomics? get selectedEconomics => selectedRoute?.economics;
+  bool get fareTouchedByUser => _fareTouchedByUser;
+  String? get routeError => _routeError;
+
   /// True once a genuine GPS (or explicit user-chosen) pickup exists.
   bool get hasPickupFromGps => _hasPickupFromGps;
 
   double get suggestedFare =>
+      selectedEconomics?.riderFare ??
       DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
 
   /// Sets the pickup address from a real device fix.
@@ -167,28 +182,74 @@ class RiderViewModel extends ChangeNotifier {
     });
   }
 
+  void selectRoute(int index) {
+    if (index == _selectedRouteIndex || index < 0 || index >= _routes.length) {
+      return;
+    }
+    _selectedRouteIndex = index;
+    final sel = _routes[index];
+    _routePolyline = sel.polylinePoints;
+    _routeTraffic = sel.trafficIntervals;
+    _estimatedDistanceKm = double.parse(sel.distanceKm.toStringAsFixed(1));
+    _estimatedDurationMin = double.parse(sel.durationMin.toStringAsFixed(0));
+    if (!_fareTouchedByUser) {
+      fareController.text = sel.economics.riderFare.round().toString();
+    }
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
+  }
+
   Future<void> _loadRoute(LatLng origin, LatLng dest) async {
+    _routeError = null;
     final requestId = ++_routeRequestId;
 
-    RouteDetails? route;
+    RoutePlan? plan;
     try {
-      route = await _mapService.fetchRoute(origin, dest);
+      plan = await _mapService.fetchRoute(origin, dest);
     } catch (e) {
       debugPrint('[RiderViewModel] route fetch failed: $e');
     }
 
     if (requestId != _routeRequestId) return;
 
-    route ??= _mapService.estimateStraightLineRoute(origin, dest);
+    if (plan == null || plan.routes.isEmpty) {
+      _routes = [];
+      _selectedRouteIndex = 0;
+      _routePolyline = [];
+      _routeTraffic = [];
+      _estimatedDistanceKm = 0;
+      _estimatedDurationMin = 0;
+      _routeError = 'Could not compute a route. Check your connection.';
+      notifyListeners();
+      return;
+    }
 
-    _routePolyline = route.polylinePoints;
-    _routeTraffic = route.trafficIntervals;
-    _routeIsEstimated = route.isEstimated;
-    _estimatedDistanceKm = double.parse(route.distanceKm.toStringAsFixed(1));
-    _estimatedDurationMin = double.parse(route.durationMin.toStringAsFixed(0));
+    _routeIsEstimated = false;
+    _routes = plan.routes;
+    _selectedRouteIndex =
+        (plan.defaultIndex >= 0 && plan.defaultIndex < _routes.length)
+            ? plan.defaultIndex
+            : 0;
 
-    if (!_fareTouchedByUser) {
-      fareController.text = suggestedFare.toInt().toString();
+    debugPrint('[MAP-DEBUG] routes=${_routes.length} '
+        'selected=$_selectedRouteIndex '
+        'polylinePoints=${_routes.isNotEmpty ? _routes[_selectedRouteIndex].polylinePoints.length : 0}');
+
+    final sel = selectedRoute;
+    if (sel != null) {
+      _routePolyline = sel.polylinePoints;
+      _routeTraffic = sel.trafficIntervals;
+      _estimatedDistanceKm = double.parse(sel.distanceKm.toStringAsFixed(1));
+      _estimatedDurationMin = double.parse(sel.durationMin.toStringAsFixed(0));
+
+      if (!_fareTouchedByUser) {
+        fareController.text = sel.economics.riderFare.round().toString();
+      }
+    } else {
+      _routePolyline = [];
+      _routeTraffic = [];
+      _estimatedDistanceKm = 0;
+      _estimatedDurationMin = 0;
     }
 
     notifyListeners();

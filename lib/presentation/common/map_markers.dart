@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -9,6 +12,39 @@ import 'map_marker_icons.dart';
 /// rendered, and falls back to the stock Google pins otherwise so a rendering
 /// failure degrades rather than blanking the map.
 class MapMarkers {
+  static BitmapDescriptor? customOriginDot;
+
+  /// Ensures custom origin dot glyph is generated.
+  static Future<void> ensureOriginDot() async {
+    if (customOriginDot != null) return;
+    try {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      const size = 36.0;
+      const c = Offset(size / 2, size / 2);
+      canvas.drawCircle(c, 16.0, Paint()..color = const Color(0x33000000));
+      canvas.drawCircle(c, 14.0, Paint()..color = const Color(0xFF0F172A));
+      canvas.drawCircle(c, 7.0, Paint()..color = Colors.white);
+      final picture = recorder.endRecording();
+      final img = await picture.toImage(size.toInt(), size.toInt());
+      final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+      if (byteData != null) {
+        customOriginDot = BitmapDescriptor.bytes(byteData.buffer.asUint8List());
+      }
+    } catch (_) {}
+  }
+
+  /// Origin: small filled circle (12px diameter with 6px white center).
+  static Marker originDot(LatLng pos, {String id = 'route_origin'}) => Marker(
+        markerId: MarkerId(id),
+        position: pos,
+        icon: customOriginDot ??
+            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueCyan),
+        anchor: const Offset(0.5, 0.5),
+        zIndexInt: 4,
+        infoWindow: const InfoWindow(title: 'Pickup'),
+      );
+
   /// Pickup: green disc with a white ring.
   ///
   /// [id] lets a screen draw more than one pickup (for example the address

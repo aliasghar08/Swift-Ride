@@ -9,6 +9,13 @@ export interface AuthenticatedUser {
   email?: string;
 }
 
+export function assertHasToken(request: CallableRequest): { uid: string } {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError('unauthenticated', 'User must be authenticated to perform this operation.');
+  }
+  return { uid: request.auth.uid };
+}
+
 export async function assertAuthenticated(request: CallableRequest): Promise<AuthenticatedUser> {
   if (!request.auth || !request.auth.uid) {
     throw new HttpsError('unauthenticated', 'User must be authenticated to perform this operation.');

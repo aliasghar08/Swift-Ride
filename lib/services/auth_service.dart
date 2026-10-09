@@ -40,6 +40,25 @@ class AuthService {
   /// Whether a real Firebase user is currently authenticated.
   bool get isAuthenticated => currentFirebaseUser != null;
 
+  /// Signs in anonymously so unauthenticated guests can mint valid tokens
+  /// for Cloud Functions callables (maps, routes, fare estimates).
+  Future<UserCredential?> signInAnonymously() async {
+    final auth = _auth;
+    if (auth == null) return null;
+    try {
+      if (auth.currentUser != null) {
+        return null;
+      }
+      debugPrint('[AuthService] Initiating anonymous sign-in...');
+      final cred = await auth.signInAnonymously();
+      debugPrint('[AuthService] Anonymous sign-in success: ${cred.user?.uid}');
+      return cred;
+    } catch (e) {
+      debugPrint('[AuthService] Anonymous sign-in failed: $e');
+      return null;
+    }
+  }
+
   /// Dispatches an SMS verification code to [phoneNumber].
   Future<void> sendOtp({
     required String phoneNumber,

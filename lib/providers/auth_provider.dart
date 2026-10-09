@@ -29,6 +29,13 @@ class AuthProvider extends ChangeNotifier {
         _activeRole = initialRole {
     _loadPersistedRole();
     _initAuthListener();
+    _initAnonymousSession();
+  }
+
+  Future<void> _initAnonymousSession() async {
+    if (!_authService.isAuthenticated) {
+      await _authService.signInAnonymously();
+    }
   }
 
   AppUser get currentUser => _currentUser;

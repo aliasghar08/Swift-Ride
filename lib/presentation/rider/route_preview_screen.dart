@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../domain/models/route_option.dart';
+import '../../services/map_service.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
 import '../view_models/rider_view_model.dart';
@@ -231,25 +231,22 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
         ),
       );
 
-      for (var j = 0; j < sel.trafficIntervals.length; j++) {
-        final interval = sel.trafficIntervals[j];
-        final seg = TrafficInterval.segment(
-          sel.polylinePoints,
-          sel.trafficIntervals,
-        );
-        for (var k = 0; k < seg.length; k++) {
-          set.add(
-            Polyline(
-              polylineId: PolylineId(
-                'preview_route_${_selectedRouteIndex}_traffic_$k',
-              ),
-              points: seg[k].points,
-              color: _trafficColour(seg[k].interval),
-              width: fillWidth,
-              zIndex: 2,
+      final segs = TrafficInterval.segment(
+        sel.polylinePoints,
+        sel.trafficIntervals,
+      );
+      for (var k = 0; k < segs.length; k++) {
+        set.add(
+          Polyline(
+            polylineId: PolylineId(
+              'preview_route_${_selectedRouteIndex}_traffic_$k',
             ),
-          );
-        }
+            points: segs[k].points,
+            color: _trafficColour(segs[k].interval),
+            width: fillWidth,
+            zIndex: 2,
+          ),
+        );
       }
     }
 
@@ -412,8 +409,19 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                             children: List.generate(routes.length, (idx) {
                               final r = routes[idx];
                               final isSelected = idx == _selectedRouteIndex;
-                              final label = r.badges.isNotEmpty
-                                  ? r.badges.first.displayName
+                              final label = r.labels.isNotEmpty
+                                  ? r.labels.map((l) {
+                                      switch (l.toUpperCase()) {
+                                        case 'CHEAPEST':
+                                          return 'Cheapest';
+                                        case 'FASTEST':
+                                          return 'Fastest';
+                                        case 'BEST_DRIVER':
+                                          return 'Best for Driver';
+                                        default:
+                                          return l;
+                                      }
+                                    }).join(' · ')
                                   : 'Option ${idx + 1}';
 
                               return Padding(

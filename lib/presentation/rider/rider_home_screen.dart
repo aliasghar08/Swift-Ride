@@ -92,33 +92,21 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       );
 
       final fix = await locProv.waitForFirstFix(
-        timeout: const Duration(seconds: 12),
+        timeout: const Duration(seconds: 4),
       );
       if (!mounted) return;
 
-      if (fix != null) {
-        _viewModel.initializeFromCoordinates(fix.latitude, fix.longitude);
-        setState(() => _waitingForGps = false);
-        _viewModel.setDropoff(
-          const LocationPoint(
-            latitude: 31.2681,
-            longitude: 72.3181,
-            address: 'Jhang, Punjab, Pakistan',
-          ),
-        );
-      } else {
-        setState(() => _waitingForGps = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'We could not read your GPS. Tap the pin icon to place your '
-              'pickup manually, or enable location in Settings.',
-            ),
-            duration: const Duration(seconds: 6),
-            backgroundColor: AppTheme.amberWarning,
-          ),
-        );
-      }
+      final lat = fix?.latitude ?? (locProv.hasRealFix ? locProv.latitude : 31.5580);
+      final lng = fix?.longitude ?? (locProv.hasRealFix ? locProv.longitude : 74.3507);
+      _viewModel.initializeFromCoordinates(lat, lng);
+      setState(() => _waitingForGps = false);
+      _viewModel.setDropoff(
+        const LocationPoint(
+          latitude: 31.2681,
+          longitude: 72.3181,
+          address: 'Jhang, Punjab, Pakistan',
+        ),
+      );
       _viewModelInitialized = true;
     });
   }
@@ -215,220 +203,262 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final ctrl = _mapController;
           if (ctrl == null || currentRide != null) return;
-          ctrl.animateCamera(
-            CameraUpdate.newLatLngZoom(
-              LatLng(locProv.latitude, locProv.longitude),
-              16.8,
-            ),
-          );
+          final sel = _viewModel.selectedRoute;
+          if (sel != null && sel.polylinePoints.isNotEmpty) {
+            final routeId =
+                '${_viewModel.selectedRouteIndex}_${sel.polylinePoints.length}_${sel.distanceKm}';
+            if (!_userMovedMap && _lastRouteId != routeId) {
+              _lastRouteId = routeId;
+              _fitSelectedRoute();
+            }
+          }
         });
+
+        final casingWidth = kIsWeb ? 18 : 16;
+        final fillWidth = kIsWeb ? 12 : 10;
+
+        final polylines = <Polyline>{
+          if (_viewModel.routeError == null) ...[
+            if (_viewModel.routes.isNotEmpty) ...[
+              for (var i = 0; i < _viewModel.routes.length; i++)
+                if (i != _viewModel.selectedRouteIndex)
+                  Polyline(
+                    polylineId: PolylineId('rider_route_$i'),
+                    points: _viewModel.routes[i].polylinePoints,
+                    color: AppTheme.slateMuted.withValues(alpha: 0.45),
+                    width: 6,
+                    zIndex: -1,
+                  ),
+              if (_viewModel.selectedRoute != null) ...[
+                Polyline(
+                  polylineId: PolylineId(
+                    'rider_route_${_viewModel.selectedRouteIndex}_casing',
+                  ),
+                  points: _viewModel.selectedRoute!.polylinePoints,
+                  color: AppTheme.primaryNavy,
+                  width: casingWidth,
+                  zIndex: 0,
+                ),
+                Polyline(
+                  polylineId: PolylineId(
+                    'rider_route_${_viewModel.selectedRouteIndex}_fill',
+                  ),
+                  points: _viewModel.selectedRoute!.polylinePoints,
+                  color: AppTheme.accentCyan,
+                  width: fillWidth,
+                  zIndex: 1,
+                ),
+                ...TrafficInterval.segment(
+                  _viewModel.selectedRoute!.polylinePoints,
+                  _viewModel.selectedRoute!.trafficIntervals,
+                ).asMap().entries.map((entry) {
+                  final interval = entry.value.interval;
+                  return Polyline(
+                    polylineId: PolylineId(
+                      'rider_route_${_viewModel.selectedRouteIndex}_traffic_${entry.key}',
+                    ),
+                    points: entry.value.points,
+                    color: _trafficColour(interval),
+                    width: fillWidth,
+                    zIndex: 2,
+                  );
+                }),
+              ],
+            ] else if (_viewModel.routePolyline.isNotEmpty) ...[
+              Polyline(
+                polylineId: const PolylineId(
+                  'rider_preview_route_casing',
+                ),
+                points: _viewModel.routePolyline,
+                color: AppTheme.primaryNavy,
+                width: casingWidth,
+                zIndex: 0,
+              ),
+              Polyline(
+                polylineId: const PolylineId(
+                  'rider_preview_route_fill',
+                ),
+                points: _viewModel.routePolyline,
+                color: AppTheme.accentCyan,
+                width: fillWidth,
+                zIndex: 1,
+              ),
+              ...TrafficInterval.segment(
+                _viewModel.routePolyline,
+                _viewModel.routeTraffic,
+              ).asMap().entries.map((entry) {
+                final interval = entry.value.interval;
+                return Polyline(
+                  polylineId: PolylineId(
+                    'rider_preview_traffic_${entry.key}',
+                  ),
+                  points: entry.value.points,
+                  color: _trafficColour(interval),
+                  width: fillWidth,
+                  zIndex: 2,
+                );
+              }),
+            ],
+          ] else if (currentRide != null) ...[
+            Polyline(
+              polylineId: const PolylineId('rider_active_route_casing'),
+              points: [
+                if (driverTelemetry != null && !driverTelemetry.isStale)
+                  LatLng(
+                    driverTelemetry.latitude,
+                    driverTelemetry.longitude,
+                  )
+                else
+                  LatLng(
+                    currentRide.pickup.latitude,
+                    currentRide.pickup.longitude,
+                  ),
+                LatLng(
+                  currentRide.pickup.latitude,
+                  currentRide.pickup.longitude,
+                ),
+                LatLng(
+                  currentRide.dropoff.latitude,
+                  currentRide.dropoff.longitude,
+                ),
+              ],
+              color: AppTheme.primaryNavy,
+              width: casingWidth,
+              zIndex: 0,
+            ),
+            Polyline(
+              polylineId: const PolylineId('rider_active_route_fill'),
+              points: [
+                if (driverTelemetry != null && !driverTelemetry.isStale)
+                  LatLng(
+                    driverTelemetry.latitude,
+                    driverTelemetry.longitude,
+                  )
+                else
+                  LatLng(
+                    currentRide.pickup.latitude,
+                    currentRide.pickup.longitude,
+                  ),
+                LatLng(
+                  currentRide.pickup.latitude,
+                  currentRide.pickup.longitude,
+                ),
+                LatLng(
+                  currentRide.dropoff.latitude,
+                  currentRide.dropoff.longitude,
+                ),
+              ],
+              color: AppTheme.accentCyan,
+              width: fillWidth,
+              zIndex: 1,
+            ),
+          ],
+        };
+
+        for (final p in polylines) {
+          debugPrint(
+            '[MAP-DEBUG] drawing polyline id=${p.polylineId.value} points=${p.points.length}',
+          );
+        }
 
         return Scaffold(
           body: Stack(
             children: [
-              GoogleMapView(
-                initialCenter: LatLng(locProv.latitude, locProv.longitude),
-                initialZoom: 15,
-                semanticsLabel: _viewModel.isPinMode
-                    ? 'Map with a pin at the centre. Drag to choose a location.'
-                    : (currentRide != null
-                          ? 'Live map of your trip. Status: ${currentRide.status.displayName}.'
-                          : 'Map of your area. Choose a pickup and destination to see a route.'),
-                mode: _viewModel.isPinMode
-                    ? MapMode.pinPicker
-                    : (currentRide != null
-                          ? MapMode.liveTracking
-                          : MapMode.viewOnly),
-                darkMode: true,
-                showTraffic: true,
-                onControllerCreated: (controller) {
-                  _mapController = controller;
-                },
-                onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(
-                  coords.latitude,
-                  coords.longitude,
-                ),
-                markers: {
-                  // Only display pickup disc when setting pin or after choosing destination
-                  if (currentRide == null &&
-                      _viewModel.pickupLocation != null &&
-                      (_viewModel.isPinMode ||
-                          _viewModel.dropoffLocation != null))
-                    MapMarkers.pickup(
-                      LatLng(
-                        _viewModel.pickupLocation!.latitude,
-                        _viewModel.pickupLocation!.longitude,
-                      ),
-                      id: 'search_pickup',
-                    ),
-                  if (currentRide == null && _viewModel.dropoffLocation != null)
-                    MapMarkers.dropoff(
-                      LatLng(
-                        _viewModel.dropoffLocation!.latitude,
-                        _viewModel.dropoffLocation!.longitude,
-                      ),
-                      id: 'search_dropoff',
-                    ),
-                  if (currentRide != null) ...[
-                    MapMarkers.pickup(
-                      LatLng(
-                        currentRide.pickup.latitude,
-                        currentRide.pickup.longitude,
-                      ),
-                      id: 'ride_pickup',
-                    ),
-                    MapMarkers.dropoff(
-                      LatLng(
-                        currentRide.dropoff.latitude,
-                        currentRide.dropoff.longitude,
-                      ),
-                      id: 'ride_dropoff',
-                    ),
-                    if (driverTelemetry != null && !driverTelemetry.isStale)
-                      MapMarkers.driver(
-                        driverId: currentRide.driverId ?? 'driver',
-                        pos: LatLng(
-                          driverTelemetry.latitude,
-                          driverTelemetry.longitude,
-                        ),
-                        heading: driverTelemetry.heading,
-                      ),
-                  ],
-                },
-                polylines: () {
-                  final polylines = <Polyline>{
-                  if (_viewModel.routeError == null) ...[
-                    if (_viewModel.routes.isNotEmpty) ...[
-                    for (var i = 0; i < _viewModel.routes.length; i++)
-                      if (i != _viewModel.selectedRouteIndex)
-                        Polyline(
-                          polylineId: PolylineId('rider_route_$i'),
-                          points: _viewModel.routes[i].polylinePoints,
-                          color: AppTheme.slateMuted.withValues(alpha: 0.5),
-                          width: 4,
-                          zIndex: 1,
-                        ),
-                    if (_viewModel.selectedRoute != null) ...[
-                      Polyline(
-                        polylineId: PolylineId(
-                          'rider_route_${_viewModel.selectedRouteIndex}_casing',
-                        ),
-                        points: _viewModel.selectedRoute!.polylinePoints,
-                        color: AppTheme.primaryNavy,
-                        width: 14,
-                        zIndex: 2,
-                      ),
-                      if (_viewModel.selectedRoute!.trafficIntervals.isEmpty)
-                        Polyline(
-                          polylineId: PolylineId(
-                            'rider_route_${_viewModel.selectedRouteIndex}',
-                          ),
-                          points: _viewModel.selectedRoute!.polylinePoints,
-                          color: AppTheme.accentCyan,
-                          width: 8,
-                          zIndex: 3,
-                        )
-                      else
-                        ...TrafficInterval.segment(
-                          _viewModel.selectedRoute!.polylinePoints,
-                          _viewModel.selectedRoute!.trafficIntervals,
-                        ).asMap().entries.map((entry) {
-                          final interval = entry.value.interval;
-                          return Polyline(
-                            polylineId: PolylineId(
-                              'rider_route_${_viewModel.selectedRouteIndex}_traffic_${entry.key}',
-                            ),
-                            points: entry.value.points,
-                            color: _trafficColour(interval),
-                            width: 8,
-                            zIndex: 3,
-                          );
-                        }),
-                    ],
-                  ] else if (_viewModel.routePolyline.isNotEmpty) ...[
-                    Polyline(
-                      polylineId: const PolylineId(
-                        'rider_preview_route_casing',
-                      ),
-                      points: _viewModel.routePolyline,
-                      color: AppTheme.primaryNavy,
-                      width: 14,
-                    ),
-                    ...TrafficInterval.segment(
-                      _viewModel.routePolyline,
-                      _viewModel.routeTraffic,
-                    ).asMap().entries.map((entry) {
-                      final interval = entry.value.interval;
-                      return Polyline(
-                        polylineId: PolylineId(
-                          'rider_preview_traffic_${entry.key}',
-                        ),
-                        points: entry.value.points,
-                        color: _trafficColour(interval),
-                        width: 8,
-                      );
-                    }),
-                  ],
-                ] else if (currentRide != null) ...[
-                    Polyline(
-                      polylineId: const PolylineId('rider_active_route_casing'),
-                      points: [
-                        if (driverTelemetry != null && !driverTelemetry.isStale)
-                          LatLng(
-                            driverTelemetry.latitude,
-                            driverTelemetry.longitude,
-                          )
-                        else
-                          LatLng(
-                            currentRide.pickup.latitude,
-                            currentRide.pickup.longitude,
-                          ),
-                        LatLng(
-                          currentRide.pickup.latitude,
-                          currentRide.pickup.longitude,
-                        ),
-                        LatLng(
-                          currentRide.dropoff.latitude,
-                          currentRide.dropoff.longitude,
-                        ),
-                      ],
-                      color: AppTheme.primaryNavy,
-                      width: 14,
-                    ),
-                    Polyline(
-                      polylineId: const PolylineId('rider_active_route'),
-                      points: [
-                        if (driverTelemetry != null && !driverTelemetry.isStale)
-                          LatLng(
-                            driverTelemetry.latitude,
-                            driverTelemetry.longitude,
-                          )
-                        else
-                          LatLng(
-                            currentRide.pickup.latitude,
-                            currentRide.pickup.longitude,
-                          ),
-                        LatLng(
-                          currentRide.pickup.latitude,
-                          currentRide.pickup.longitude,
-                        ),
-                        LatLng(
-                          currentRide.dropoff.latitude,
-                          currentRide.dropoff.longitude,
-                        ),
-                      ],
-                      color: AppTheme.accentCyan,
-                      width: 8,
-                    ),
-                  ],
-                  };
-                  for (final p in polylines) {
-                    debugPrint(
-                      '[MAP-DEBUG] drawing polyline id=${p.polylineId.value} points=${p.points.length}',
-                    );
+              Listener(
+                onPointerDown: (_) {
+                  if (!_userMovedMap) {
+                    setState(() => _userMovedMap = true);
                   }
-                  return polylines;
-                }(),
+                },
+                child: GoogleMapView(
+                  initialCenter: LatLng(locProv.latitude, locProv.longitude),
+                  initialZoom: 15,
+                  semanticsLabel: _viewModel.isPinMode
+                      ? 'Map with a pin at the centre. Drag to choose a location.'
+                      : (currentRide != null
+                            ? 'Live map of your trip. Status: ${currentRide.status.displayName}.'
+                            : 'Map of your area. Choose a pickup and destination to see a route.'),
+                  mode: _viewModel.isPinMode
+                      ? MapMode.pinPicker
+                      : (currentRide != null
+                            ? MapMode.liveTracking
+                            : MapMode.viewOnly),
+                  darkMode: true,
+                  showTraffic: true,
+                  onControllerCreated: (controller) {
+                    _mapController = controller;
+                  },
+                  onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(
+                    coords.latitude,
+                    coords.longitude,
+                  ),
+                  markers: {
+                    if (currentRide == null &&
+                        _viewModel.dropoffLocation != null &&
+                        _viewModel.pickupLocation != null) ...[
+                      MapMarkers.originDot(
+                        LatLng(
+                          _viewModel.pickupLocation!.latitude,
+                          _viewModel.pickupLocation!.longitude,
+                        ),
+                        id: 'route_origin_dot',
+                      ),
+                      MapMarkers.dropoff(
+                        LatLng(
+                          _viewModel.dropoffLocation!.latitude,
+                          _viewModel.dropoffLocation!.longitude,
+                        ),
+                        id: 'search_dropoff',
+                      ),
+                    ] else ...[
+                      if (currentRide == null &&
+                          _viewModel.pickupLocation != null &&
+                          (_viewModel.isPinMode ||
+                              _viewModel.dropoffLocation != null))
+                        MapMarkers.pickup(
+                          LatLng(
+                            _viewModel.pickupLocation!.latitude,
+                            _viewModel.pickupLocation!.longitude,
+                          ),
+                          id: 'search_pickup',
+                        ),
+                      if (currentRide == null && _viewModel.dropoffLocation != null)
+                        MapMarkers.dropoff(
+                          LatLng(
+                            _viewModel.dropoffLocation!.latitude,
+                            _viewModel.dropoffLocation!.longitude,
+                          ),
+                          id: 'search_dropoff',
+                        ),
+                    ],
+                    if (currentRide != null) ...[
+                      MapMarkers.pickup(
+                        LatLng(
+                          currentRide.pickup.latitude,
+                          currentRide.pickup.longitude,
+                        ),
+                        id: 'ride_pickup',
+                      ),
+                      MapMarkers.dropoff(
+                        LatLng(
+                          currentRide.dropoff.latitude,
+                          currentRide.dropoff.longitude,
+                        ),
+                        id: 'ride_dropoff',
+                      ),
+                      if (driverTelemetry != null && !driverTelemetry.isStale)
+                        MapMarkers.driver(
+                          driverId: currentRide.driverId ?? 'driver',
+                          pos: LatLng(
+                            driverTelemetry.latitude,
+                            driverTelemetry.longitude,
+                          ),
+                          heading: driverTelemetry.heading,
+                        ),
+                    ],
+                  },
+                  polylines: polylines,
+                ),
               ),
 
               if (currentRide == null)
@@ -554,34 +584,43 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              FloatingActionButton.small(
-                heroTag: 'my_location_btn',
-                backgroundColor: AppTheme.primaryNavy,
-                foregroundColor: AppTheme.accentCyan,
-                child: const Icon(Icons.my_location, size: 20),
-                onPressed: () {
-                  final loc =
-                      CustomChangeNotifierProvider.read<LocationProvider>(
-                        context,
-                      );
-                  if (loc.hasRealFix && _mapController != null) {
-                    _mapController!.animateCamera(
-                      CameraUpdate.newLatLng(
-                        LatLng(loc.latitude, loc.longitude),
-                      ),
-                    );
-                  } else if (!loc.hasRealFix) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Waiting for GPS signal...'),
-                        backgroundColor: AppTheme.amberWarning,
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
+              if (_userMovedMap) ...[
+                FloatingActionButton.small(
+                  heroTag: 'my_location_btn',
+                  backgroundColor: AppTheme.primaryNavy,
+                  foregroundColor: AppTheme.accentCyan,
+                  child: const Icon(Icons.my_location, size: 20),
+                  onPressed: () {
+                    setState(() {
+                      _userMovedMap = false;
+                    });
+                    if (_viewModel.selectedRoute != null) {
+                      _fitSelectedRoute();
+                    } else {
+                      final loc =
+                          CustomChangeNotifierProvider.read<LocationProvider>(
+                            context,
+                          );
+                      if (loc.hasRealFix && _mapController != null) {
+                        _mapController!.animateCamera(
+                          CameraUpdate.newLatLng(
+                            LatLng(loc.latitude, loc.longitude),
+                          ),
+                        );
+                      } else if (!loc.hasRealFix) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Waiting for GPS signal...'),
+                            backgroundColor: AppTheme.amberWarning,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
               PulsingGlowWidget(
                 glowColor: AppTheme.accentCyan,
                 minSpread: 1.0,
@@ -1051,6 +1090,48 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
               ],
+            ],
+            if (_viewModel.selectedRoute != null) ...[
+              SizedBox(height: layout.scale(8)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            RoutePreviewScreen(viewModel: _viewModel),
+                      ),
+                    );
+                  },
+                  icon: const Icon(
+                    Icons.directions,
+                    size: 18,
+                    color: AppTheme.accentCyan,
+                  ),
+                  label: const Text(
+                    'Directions',
+                    style: TextStyle(
+                      color: AppTheme.accentCyan,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      color: AppTheme.accentCyan,
+                      width: 1.2,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                  ),
+                ),
+              ),
             ],
             SizedBox(height: layout.scale(10)),
             StaggeredEntryWidget(

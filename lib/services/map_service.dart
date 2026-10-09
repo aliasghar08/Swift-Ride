@@ -129,6 +129,36 @@ class RouteEconomics {
   };
 }
 
+class RouteStep {
+  final String maneuver; // TURN_LEFT, TURN_RIGHT, STRAIGHT, ...
+  final String instruction; // "Turn left onto Jhang Road"
+  final double distanceKm;
+  final double durationMin;
+
+  const RouteStep({
+    required this.maneuver,
+    required this.instruction,
+    required this.distanceKm,
+    required this.durationMin,
+  });
+
+  factory RouteStep.fromJson(Map<dynamic, dynamic> json) {
+    return RouteStep(
+      maneuver: (json['maneuver'] as String?) ?? 'STRAIGHT',
+      instruction: (json['instruction'] as String?) ?? 'Continue',
+      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      durationMin: (json['durationMin'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'maneuver': maneuver,
+    'instruction': instruction,
+    'distanceKm': distanceKm,
+    'durationMin': durationMin,
+  };
+}
+
 class RouteOption {
   final String id;
   final List<LatLng> polylinePoints;
@@ -139,6 +169,7 @@ class RouteOption {
   final List<String> labels;
   final String trafficLevel;
   final List<TrafficInterval> trafficIntervals;
+  final List<RouteStep> steps;
   final RouteEconomics economics;
   final bool isEstimated;
 
@@ -152,6 +183,7 @@ class RouteOption {
     required this.labels,
     required this.trafficLevel,
     required this.trafficIntervals,
+    this.steps = const [],
     required this.economics,
     this.isEstimated = false,
   });
@@ -174,6 +206,11 @@ class RouteOption {
           const [],
       trafficLevel: (json['trafficLevel'] as String?) ?? 'NORMAL',
       trafficIntervals: TrafficInterval.listFrom(json['trafficIntervals']),
+      steps: (json['steps'] as List?)
+              ?.whereType<Map>()
+              .map((s) => RouteStep.fromJson(s))
+              .toList() ??
+          const [],
       economics: json['economics'] is Map
           ? RouteEconomics.fromJson(json['economics'] as Map)
           : const RouteEconomics(

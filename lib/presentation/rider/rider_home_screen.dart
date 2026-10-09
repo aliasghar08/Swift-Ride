@@ -53,7 +53,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   // UI Minimization States
   bool _isTopCardMinimized = false;
-  bool _isBottomSheetMinimized = false;
+  final DraggableScrollableController _fareSheetController =
+      DraggableScrollableController();
+  final DraggableScrollableController _activeRideSheetController =
+      DraggableScrollableController();
 
   bool _userMovedMap = false;
   String? _lastRouteId;
@@ -100,13 +103,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       final lng = fix?.longitude ?? (locProv.hasRealFix ? locProv.longitude : 74.3507);
       _viewModel.initializeFromCoordinates(lat, lng);
       setState(() => _waitingForGps = false);
-      _viewModel.setDropoff(
-        const LocationPoint(
-          latitude: 31.2681,
-          longitude: 72.3181,
-          address: 'Jhang, Punjab, Pakistan',
-        ),
-      );
       _viewModelInitialized = true;
     });
   }
@@ -172,13 +168,21 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         _viewModel.setPickup(result);
       } else {
         _viewModel.setDropoff(result);
-        setState(() => _isBottomSheetMinimized = false);
+        if (_fareSheetController.isAttached) {
+          _fareSheetController.animateTo(
+            0.45,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
       }
     }
   }
 
   @override
   void dispose() {
+    _fareSheetController.dispose();
+    _activeRideSheetController.dispose();
     _mapController = null;
     _viewModel.dispose();
     super.dispose();
@@ -214,8 +218,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           }
         });
 
-        final casingWidth = kIsWeb ? 18 : 16;
-        final fillWidth = kIsWeb ? 12 : 10;
+        const casingWidth = 16;
+        const fillWidth = 10;
 
         final polylines = <Polyline>{
           if (_viewModel.routeError == null) ...[
@@ -357,7 +361,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
         for (final p in polylines) {
           debugPrint(
-            '[MAP-DEBUG] drawing polyline id=${p.polylineId.value} points=${p.points.length}',
+            '[POLY-DEBUG] id=${p.polylineId.value} width=${p.width} points=${p.points.length}',
           );
         }
 
@@ -489,33 +493,25 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
 
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
-                    child: currentRide == null
-                        ? _buildFareProposalSheet(
-                            layout,
-                            rideProv,
-                            authProv,
-                            driverProv,
-                          )
-                        : _buildActiveRideSheet(
-                            layout: layout,
-                            ride: currentRide,
-                            offers: rideProv.activeOffers,
-                            rideProv: rideProv,
-                            safetyProv: safetyProv,
-                            authProv: authProv,
-                            locProv: locProv,
-                          ),
-                  ),
+              if (currentRide != null || _viewModel.dropoffLocation != null)
+                Positioned.fill(
+                  child: currentRide == null
+                      ? _buildFareProposalSheet(
+                          layout,
+                          rideProv,
+                          authProv,
+                          driverProv,
+                        )
+                      : _buildActiveRideSheet(
+                          layout: layout,
+                          ride: currentRide,
+                          offers: rideProv.activeOffers,
+                          rideProv: rideProv,
+                          safetyProv: safetyProv,
+                          authProv: authProv,
+                          locProv: locProv,
+                        ),
                 ),
-              ),
 
               CustomConsumer<SafetyCheckProvider>(
                 builder: (context, safetyCheck, _) {
@@ -921,390 +917,400 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     AuthProvider authProv,
     DriverProvider driverProv,
   ) {
-    if (_isBottomSheetMinimized) {
-      return GestureDetector(
-        onTap: () => setState(() => _isBottomSheetMinimized = false),
-        onVerticalDragEnd: (details) {
-          if (details.primaryVelocity != null &&
-              details.primaryVelocity! < -100) {
-            setState(() => _isBottomSheetMinimized = false);
-          }
-        },
-        child: GlassContainer(
-          borderRadius: 28,
-          blur: 24,
-          padding: EdgeInsets.fromLTRB(
-            layout.horizontalPadding,
-            12,
-            layout.horizontalPadding,
-            layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Tap to expand fare options',
-                style: TextStyle(
-                  color: AppColors.of(context).textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
+    if (_viewModel.dropoffLocation == null) {
+      return const SizedBox.shrink();
     }
 
     final c = AppColors.of(layout.context);
     final displayedFare =
         _viewModel.selectedEconomics?.riderFare ?? _viewModel.suggestedFare;
 
-    return GestureDetector(
-      onVerticalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
-          setState(() => _isBottomSheetMinimized = true);
-        }
+    return DraggableScrollableSheet(
+      controller: _fareSheetController,
+      initialChildSize: 0.45,
+      minChildSize: 0.20,
+      maxChildSize: 0.92,
+      snap: true,
+      snapSizes: const [0.20, 0.45, 0.92],
+      builder: (context, scrollController) {
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
+            child: GlassContainer(
+              borderRadius: 28,
+              blur: 24,
+              padding: EdgeInsets.fromLTRB(
+                layout.horizontalPadding,
+                14,
+                layout.horizontalPadding,
+                layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
+              ),
+              child: CustomScrollView(
+                controller: scrollController,
+                physics: const ClampingScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        GestureDetector(
+                          key: const Key('fare_sheet_drag_handle'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (_fareSheetController.isAttached) {
+                              final current = _fareSheetController.size;
+                              if (current < 0.35) {
+                                _fareSheetController.animateTo(
+                                  0.45,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              } else if (current < 0.70) {
+                                _fareSheetController.animateTo(
+                                  0.92,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              } else {
+                                _fareSheetController.animateTo(
+                                  0.20,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              }
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Center(
+                              child: Container(
+                                width: 36,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade400,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: layout.scale(12)),
+                        StaggeredEntryWidget(
+                          index: 0,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _viewModel.routeIsEstimated &&
+                                          _viewModel.estimatedDistanceKm > 0
+                                      ? 'Approx ${_viewModel.estimatedDistanceKm}km • ${_viewModel.estimatedDurationMin.toInt()} min (direct estimate)'
+                                      : '${_viewModel.estimatedDistanceKm}km • ${_viewModel.estimatedDurationMin.toInt()} min',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: AppTheme.slateMuted,
+                                    fontSize: layout.fontSize(12),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Suggested: ${CurrencyFormatter.format(displayedFare)}',
+                                  style: TextStyle(
+                                    color: AppTheme.primaryBlue,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: layout.fontSize(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_viewModel.routeError != null &&
+                            _viewModel.dropoffLocation != null) ...[
+                          SizedBox(height: layout.scale(10)),
+                          Container(
+                            width: double.infinity,
+                            padding: EdgeInsets.symmetric(
+                              horizontal: layout.scale(14),
+                              vertical: layout.scale(10),
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.sunsetCoral.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppTheme.sunsetCoral.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.error_outline_rounded,
+                                  color: AppTheme.sunsetCoral,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _viewModel.routeError!,
+                                    style: TextStyle(
+                                      color: AppTheme.sunsetCoral,
+                                      fontSize: layout.fontSize(12),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else if (_viewModel.routes.length > 1) ...[
+                          SizedBox(height: layout.scale(10)),
+                          _buildRouteSelector(layout),
+                          if (!_viewModel.fareTouchedByUser &&
+                              _viewModel.selectedEconomics != null) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Driver earns PKR ${_formatDriverNumber(_viewModel.selectedEconomics!.driverProfit)} (${_formatDriverNumber(_viewModel.selectedEconomics!.profitPerMin)} PKR/min)',
+                              style: const TextStyle(
+                                color: AppTheme.slateMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                        if (_viewModel.selectedRoute != null) ...[
+                          SizedBox(height: layout.scale(8)),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        RoutePreviewScreen(viewModel: _viewModel),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.directions,
+                                size: 18,
+                                color: AppTheme.accentCyan,
+                              ),
+                              label: const Text(
+                                'Directions',
+                                style: TextStyle(
+                                  color: AppTheme.accentCyan,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: const BorderSide(
+                                  color: AppTheme.accentCyan,
+                                  width: 1.2,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        SizedBox(height: layout.scale(10)),
+                        StaggeredEntryWidget(
+                          index: 1,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Your Offer (Rider sets the price):',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: layout.fontSize(14),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Container(
+                                    height: layout.touchTarget(48),
+                                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: c.surfaceRaised,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      'PKR',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(14),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: SizedBox(
+                                      height: layout.touchTarget(48),
+                                      child: TextField(
+                                        controller: _viewModel.fareController,
+                                        keyboardType: const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                        onChanged: (_) => _viewModel.markFareEditedByUser(),
+                                        style: TextStyle(
+                                          fontSize: layout.fontSize(18),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        decoration: const InputDecoration(
+                                          hintText: 'Enter fare in PKR',
+                                          contentPadding: EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 10,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  SizedBox(
+                                    height: layout.touchTarget(48),
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      ),
+                                      onPressed: () => _viewModel.quickIncrementFare(50.0),
+                                      child: const Text('+50'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  SizedBox(
+                                    height: layout.touchTarget(48),
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                      ),
+                                      onPressed: () => _viewModel.quickIncrementFare(100.0),
+                                      child: const Text('+100'),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: layout.scale(10)),
+                        StaggeredEntryWidget(
+                          index: 2,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: c.surfaceRaised,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.credit_card,
+                                  size: 16,
+                                  color: AppTheme.primaryBlue,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Payment: ${_viewModel.selectedPaymentMethod}',
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      fontWeight: FontWeight.w600,
+                                      color: c.textSecondary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () => _showPaymentMethodSheet(context),
+                                  child: Text(
+                                    'Change',
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      color: AppTheme.primaryBlue,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: layout.scale(12)),
+                        StaggeredEntryWidget(
+                          index: 3,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: AppTheme.glowShadow(
+                                AppTheme.primaryBlue,
+                                opacity: 0.35,
+                                blur: 16,
+                              ),
+                            ),
+                            height: layout.touchTarget(50),
+                            child: ElevatedButton(
+                              onPressed: rideProv.isSubmitting
+                                  ? null
+                                  : () async {
+                                      final ok = await _viewModel.submitRideRequest(
+                                        rideProv: rideProv,
+                                      );
+                                      if (!mounted || ok) return;
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            rideProv.lastError ??
+                                                'Choose a pickup and destination before requesting a ride.',
+                                          ),
+                                          backgroundColor: AppTheme.sunsetCoral,
+                                        ),
+                                      );
+                                    },
+                              child: rideProv.isSubmitting
+                                  ? const SizedBox(
+                                      height: 20,
+                                      width: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Text('Find Nearby Drivers (0% Commission)'),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
       },
-      child: GlassContainer(
-        borderRadius: 28,
-        blur: 24,
-        padding: EdgeInsets.fromLTRB(
-          layout.horizontalPadding,
-          14,
-          layout.horizontalPadding,
-          layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: layout.scale(12)),
-            StaggeredEntryWidget(
-              index: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      _viewModel.routeIsEstimated &&
-                              _viewModel.estimatedDistanceKm > 0
-                          ? 'Approx ${_viewModel.estimatedDistanceKm}km • ${_viewModel.estimatedDurationMin.toInt()} min (direct estimate)'
-                          : '${_viewModel.estimatedDistanceKm}km • ${_viewModel.estimatedDurationMin.toInt()} min',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.slateMuted,
-                        fontSize: layout.fontSize(12),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      'Suggested: ${CurrencyFormatter.format(displayedFare)}',
-                      style: TextStyle(
-                        color: AppTheme.primaryBlue,
-                        fontWeight: FontWeight.w700,
-                        fontSize: layout.fontSize(12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_viewModel.routeError != null &&
-                _viewModel.dropoffLocation != null) ...[
-              SizedBox(height: layout.scale(10)),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.symmetric(
-                  horizontal: layout.scale(14),
-                  vertical: layout.scale(10),
-                ),
-                decoration: BoxDecoration(
-                  color: AppTheme.sunsetCoral.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: AppTheme.sunsetCoral.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.error_outline_rounded,
-                      color: AppTheme.sunsetCoral,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _viewModel.routeError!,
-                        style: TextStyle(
-                          color: AppTheme.sunsetCoral,
-                          fontSize: layout.fontSize(12),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ] else if (_viewModel.routes.length > 1) ...[
-              SizedBox(height: layout.scale(10)),
-              _buildRouteSelector(layout),
-              if (!_viewModel.fareTouchedByUser &&
-                  _viewModel.selectedEconomics != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  'Driver earns PKR ${_formatDriverNumber(_viewModel.selectedEconomics!.driverProfit)} (${_formatDriverNumber(_viewModel.selectedEconomics!.profitPerMin)} PKR/min)',
-                  style: const TextStyle(
-                    color: AppTheme.slateMuted,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ],
-            if (_viewModel.selectedRoute != null) ...[
-              SizedBox(height: layout.scale(8)),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            RoutePreviewScreen(viewModel: _viewModel),
-                      ),
-                    );
-                  },
-                  icon: const Icon(
-                    Icons.directions,
-                    size: 18,
-                    color: AppTheme.accentCyan,
-                  ),
-                  label: const Text(
-                    'Directions',
-                    style: TextStyle(
-                      color: AppTheme.accentCyan,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(
-                      color: AppTheme.accentCyan,
-                      width: 1.2,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            SizedBox(height: layout.scale(10)),
-            StaggeredEntryWidget(
-              index: 1,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Your Offer (Rider sets the price):',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: layout.fontSize(14),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        height: layout.touchTarget(48),
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: c.surfaceRaised,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'PKR',
-                          style: TextStyle(
-                            fontSize: layout.fontSize(14),
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SizedBox(
-                          height: layout.touchTarget(48),
-                          child: TextField(
-                            controller: _viewModel.fareController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            onChanged: (_) => _viewModel.markFareEditedByUser(),
-                            style: TextStyle(
-                              fontSize: layout.fontSize(18),
-                              fontWeight: FontWeight.bold,
-                            ),
-                            decoration: const InputDecoration(
-                              hintText: 'Enter fare in PKR',
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      SizedBox(
-                        height: layout.touchTarget(48),
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-                          onPressed: () => _viewModel.quickIncrementFare(50.0),
-                          child: const Text('+50'),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      SizedBox(
-                        height: layout.touchTarget(48),
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                          ),
-                          onPressed: () => _viewModel.quickIncrementFare(100.0),
-                          child: const Text('+100'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(height: layout.scale(10)),
-            StaggeredEntryWidget(
-              index: 2,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: c.surfaceRaised,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.credit_card,
-                      size: 16,
-                      color: AppTheme.primaryBlue,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Payment: ${_viewModel.selectedPaymentMethod}',
-                        style: TextStyle(
-                          fontSize: layout.fontSize(12),
-                          fontWeight: FontWeight.w600,
-                          color: c.textSecondary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => _showPaymentMethodSheet(context),
-                      child: Text(
-                        'Change',
-                        style: TextStyle(
-                          fontSize: layout.fontSize(12),
-                          color: AppTheme.primaryBlue,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: layout.scale(12)),
-            StaggeredEntryWidget(
-              index: 3,
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: AppTheme.glowShadow(
-                    AppTheme.primaryBlue,
-                    opacity: 0.35,
-                    blur: 16,
-                  ),
-                ),
-                height: layout.touchTarget(50),
-                child: ElevatedButton(
-                  onPressed: rideProv.isSubmitting
-                      ? null
-                      : () async {
-                          final ok = await _viewModel.submitRideRequest(
-                            rideProv: rideProv,
-                          );
-                          if (!mounted || ok) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                rideProv.lastError ?? 'Choose a pickup and destination before requesting a ride.',
-                              ),
-                              backgroundColor: AppTheme.sunsetCoral,
-                            ),
-                          );
-                        },
-                  child: rideProv.isSubmitting
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Find Nearby Drivers (0% Commission)'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -1317,79 +1323,78 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     required AuthProvider authProv,
     required LocationProvider locProv,
   }) {
-    if (_isBottomSheetMinimized) {
-      return GestureDetector(
-        onTap: () => setState(() => _isBottomSheetMinimized = false),
-        onVerticalDragEnd: (details) {
-          if (details.primaryVelocity != null &&
-              details.primaryVelocity! < -100) {
-            setState(() => _isBottomSheetMinimized = false);
-          }
-        },
-        child: GlassContainer(
-          borderRadius: 28,
-          blur: 24,
-          padding: EdgeInsets.fromLTRB(
-            layout.horizontalPadding,
-            12,
-            layout.horizontalPadding,
-            layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+    return DraggableScrollableSheet(
+      controller: _activeRideSheetController,
+      initialChildSize: 0.45,
+      minChildSize: 0.20,
+      maxChildSize: 0.92,
+      snap: true,
+      snapSizes: const [0.20, 0.45, 0.92],
+      builder: (context, scrollController) {
+        return Align(
+          alignment: Alignment.bottomCenter,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
+            child: GlassContainer(
+              borderRadius: 28,
+              blur: 24,
+              padding: EdgeInsets.fromLTRB(
+                layout.horizontalPadding,
+                14,
+                layout.horizontalPadding,
+                layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Tap to expand trip details',
-                style: TextStyle(
-                  color: AppColors.of(context).textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return GestureDetector(
-      onVerticalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 100) {
-          setState(() => _isBottomSheetMinimized = true);
-        }
-      },
-      child: GlassContainer(
-        borderRadius: 28,
-        blur: 24,
-        padding: EdgeInsets.fromLTRB(
-          layout.horizontalPadding,
-          14,
-          layout.horizontalPadding,
-          layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 20,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade400,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            SizedBox(height: layout.scale(10)),
+              child: CustomScrollView(
+                controller: scrollController,
+                physics: const ClampingScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        GestureDetector(
+                          key: const Key('active_ride_sheet_drag_handle'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () {
+                            if (_activeRideSheetController.isAttached) {
+                              final current = _activeRideSheetController.size;
+                              if (current < 0.35) {
+                                _activeRideSheetController.animateTo(
+                                  0.45,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              } else if (current < 0.70) {
+                                _activeRideSheetController.animateTo(
+                                  0.92,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              } else {
+                                _activeRideSheetController.animateTo(
+                                  0.20,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOut,
+                                );
+                              }
+                            }
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Center(
+                              child: Container(
+                                width: 36,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade400,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        SizedBox(height: layout.scale(10)),
             StaggeredEntryWidget(
               index: 0,
               child: Row(
@@ -1700,14 +1705,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       },
                     ),
                   ),
-                ],
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      ],
+    ),
+  ),
+),
+);
+},
+);
+}
 
   Widget _buildOfferCard(
     ResponsiveLayoutHelper layout,

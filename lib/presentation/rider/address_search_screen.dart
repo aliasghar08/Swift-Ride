@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/location_point_model.dart';
 import '../../providers/location_provider.dart';
+import '../../services/coordinate_parser.dart';
 import '../../services/map_service.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
@@ -39,7 +40,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     super.initState();
     _searchController.text = widget.initialQuery;
     if (widget.initialQuery.trim().isNotEmpty) {
-      _fetchSuggestions(widget.initialQuery);
+      _handleQuery(widget.initialQuery);
     }
   }
 
@@ -53,8 +54,54 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   void _onQueryChanged(String query) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      _fetchSuggestions(query);
+      _handleQuery(query);
     });
+  }
+
+  Future<void> _handleQuery(String query) async {
+    final parsed = CoordinateParser.tryParse(query);
+    if (parsed != null) {
+      _debounce?.cancel();
+      setState(() {
+        _isLoading = true;
+        _suggestions = [];
+        _hasSearched = true;
+      });
+
+      String address;
+      try {
+        debugPrint(
+          '[GEO-DEBUG] parsed: lat=${parsed.latitude}, lng=${parsed.longitude}',
+        );
+        address = await _mapService.reverseGeocode(
+          parsed.latitude,
+          parsed.longitude,
+        );
+        debugPrint('[GEO-DEBUG] reverseGeocode resolved address: $address');
+        if (address.trim().isEmpty || address.startsWith('Pinned Spot') || address.startsWith('Location (')) {
+          address =
+              'Pinned Location (${parsed.latitude.toStringAsFixed(4)}, ${parsed.longitude.toStringAsFixed(4)})';
+        }
+      } catch (e) {
+        debugPrint('[GEO-DEBUG] reverseGeocode error: $e');
+        address =
+            'Pinned Location (${parsed.latitude.toStringAsFixed(4)}, ${parsed.longitude.toStringAsFixed(4)})';
+      }
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
+      Navigator.of(context).pop(
+        LocationPoint(
+          latitude: parsed.latitude,
+          longitude: parsed.longitude,
+          address: address,
+        ),
+      );
+      return;
+    }
+
+    _fetchSuggestions(query);
   }
 
   LatLng? _riderLatLng() {
@@ -192,7 +239,21 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                         onChanged: _onQueryChanged,
                       ),
                     ),
-                    if (trimmed.isNotEmpty)
+                    if (_isLoading)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: isDark
+                                ? AppTheme.accentCyan
+                                : AppTheme.primaryBlue,
+                          ),
+                        ),
+                      )
+                    else if (trimmed.isNotEmpty)
                       IconButton(
                         tooltip: 'Clear search',
                         icon: Icon(
@@ -304,6 +365,15 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                 'Type a destination or area name',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: c.textSecondary, fontSize: 14),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Tip: paste coordinates to set exact location',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: c.textMuted,
+                  fontSize: 12,
+                ),
               ),
             ],
           ),

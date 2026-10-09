@@ -8,7 +8,9 @@ import 'package:swiftride/providers/location_provider.dart';
 import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/providers/safety_provider.dart';
 import 'package:swiftride/ai/ai.dart';
+import 'package:swiftride/domain/models/location_point_model.dart';
 import 'package:swiftride/main.dart';
+import 'package:swiftride/presentation/rider/address_search_screen.dart';
 
 void main() {
   testWidgets('SwiftRide App loads with Rider Mode and Zero Commission branding', (WidgetTester tester) async {
@@ -90,8 +92,10 @@ void main() {
 
     // Verify Rider view is loaded initially
     expect(find.text('Rider'), findsWidgets);
-    expect(find.text('Your Offer (Rider sets the price):'), findsOneWidget);
-    expect(find.text('Find Nearby Drivers (0% Commission)'), findsOneWidget);
+    expect(find.text('Where to? (Destination)'), findsOneWidget);
+    // Fare preview is only visible when destination is selected
+    expect(find.text('Your Offer (Rider sets the price):'), findsNothing);
+    expect(find.text('Find Nearby Drivers (0% Commission)'), findsNothing);
 
     // Switch to Driver Mode
     await tester.tap(find.text('Driver'));

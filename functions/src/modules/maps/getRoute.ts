@@ -61,7 +61,10 @@ export const getRoute = onCall(
               'routes.staticDuration,' +
               'routes.distanceMeters,' +
               'routes.polyline.encodedPolyline,' +
-              'routes.legs.travelAdvisory.speedReadingIntervals',
+              'routes.legs.travelAdvisory.speedReadingIntervals,' +
+              'routes.legs.steps.navigationInstruction,' +
+              'routes.legs.steps.distanceMeters,' +
+              'routes.legs.steps.staticDuration',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -99,6 +102,13 @@ export const getRoute = onCall(
         return { routes: [], defaultRouteIndex: 0 };
       }
 
+      interface ProcessedStep {
+        distanceKm: number;
+        durationMin: number;
+        maneuver: string;
+        instruction: string;
+      }
+
       interface ProcessedRoute {
         id: string;
         distanceKm: number;
@@ -112,6 +122,7 @@ export const getRoute = onCall(
           endIndex: number | null;
           speed: string;
         }>;
+        steps: ProcessedStep[];
         economics: {
           fuelCost: number;
           maintenanceCost: number;
@@ -193,6 +204,41 @@ export const getRoute = onCall(
             ? 'MODERATE'
             : 'NORMAL';
 
+        // Extract navigation steps from legs
+        const steps: ProcessedStep[] = [];
+        const rawLegs = Array.isArray(route.legs) ? route.legs : [];
+        for (const leg of rawLegs) {
+          const rawSteps = Array.isArray(leg.steps) ? leg.steps : [];
+          for (const s of rawSteps) {
+            const stepDistMeters = Number(s.distanceMeters || 0);
+            const stepDistKm = Math.round((stepDistMeters / 1000) * 100) / 100;
+            const stepDurationSec = parseInt(
+              s.staticDuration?.replace('s', '') || '0',
+              10
+            );
+            const stepDurationMin = Math.round((stepDurationSec / 60) * 10) / 10;
+
+            const nav = s.navigationInstruction;
+            const maneuver =
+              nav?.maneuver && typeof nav.maneuver === 'string'
+                ? nav.maneuver
+                : 'STRAIGHT';
+            const instruction =
+              nav?.instructions && typeof nav.instructions === 'string'
+                ? nav.instructions
+                : nav?.instruction && typeof nav.instruction === 'string'
+                  ? nav.instruction
+                  : 'Continue';
+
+            steps.push({
+              distanceKm: stepDistKm,
+              durationMin: stepDurationMin,
+              maneuver,
+              instruction,
+            });
+          }
+        }
+
         processedRoutes.push({
           id: `route_${i}`,
           distanceKm,
@@ -202,6 +248,7 @@ export const getRoute = onCall(
           summary: route.description || '',
           trafficLevel,
           trafficIntervals: intervals,
+          steps,
           economics: {
             fuelCost,
             maintenanceCost,

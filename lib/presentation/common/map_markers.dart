@@ -19,10 +19,15 @@ class MapMarkers {
     try {
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      const size = 36.0;
+      const size = 56.0;
       const c = Offset(size / 2, size / 2);
-      canvas.drawCircle(c, 16.0, Paint()..color = const Color(0x33000000));
-      canvas.drawCircle(c, 14.0, Paint()..color = const Color(0xFF0F172A));
+      // Soft shadow
+      canvas.drawCircle(c, 24.0, Paint()..color = const Color(0x33000000));
+      // Outer crisp white ring
+      canvas.drawCircle(c, 22.0, Paint()..color = Colors.white);
+      // Inner bold dark navy disc
+      canvas.drawCircle(c, 16.0, Paint()..color = const Color(0xFF0F172A));
+      // Center solid core
       canvas.drawCircle(c, 7.0, Paint()..color = Colors.white);
       final picture = recorder.endRecording();
       final img = await picture.toImage(size.toInt(), size.toInt());
@@ -33,7 +38,7 @@ class MapMarkers {
     } catch (_) {}
   }
 
-  /// Origin: small filled circle (12px diameter with 6px white center).
+  /// Origin: Google-style prominent start circle.
   static Marker originDot(LatLng pos, {String id = 'route_origin'}) => Marker(
         markerId: MarkerId(id),
         position: pos,
@@ -45,10 +50,6 @@ class MapMarkers {
       );
 
   /// Pickup: green disc with a white ring.
-  ///
-  /// [id] lets a screen draw more than one pickup (for example the address
-  /// search preview *and* the confirmed trip) without the two colliding on a
-  /// shared `MarkerId`.
   static Marker pickup(LatLng pos, {String id = 'pickup'}) => Marker(
         markerId: MarkerId(id),
         position: pos,
@@ -58,13 +59,13 @@ class MapMarkers {
         infoWindow: const InfoWindow(title: 'Pickup'),
       );
 
-  /// Dropoff: dark rounded square with a white ring.
+  /// Dropoff: classic Google Maps red teardrop pin.
   static Marker dropoff(LatLng pos, {String id = 'dropoff'}) => Marker(
         markerId: MarkerId(id),
         position: pos,
-        icon: MapMarkerIcons.dropoff ??
-            BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        anchor: const Offset(0.5, 0.5),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        anchor: const Offset(0.5, 1.0),
+        zIndexInt: 5,
         infoWindow: const InfoWindow(title: 'Destination'),
       );
 

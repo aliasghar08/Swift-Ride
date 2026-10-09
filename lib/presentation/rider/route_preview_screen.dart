@@ -1,6 +1,3 @@
-import 'dart:math';
-
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
@@ -10,17 +7,7 @@ import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
 import '../view_models/rider_view_model.dart';
 
-class TurnInstruction {
-  final IconData icon;
-  final String instruction;
-  final String distanceText;
 
-  const TurnInstruction({
-    required this.icon,
-    required this.instruction,
-    required this.distanceText,
-  });
-}
 
 class RoutePreviewScreen extends StatefulWidget {
   final RiderViewModel viewModel;
@@ -37,22 +24,12 @@ class RoutePreviewScreen extends StatefulWidget {
 class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
   GoogleMapController? _mapController;
   late int _selectedRouteIndex;
-  late List<TurnInstruction> _turns;
 
   @override
   void initState() {
     super.initState();
+    MapMarkers.ensureOriginDot();
     _selectedRouteIndex = widget.viewModel.selectedRouteIndex;
-    _updateTurns();
-  }
-
-  void _updateTurns() {
-    final routes = widget.viewModel.routes;
-    if (routes.isNotEmpty && _selectedRouteIndex < routes.length) {
-      _turns = _buildTurns(routes[_selectedRouteIndex].polylinePoints);
-    } else {
-      _turns = [];
-    }
   }
 
   void _selectRoute(int index) {
@@ -60,7 +37,6 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
     setState(() {
       _selectedRouteIndex = index;
       widget.viewModel.selectRoute(index);
-      _updateTurns();
     });
     final routes = widget.viewModel.routes;
     if (routes.isNotEmpty && index < routes.length) {
@@ -94,88 +70,47 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
     );
   }
 
-  static double _calculateBearing(LatLng start, LatLng end) {
-    final startLat = start.latitude * (pi / 180.0);
-    final startLng = start.longitude * (pi / 180.0);
-    final endLat = end.latitude * (pi / 180.0);
-    final endLng = end.longitude * (pi / 180.0);
-
-    final dLng = endLng - startLng;
-    final y = sin(dLng) * cos(endLat);
-    final x = cos(startLat) * sin(endLat) - sin(startLat) * cos(dLng);
-    final bearing = atan2(y, x) * (180.0 / pi);
-    return (bearing + 360.0) % 360.0;
+  static IconData _maneuverIcon(String maneuver) {
+    switch (maneuver.toUpperCase()) {
+      case 'TURN_LEFT':
+      case 'TURN_SLIGHT_LEFT':
+      case 'TURN_SHARP_LEFT':
+        return Icons.turn_left;
+      case 'TURN_RIGHT':
+      case 'TURN_SLIGHT_RIGHT':
+      case 'TURN_SHARP_RIGHT':
+        return Icons.turn_right;
+      case 'STRAIGHT':
+        return Icons.straight;
+      case 'ROUNDABOUT_LEFT':
+      case 'ROUNDABOUT_RIGHT':
+        return Icons.roundabout_left;
+      case 'MERGE':
+        return Icons.merge;
+      case 'FORK_LEFT':
+        return Icons.fork_left;
+      case 'FORK_RIGHT':
+        return Icons.fork_right;
+      case 'RAMP_LEFT':
+        return Icons.ramp_left;
+      case 'RAMP_RIGHT':
+        return Icons.ramp_right;
+      case 'DEPART':
+        return Icons.navigation;
+      case 'DESTINATION':
+        return Icons.place;
+      default:
+        return Icons.navigation;
+    }
   }
 
-  static double _calculateDistanceMeters(LatLng p1, LatLng p2) {
-    const earthRadius = 6371000.0;
-    final dLat = (p2.latitude - p1.latitude) * (pi / 180.0);
-    final dLng = (p2.longitude - p1.longitude) * (pi / 180.0);
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(p1.latitude * (pi / 180.0)) *
-            cos(p2.latitude * (pi / 180.0)) *
-            sin(dLng / 2) *
-            sin(dLng / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-
-  static List<TurnInstruction> _buildTurns(List<LatLng> points) {
-    if (points.length < 3) {
-      return [
-        const TurnInstruction(
-          icon: Icons.straight,
-          instruction: 'Head straight to destination',
-          distanceText: '',
-        ),
-      ];
+  static String _formatStepDistance(double distanceKm) {
+    if (distanceKm >= 1.0) {
+      return '${distanceKm.toStringAsFixed(1)} km';
+    } else {
+      final meters = (distanceKm * 1000).round();
+      return '$meters m';
     }
-
-    final turns = <TurnInstruction>[];
-    double accumulatedMeters = 0.0;
-
-    for (int i = 1; i < points.length - 1; i++) {
-      final prev = points[i - 1];
-      final curr = points[i];
-      final next = points[i + 1];
-
-      accumulatedMeters += _calculateDistanceMeters(curr, next);
-
-      final b1 = _calculateBearing(prev, curr);
-      final b2 = _calculateBearing(curr, next);
-      final delta = (b2 - b1 + 540.0) % 360.0 - 180.0;
-
-      if (delta.abs() > 30.0) {
-        final isLeft = delta < 0;
-        final distStr = accumulatedMeters >= 1000
-            ? '${(accumulatedMeters / 1000).toStringAsFixed(1)} km'
-            : '${accumulatedMeters.round()} m';
-
-        turns.add(TurnInstruction(
-          icon: isLeft ? Icons.turn_left : Icons.turn_right,
-          instruction: isLeft ? 'Turn left' : 'Turn right',
-          distanceText: distStr,
-        ));
-        accumulatedMeters = 0;
-      }
-    }
-
-    if (turns.isEmpty) {
-      final totalKm = accumulatedMeters / 1000;
-      turns.add(TurnInstruction(
-        icon: Icons.straight,
-        instruction: 'Continue along main route',
-        distanceText: '${totalKm.toStringAsFixed(1)} km',
-      ));
-    }
-
-    turns.add(const TurnInstruction(
-      icon: Icons.place,
-      instruction: 'Arrive at destination',
-      distanceText: '',
-    ));
-
-    return turns;
   }
 
   static Color _trafficColour(TrafficInterval? interval) {
@@ -189,8 +124,8 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
     final routes = widget.viewModel.routes;
     if (routes.isEmpty) return const {};
 
-    final casingWidth = kIsWeb ? 18 : 16;
-    final fillWidth = kIsWeb ? 12 : 10;
+    const casingWidth = 16;
+    const fillWidth = 10;
 
     final set = <Polyline>{};
 
@@ -248,6 +183,12 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
           ),
         );
       }
+    }
+
+    for (final p in set) {
+      debugPrint(
+        '[POLY-DEBUG] id=${p.polylineId.value} width=${p.width} points=${p.points.length}',
+      );
     }
 
     return set;
@@ -327,9 +268,9 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
 
           // 3. Draggable Directions Bottom Sheet
           DraggableScrollableSheet(
-            initialChildSize: 0.40,
-            minChildSize: 0.20,
-            maxChildSize: 0.85,
+            initialChildSize: 0.65,
+            minChildSize: 0.25,
+            maxChildSize: 0.90,
             builder: (context, scrollController) {
               return Container(
                 decoration: BoxDecoration(
@@ -459,16 +400,16 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    if (_turns.isEmpty)
+                    if (selected == null || selected.steps.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 16),
                         child: Text(
-                          'No turns detected.',
+                          'No directions available for this route.',
                           style: TextStyle(color: Colors.white54),
                         ),
                       )
                     else
-                      ..._turns.map((turn) {
+                      ...selected.steps.map((step) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Row(
@@ -481,7 +422,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Icon(
-                                  turn.icon,
+                                  _maneuverIcon(step.maneuver),
                                   color: AppTheme.accentCyan,
                                   size: 22,
                                 ),
@@ -492,24 +433,23 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      turn.instruction,
+                                      step.instruction,
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-                                    if (turn.distanceText.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 2),
-                                        child: Text(
-                                          'In ${turn.distanceText}',
-                                          style: const TextStyle(
-                                            color: Colors.white54,
-                                            fontSize: 12,
-                                          ),
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        'In ${_formatStepDistance(step.distanceKm)}',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 12,
                                         ),
                                       ),
+                                    ),
                                   ],
                                 ),
                               ),

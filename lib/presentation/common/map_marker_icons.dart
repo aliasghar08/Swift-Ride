@@ -3,7 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../services/native_map_service.dart';
 
 /// Renders Uber-style map glyphs to PNG bytes at runtime and caches the
 /// resulting [BitmapDescriptor]s.

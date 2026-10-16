@@ -64,7 +64,11 @@ export const getRoute = onCall(
               'routes.legs.travelAdvisory.speedReadingIntervals,' +
               'routes.legs.steps.navigationInstruction,' +
               'routes.legs.steps.distanceMeters,' +
-              'routes.legs.steps.staticDuration',
+              'routes.legs.steps.staticDuration,' +
+              'routes.legs.steps.localizedValues,' +
+              'routes.legs.steps.startLocation,' +
+              'routes.legs.steps.endLocation,' +
+              'routes.legs.steps.polyline.encodedPolyline',
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -104,9 +108,19 @@ export const getRoute = onCall(
 
       interface ProcessedStep {
         distanceKm: number;
+        distanceMeters: number;
+        distanceText: string;
         durationMin: number;
+        durationText: string;
         maneuver: string;
         instruction: string;
+        primaryInstruction: string;
+        secondaryInstruction?: string;
+        roadName?: string;
+        startLocation?: { latitude: number; longitude: number };
+        endLocation?: { latitude: number; longitude: number };
+        encodedPolyline?: string;
+        isToll?: boolean;
       }
 
       interface ProcessedRoute {
@@ -204,7 +218,7 @@ export const getRoute = onCall(
             ? 'MODERATE'
             : 'NORMAL';
 
-        // Extract navigation steps from legs
+        // Extract navigation steps from legs with complete Google Maps fidelity
         const steps: ProcessedStep[] = [];
         const rawLegs = Array.isArray(route.legs) ? route.legs : [];
         for (const leg of rawLegs) {
@@ -223,18 +237,60 @@ export const getRoute = onCall(
               nav?.maneuver && typeof nav.maneuver === 'string'
                 ? nav.maneuver
                 : 'STRAIGHT';
-            const instruction =
+            const rawInstruction =
               nav?.instructions && typeof nav.instructions === 'string'
                 ? nav.instructions
                 : nav?.instruction && typeof nav.instruction === 'string'
                   ? nav.instruction
                   : 'Continue';
 
+            const lines = rawInstruction
+              .split('\n')
+              .map((l: string) => l.trim())
+              .filter((l: string) => l.length > 0);
+            const primaryInstruction = lines.length > 0 ? lines[0] : rawInstruction;
+            const secondaryInstruction = lines.length > 1 ? lines.slice(1).join(' · ') : undefined;
+
+            // Extract road name if pattern matches "onto <road>"
+            let roadName: string | undefined;
+            const ontoMatch = primaryInstruction.match(/onto\s+([^,]+)/i);
+            if (ontoMatch && ontoMatch[1]) {
+              roadName = ontoMatch[1].trim();
+            }
+
+            const distanceText =
+              s.localizedValues?.distance?.text ||
+              (stepDistKm >= 1 ? `${stepDistKm.toFixed(1)} km` : `${stepDistMeters} m`);
+            const durationText =
+              s.localizedValues?.staticDuration?.text ||
+              (stepDurationMin >= 60
+                ? `${Math.floor(stepDurationMin / 60)} hr ${Math.round(stepDurationMin % 60)} min`
+                : `${Math.max(1, Math.round(stepDurationMin))} min`);
+
+            const startLocation = s.startLocation?.latLng
+              ? { latitude: s.startLocation.latLng.latitude, longitude: s.startLocation.latLng.longitude }
+              : undefined;
+            const endLocation = s.endLocation?.latLng
+              ? { latitude: s.endLocation.latLng.latitude, longitude: s.endLocation.latLng.longitude }
+              : undefined;
+            const stepPolyline = s.polyline?.encodedPolyline || undefined;
+            const isToll = rawInstruction.toLowerCase().includes('toll');
+
             steps.push({
               distanceKm: stepDistKm,
+              distanceMeters: stepDistMeters,
+              distanceText,
               durationMin: stepDurationMin,
+              durationText,
               maneuver,
-              instruction,
+              instruction: rawInstruction,
+              primaryInstruction,
+              secondaryInstruction,
+              roadName,
+              startLocation,
+              endLocation,
+              encodedPolyline: stepPolyline,
+              isToll,
             });
           }
         }

@@ -97,6 +97,14 @@ class LocationService {
 
   /// Single-shot fetch with explicit status. Never invents coordinates.
   Future<LocationFetchResult> fetchCurrentPositionDetailed() async {
+    var hasPermission = await checkPermission();
+    if (!hasPermission) {
+      hasPermission = await requestPermission();
+      if (!hasPermission) {
+        return const LocationFetchResult(LocationFetchStatus.permissionDenied);
+      }
+    }
+
     final res = await _invokeMapSafe(
       NativeChannelConstants.methodGetCurrentLocation,
     );
@@ -157,6 +165,12 @@ class LocationService {
         longitude: _currentLng,
         heading: _currentHeading,
       );
+    }
+
+    // Ensure location permission is requested before waiting for fix
+    final hasPerm = await checkPermission();
+    if (!hasPerm) {
+      await requestPermission();
     }
 
     final completer = Completer<NativeLocationPoint?>();

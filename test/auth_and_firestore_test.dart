@@ -260,25 +260,39 @@ void main() {
       );
 
       // Verify UI elements
-      expect(find.text('Enter Phone Number'), findsOneWidget);
+      expect(find.text('Enter Your Mobile Number'), findsOneWidget);
       expect(find.text('+92'), findsOneWidget);
-      expect(find.text('Send OTP Code'), findsOneWidget);
-      expect(find.text('Fill Demo / Test Number (+92 300 0000000)'), findsOneWidget);
+      expect(find.text('Continue with Phone'), findsOneWidget);
+      expect(find.text('Continue as AI Guest / Passenger'), findsOneWidget);
+      // Ensure visible test button is NOT present (secret/hidden for App Store & Play Store)
+      expect(find.text('Fill Demo / Test Number (+92 300 0000000)'), findsNothing);
 
-      // Tap demo button
-      await tester.tap(find.text('Fill Demo / Test Number (+92 300 0000000)'));
+      // Trigger secret developer long-press on branding logo
+      await tester.longPress(find.byIcon(Icons.directions_car_filled));
       await tester.pumpAndSettle();
 
       expect(find.text('3000000000'), findsOneWidget);
 
-      // Tap Send OTP
-      await tester.tap(find.text('Send OTP Code'));
+      // Tap Continue with Phone
+      await tester.tap(find.text('Continue with Phone'));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pumpAndSettle();
 
       // Should transition to OTP screen
-      expect(find.text('Verify OTP Code'), findsOneWidget);
-      expect(find.text('Verify & Continue'), findsOneWidget);
+      expect(find.text('Enter 6-Digit Code'), findsOneWidget);
+      expect(find.text('Verify & Login'), findsOneWidget);
+      expect(find.textContaining('Resend Code in 00:'), findsOneWidget);
+
+      // Verify OTP and transition to Profile Setup
+      await tester.tap(find.text('Verify & Login'));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      // Verify Profile Setup step UI
+      expect(find.text('Select Account Role'), findsOneWidget);
+      expect(find.text('Rider (Book Rides)'), findsOneWidget);
+      expect(find.text('Driver (Earn 100%)'), findsOneWidget);
+      expect(find.textContaining('Region: Jhang (31.2785, 72.3317) · AI Bidding Ready'), findsOneWidget);
     });
   });
 }

@@ -2,21 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart' as fmap;
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:latlong2/latlong.dart' as ll;
 
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../services/map_service.dart';
-import 'glass_container.dart';
 import 'map_marker_icons.dart';
+import 'native_platform_map.dart';
 
 /// Supported operation modes for the map view.
 enum MapMode { viewOnly, pinPicker, navigation, liveTracking }
 
-/// State-of-the-art Dual-Engine Map View for SwiftRide.
+/// High-performance Native Map View for SwiftRide using Kotlin (Android) & Swift (iOS).
 class RealMapView extends StatefulWidget {
   final LatLng initialCenter;
   final double initialZoom;
@@ -73,11 +70,6 @@ class RealMapView extends StatefulWidget {
 }
 
 class _RealMapViewState extends State<RealMapView> {
-  bool _useGoogleMaps =
-      defaultTargetPlatform == TargetPlatform.iOS ||
-      defaultTargetPlatform == TargetPlatform.android ||
-      kIsWeb;
-
   /// Uber-style clean map: muted land, white roads, no POI clutter.
   static const String _uberLightStyle = '''[
   {"elementType":"geometry","stylers":[{"color":"#f5f5f5"}]},
@@ -107,8 +99,8 @@ class _RealMapViewState extends State<RealMapView> {
   {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0e1626"}]}
 ]''';
 
-  void _fitGoogleBounds() {
-    final c = _googleMapController;
+  void _fitBounds() {
+    final c = _controller;
     if (c == null || widget.markers.length < 2) return;
     final pts = widget.markers.map((m) => m.position).toList();
     double minLat = pts.first.latitude, maxLat = minLat;
@@ -134,9 +126,9 @@ class _RealMapViewState extends State<RealMapView> {
   void didUpdateWidget(covariant RealMapView oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (!_useGoogleMaps) return;
-    if (widget.mode == MapMode.pinPicker || widget.mode == MapMode.navigation)
+    if (widget.mode == MapMode.pinPicker || widget.mode == MapMode.navigation) {
       return;
+    }
 
     final lastPan = _lastUserPan;
     if (lastPan != null &&
@@ -160,34 +152,29 @@ class _RealMapViewState extends State<RealMapView> {
 
     if (routeChanged || widget.markers.length <= 2) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _fitGoogleBounds();
+        if (mounted) _fitBounds();
       });
     }
   }
 
   void followHeading(double heading, {double zoom = 17, double tilt = 50}) {
-    final c = _googleMapController;
-    if (c == null || !_useGoogleMaps) return;
+    final c = _controller;
+    if (c == null) return;
     c.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: _currentCenter,
-          zoom: zoom,
-          tilt: tilt,
-          bearing: heading,
-        ),
+      CameraPosition(
+        target: _currentCenter,
+        zoom: zoom,
+        tilt: tilt,
+        bearing: heading,
       ),
     );
   }
 
-  GoogleMapController? _googleMapController;
-  final fmap.MapController _flutterMapController = fmap.MapController();
-
+  NativeMapController? _controller;
   LatLng _currentCenter = const LatLng(
     AppConstants.defaultLat,
     AppConstants.defaultLng,
   );
-  bool _cameraMoving = false;
   Timer? _debounce;
   bool _isLocating = false;
 
@@ -196,7 +183,6 @@ class _RealMapViewState extends State<RealMapView> {
 
   DateTime? _lastUserPan;
   static const Duration _autoFitCooldown = Duration(seconds: 10);
-  bool _userTouching = false;
 
   @override
   void initState() {
@@ -211,14 +197,13 @@ class _RealMapViewState extends State<RealMapView> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _googleMapController?.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
-  void _onPositionChanged(ll.LatLng center, bool hasGesture) {
+  void _onPositionChanged(LatLng center, bool hasGesture) {
     if (!hasGesture && widget.mode != MapMode.pinPicker) return;
-    _cameraMoving = true;
-    _currentCenter = LatLng(center.latitude, center.longitude);
+    _currentCenter = center;
     if (hasGesture) _lastUserPan = DateTime.now();
 
     if (widget.mode == MapMode.pinPicker) {
@@ -231,11 +216,9 @@ class _RealMapViewState extends State<RealMapView> {
     }
   }
 
-  void _onCameraIdle() {
-    if (_cameraMoving) {
-      _cameraMoving = false;
-      widget.onCameraIdle?.call(_currentCenter);
-    }
+  void _onCameraIdle(LatLng center) {
+    _currentCenter = center;
+    widget.onCameraIdle?.call(_currentCenter);
   }
 
   Future<void> _moveToCurrentLocation() async {
@@ -260,22 +243,8 @@ class _RealMapViewState extends State<RealMapView> {
 
       _currentCenter = target;
 
-      final zoom = _useGoogleMaps && _googleMapController != null
-          ? await _googleMapController!.getZoomLevel()
-          : _flutterMapController.camera.zoom;
-      final targetZoom = zoom < 16.0 ? 16.0 : zoom;
-
-      if (_useGoogleMaps && _googleMapController != null) {
-        _googleMapController!.animateCamera(
-          CameraUpdate.newCameraPosition(
-            CameraPosition(target: target, zoom: targetZoom),
-          ),
-        );
-      } else {
-        _flutterMapController.move(
-          ll.LatLng(target.latitude, target.longitude),
-          targetZoom,
-        );
+      if (_controller != null) {
+        await _controller!.animateCamera(target, zoom: 16.5);
       }
 
       if (widget.mode == MapMode.pinPicker) {
@@ -304,22 +273,41 @@ class _RealMapViewState extends State<RealMapView> {
 
     return Stack(
       children: [
-        // 1. Primary Map Engine
+        // 1. Primary Native Platform Map View (AndroidView on Android, UiKitView on iOS)
         Positioned.fill(
           child: Semantics(
             container: true,
-            label:
-                widget.semanticsLabel ??
+            label: widget.semanticsLabel ??
                 (widget.markers.isEmpty
                     ? 'Map'
                     : 'Map showing ${widget.markers.length} locations'),
-            child: _useGoogleMaps
-                ? _buildGoogleMapsEngine(isDark)
-                : _buildCartographyEngine(isDark),
+            child: NativePlatformMap(
+              initialCenter: widget.initialCenter,
+              initialZoom: widget.initialZoom,
+              darkMode: isDark,
+              showTraffic: widget.showTraffic,
+              mapStyle: isDark ? _uberDarkStyle : _uberLightStyle,
+              markers: widget.markers,
+              polylines: widget.polylines,
+              onMapTap: widget.onMapTap,
+              onCameraIdle: _onCameraIdle,
+              onCameraMove: (pos) => _onPositionChanged(pos, true),
+              onMapCreated: (ctrl) {
+                _controller = ctrl;
+                widget.onMapCreated?.call(ctrl);
+                widget.onControllerCreated?.call(ctrl);
+                if (widget.mode != MapMode.pinPicker &&
+                    widget.mode != MapMode.navigation) {
+                  Future.delayed(
+                      const Duration(milliseconds: 400), _fitBounds);
+                }
+              },
+              onMapReady: widget.onMapReady,
+            ),
           ),
         ),
 
-        // 2. Compact Center Pin in Pin-Picker Mode
+        // 2. Center Pin in Pin-Picker Mode
         if (widget.mode == MapMode.pinPicker)
           IgnorePointer(
             child: Center(
@@ -334,69 +322,7 @@ class _RealMapViewState extends State<RealMapView> {
             ),
           ),
 
-        // 3. Floating Engine Switcher Badge (Debug Only)
-        if (kDebugMode)
-          Positioned(
-            top: 108,
-            right: 14,
-            child: SafeArea(
-              child: GlassContainer(
-                isDark: isDark,
-                borderRadius: 20,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                borderColor: AppTheme.accentCyan.withValues(alpha: 0.4),
-                child: InkWell(
-                  onTap: () {
-                    setState(() => _useGoogleMaps = !_useGoogleMaps);
-                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        duration: const Duration(seconds: 2),
-                        backgroundColor: AppTheme.primaryNavy,
-                        content: Text(
-                          _useGoogleMaps ? 'Switched to Google Maps SDK' : 'Switched to Real Cartography Engine (100% Visible Tiles)',
-                          style: const TextStyle(fontSize: 12.5),
-                        ),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _useGoogleMaps ? Icons.public : Icons.map_outlined,
-                        size: 15,
-                        color: _useGoogleMaps
-                            ? Colors.amberAccent
-                            : AppTheme.accentCyan,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        _useGoogleMaps ? 'Google Maps' : 'Live Cartography',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.primaryNavy,
-                        ),
-                      ),
-                      const SizedBox(width: 3),
-                      const Icon(
-                        Icons.sync_alt,
-                        size: 12,
-                        color: Colors.white60,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-        // 4. Locate-Me FAB
+        // 3. Locate-Me FAB
         if (widget.showMyLocationButton)
           Positioned(
             right: 16,
@@ -419,166 +345,6 @@ class _RealMapViewState extends State<RealMapView> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildCartographyEngine(bool isDark) {
-    final tileUrl = isDark
-        ? 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
-        : 'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}@2x.png';
-
-    final convertedMarkers = widget.markers.map((m) {
-      return fmap.Marker(
-        point: ll.LatLng(m.position.latitude, m.position.longitude),
-        width: 44,
-        height: 44,
-        child: _buildMarkerWidget(m),
-      );
-    }).toList();
-
-    final convertedPolylines = widget.polylines.map((p) {
-      return fmap.Polyline(
-        points: p.points
-            .map((pt) => ll.LatLng(pt.latitude, pt.longitude))
-            .toList(),
-        color: p.color,
-        strokeWidth: p.width.toDouble().clamp(3.0, 7.0),
-      );
-    }).toList();
-
-    final convertedCircles = widget.circles.map((c) {
-      return fmap.CircleMarker(
-        point: ll.LatLng(c.center.latitude, c.center.longitude),
-        radius: c.radius.toDouble(),
-        useRadiusInMeter: true,
-        color: c.fillColor,
-        borderColor: c.strokeColor,
-        borderStrokeWidth: c.strokeWidth.toDouble(),
-      );
-    }).toList();
-
-    return fmap.FlutterMap(
-      mapController: _flutterMapController,
-      options: fmap.MapOptions(
-        initialCenter: ll.LatLng(
-          widget.initialCenter.latitude,
-          widget.initialCenter.longitude,
-        ),
-        initialZoom: widget.initialZoom,
-        onTap: (tapPosition, point) {
-          widget.onMapTap?.call(LatLng(point.latitude, point.longitude));
-        },
-        onPositionChanged: (camera, hasGesture) {
-          _onPositionChanged(camera.center, hasGesture);
-        },
-        onMapReady: widget.onMapReady,
-        interactionOptions: const fmap.InteractionOptions(
-          flags: fmap.InteractiveFlag.all,
-        ),
-      ),
-      children: [
-        fmap.TileLayer(
-          urlTemplate: tileUrl,
-          userAgentPackageName: 'com.dartnexuslab.swiftride',
-          subdomains: const ['a', 'b', 'c', 'd'],
-          maxZoom: 20,
-        ),
-        if (convertedCircles.isNotEmpty)
-          fmap.CircleLayer(circles: convertedCircles),
-        if (convertedPolylines.isNotEmpty)
-          fmap.PolylineLayer(polylines: convertedPolylines),
-        if (convertedMarkers.isNotEmpty)
-          fmap.MarkerLayer(markers: convertedMarkers),
-      ],
-    );
-  }
-
-  Widget _buildMarkerWidget(Marker marker) {
-    final id = marker.markerId.value.toLowerCase();
-    if (id.contains('pickup')) {
-      return const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.location_on, color: Colors.greenAccent, size: 36),
-          CircleAvatar(radius: 3, backgroundColor: Colors.white),
-        ],
-      );
-    }
-    if (id.contains('dropoff')) {
-      return const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.location_on, color: Colors.redAccent, size: 36),
-          CircleAvatar(radius: 3, backgroundColor: Colors.white),
-        ],
-      );
-    }
-    if (id.contains('driver')) {
-      return Transform.rotate(
-        angle: marker.rotation * (3.141592653589793 / 180),
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: const BoxDecoration(
-            color: AppTheme.accentCyan,
-            shape: BoxShape.circle,
-            boxShadow: [BoxShadow(color: Colors.black38, blurRadius: 4)],
-          ),
-          child: const Icon(
-            Icons.navigation,
-            color: AppTheme.primaryNavy,
-            size: 20,
-          ),
-        ),
-      );
-    }
-    return const Icon(Icons.location_pin, color: Colors.blueAccent, size: 34);
-  }
-
-  Widget _buildGoogleMapsEngine(bool isDark) {
-    final padding = widget.mode == MapMode.pinPicker
-        ? EdgeInsets.zero
-        : widget.mapPadding;
-    final navigating = widget.mode == MapMode.navigation;
-
-    return Listener(
-      onPointerDown: (_) => _userTouching = true,
-      onPointerUp: (_) => _userTouching = false,
-      onPointerCancel: (_) => _userTouching = false,
-      child: GoogleMap(
-        style: isDark ? _uberDarkStyle : _uberLightStyle,
-        padding: padding,
-        initialCameraPosition: CameraPosition(
-          target: widget.initialCenter,
-          zoom: widget.initialZoom,
-          tilt: navigating ? 50 : 0,
-        ),
-        onMapCreated: (c) {
-          _googleMapController = c;
-          widget.onMapCreated?.call(c);
-          widget.onControllerCreated?.call(c);
-          widget.onMapReady?.call();
-          if (widget.mode != MapMode.pinPicker && !navigating) {
-            Future.delayed(const Duration(milliseconds: 400), _fitGoogleBounds);
-          }
-        },
-        onCameraMove: (pos) => _onPositionChanged(
-          ll.LatLng(pos.target.latitude, pos.target.longitude),
-          _userTouching,
-        ),
-        onCameraIdle: _onCameraIdle,
-        onTap: widget.onMapTap,
-        markers: widget.markers,
-        polylines: widget.polylines,
-        circles: widget.circles,
-        // Always enable native Google location blue puck
-        myLocationEnabled: true,
-        myLocationButtonEnabled: false,
-        compassEnabled: navigating,
-        trafficEnabled: widget.showTraffic,
-        mapToolbarEnabled: false,
-        zoomControlsEnabled: false,
-        buildingsEnabled: true,
-      ),
     );
   }
 }

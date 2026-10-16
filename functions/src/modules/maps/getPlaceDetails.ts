@@ -16,6 +16,25 @@ export const getPlaceDetails = onCall(
       throw new HttpsError('invalid-argument', 'placeId required');
     }
 
+    // Direct resolution for synthetic Plus Code and Pinned coordinate IDs
+    if (placeId.startsWith('plus:') || placeId.startsWith('pinned:')) {
+      const parts = placeId.split(':');
+      if (parts.length >= 2) {
+        const [latStr, lngStr] = parts[1].split(',');
+        const formattedAddress = parts.slice(2).join(':') || 'Pinned Location';
+        const lat = parseFloat(latStr);
+        const lng = parseFloat(lngStr);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          return {
+            placeId,
+            formattedAddress,
+            lat,
+            lng,
+          };
+        }
+      }
+    }
+
     const key = mapsKey.value();
     if (!key) {
       throw new HttpsError('failed-precondition', 'Place lookup is not configured.');

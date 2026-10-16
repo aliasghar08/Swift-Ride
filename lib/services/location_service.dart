@@ -5,6 +5,7 @@
 /// - Other         → location_service_stub.dart (reports no fix)
 ///
 /// The compiler picks one at build time. Nothing else in this file.
+library;
 
 export 'location_models.dart';
 

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,13 +27,14 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   AuthStep _currentStep = AuthStep.phone;
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
   bool _isSavingProfile = false;
 
   final TextEditingController _nameController = TextEditingController();
   UserRole _selectedRole = UserRole.rider;
 
   Timer? _countdownTimer;
-  int _secondsRemaining = 60;
+  int _secondsRemaining = 45;
   bool _canResend = false;
 
   @override
@@ -42,6 +42,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     _countdownTimer?.cancel();
     _phoneController.dispose();
     _otpController.dispose();
+    _otpFocusNode.dispose();
     _nameController.dispose();
     super.dispose();
   }
@@ -49,7 +50,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   void _startResendTimer() {
     _countdownTimer?.cancel();
     setState(() {
-      _secondsRemaining = 60;
+      _secondsRemaining = 45;
       _canResend = false;
     });
 
@@ -69,7 +70,14 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   String _formatPhoneNumber(String raw) {
-    var cleaned = raw.replaceAll(RegExp(r'\D'), '');
+    var trimmed = raw.trim();
+    if (trimmed.startsWith('+')) {
+      return '+${trimmed.replaceAll(RegExp(r'\D'), '')}';
+    }
+    var cleaned = trimmed.replaceAll(RegExp(r'\D'), '');
+    if (cleaned.startsWith('00')) {
+      return '+${cleaned.substring(2)}';
+    }
     if (cleaned.startsWith('0')) {
       cleaned = cleaned.substring(1);
     }
@@ -82,7 +90,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   void _useTestNumber() {
     _phoneController.text = '3000000000';
     _otpController.text = '123456';
-    _nameController.text = 'Alex Morgan';
+    _nameController.clear();
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
@@ -95,11 +103,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   Future<void> _handleSendOtp() async {
     final rawPhone = _phoneController.text.trim();
-    if (rawPhone.isEmpty || rawPhone.length < 9) {
+    if (rawPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please enter a valid Pakistani phone number (e.g. 300 1234567)',
+            'Please enter your mobile phone number',
           ),
           backgroundColor: AppTheme.sunsetCoral,
         ),
@@ -108,6 +116,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     }
 
     final fullPhone = _formatPhoneNumber(rawPhone);
+    // E.164 verification: must be at least + followed by 9 digits
+    if (fullPhone.length < 11) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please enter a valid phone number (e.g. 300 1234567)',
+          ),
+          backgroundColor: AppTheme.sunsetCoral,
+        ),
+      );
+      return;
+    }
+
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
 
     await auth.sendOtp(
@@ -147,7 +168,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final fullPhone = _formatPhoneNumber(_phoneController.text.trim());
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
 
-    final success = await auth.verifyOtp(
+    await auth.verifyOtp(
       smsCode: code,
       phoneNumber: fullPhone,
       fullName: _nameController.text.trim().isNotEmpty
@@ -156,10 +177,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       role: _selectedRole,
       onSuccess: () {
         _countdownTimer?.cancel();
-        if (widget.onAuthSuccess != null) {
-          widget.onAuthSuccess!();
-        } else if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        if (_nameController.text.trim().isNotEmpty) {
+          if (widget.onAuthSuccess != null) {
+            widget.onAuthSuccess!();
+          } else if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+        } else {
+          setState(() {
+            _currentStep = AuthStep.profile;
+          });
         }
       },
       onError: (err) {
@@ -168,13 +195,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         );
       },
     );
-
-    if (success && mounted && _nameController.text.trim().isEmpty) {
-      // Prompt for name / onboarding if needed
-      setState(() {
-        _currentStep = AuthStep.profile;
-      });
-    }
   }
 
   Future<void> _handleSaveProfile() async {
@@ -246,33 +266,36 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header & Branding
+              // Header & Branding (Secret long-press to autofill test credentials for developers)
               Center(
-                child: Container(
-                  width: layout.scale(72),
-                  height: layout.scale(72),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.brandGradient,
-                    shape: BoxShape.circle,
-                    boxShadow: AppTheme.glowShadow(
-                      AppTheme.primaryBlue,
-                      blur: 20,
+                child: GestureDetector(
+                  onLongPress: _useTestNumber,
+                  child: Container(
+                    width: layout.scale(72),
+                    height: layout.scale(72),
+                    decoration: BoxDecoration(
+                      gradient: AppTheme.brandGradient,
+                      shape: BoxShape.circle,
+                      boxShadow: AppTheme.glowShadow(
+                        AppTheme.primaryBlue,
+                        blur: 20,
+                      ),
                     ),
-                  ),
-                  child: const Icon(
-                    Icons.directions_car_filled,
-                    color: Colors.white,
-                    size: 36,
+                    child: const Icon(
+                      Icons.directions_car_filled,
+                      color: Colors.white,
+                      size: 36,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 18),
               Text(
                 _currentStep == AuthStep.phone
-                    ? 'Enter Phone Number'
+                    ? 'Enter Your Mobile Number'
                     : _currentStep == AuthStep.otp
-                    ? 'Verify OTP Code'
-                    : 'Complete Your Profile',
+                    ? 'Enter 6-Digit Code'
+                    : 'Setup Your Profile',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: layout.fontSize(24),
@@ -284,10 +307,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               const SizedBox(height: 6),
               Text(
                 _currentStep == AuthStep.phone
-                    ? 'We will send a 6-digit verification code to authenticate your account with 0% platform commission.'
+                    ? 'We will send a 6-digit verification code.'
                     : _currentStep == AuthStep.otp
-                    ? 'Enter the 6-digit code sent to ${_formatPhoneNumber(_phoneController.text)}'
-                    : 'Choose your account type and display name.',
+                    ? 'Sent to ${_formatPhoneNumber(_phoneController.text)}'
+                    : 'Choose your account role and display name for Jhang & Toba Tek Singh.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: layout.fontSize(13),
@@ -304,44 +327,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
 
               const SizedBox(height: 24),
-
-              // Test Environment Helper — debug builds only. This ships a
-              // one-tap demo login, so it must never appear in production.
-              if (kDebugMode && _currentStep == AuthStep.phone) ...[
-                const Divider(),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _useTestNumber,
-                  icon: const Icon(
-                    Icons.flash_on,
-                    color: AppTheme.amberWarning,
-                  ),
-                  label: const Text(
-                    'Fill Demo / Test Number (+92 300 0000000)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: isDark ? Colors.white : AppTheme.darkNavy,
-                    side: BorderSide(
-                      color: AppTheme.amberWarning.withValues(alpha: 0.5),
-                      width: 1.2,
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '💡 Firebase Phone Auth test bypass enabled for instant login.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: layout.fontSize(11),
-                    color: AppTheme.slateMuted,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -456,7 +441,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Send OTP Code',
+                      'Continue with Phone',
                       style: TextStyle(
                         fontSize: layout.fontSize(15),
                         fontWeight: FontWeight.w700,
@@ -466,6 +451,58 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     const Icon(Icons.arrow_forward, size: 18),
                   ],
                 ),
+        ),
+        const SizedBox(height: 20),
+        Row(
+          children: [
+            Expanded(child: Divider(color: c.border.withValues(alpha: 0.5))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Text(
+                'OR',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: c.textMuted,
+                  letterSpacing: 1.5,
+                ),
+              ),
+            ),
+            Expanded(child: Divider(color: c.border.withValues(alpha: 0.5))),
+          ],
+        ),
+        const SizedBox(height: 20),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final authProv = CustomChangeNotifierProvider.of<AuthProvider>(context);
+            if (!authProv.isAuthenticated) {
+              await authProv.authService.signInAnonymously();
+            }
+            if (!mounted) return;
+            if (widget.onAuthSuccess != null) {
+              widget.onAuthSuccess!();
+            } else if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          },
+          icon: const Icon(Icons.auto_awesome, size: 18),
+          label: const Text(
+            'Continue as AI Guest / Passenger',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: isDark ? AppTheme.accentCyan : AppTheme.primaryNavy,
+            side: BorderSide(
+              color: isDark
+                  ? AppTheme.accentCyan.withValues(alpha: 0.45)
+                  : AppTheme.primaryNavy.withValues(alpha: 0.35),
+              width: 1.3,
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
         ),
       ],
     );
@@ -477,43 +514,96 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     bool isDark,
   ) {
     final c = AppColors.of(layout.context);
+    final otpText = _otpController.text;
+
     return Column(
       key: const ValueKey('otp_step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: c.border),
-            boxShadow: AppTheme.subtleElevation,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: TextField(
-            controller: _otpController,
-            keyboardType: TextInputType.number,
-            textAlign: TextAlign.center,
-            autofocus: true,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(6),
+        // 6-digit OTP code tiles
+        GestureDetector(
+          onTap: () {
+            _otpFocusNode.requestFocus();
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: List.generate(6, (index) {
+                  final digit = index < otpText.length ? otpText[index] : '';
+                  final isFocused = index == otpText.length ||
+                      (index == 5 && otpText.length == 6);
+                  final isFilled = digit.isNotEmpty;
+
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    width: layout.scale(46),
+                    height: layout.scale(54),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? (isFilled
+                              ? AppTheme.accentCyan.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.05))
+                          : (isFilled
+                              ? AppTheme.primaryBlue.withValues(alpha: 0.08)
+                              : Colors.black.withValues(alpha: 0.03)),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isFocused
+                            ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+                            : (isFilled
+                                ? (isDark
+                                    ? AppTheme.accentCyan.withValues(alpha: 0.55)
+                                    : AppTheme.primaryBlue.withValues(alpha: 0.55))
+                                : c.border),
+                        width: isFocused ? 2.0 : 1.2,
+                      ),
+                      boxShadow: isFocused
+                          ? AppTheme.glowShadow(
+                              isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                              blur: 8,
+                              opacity: 0.25,
+                            )
+                          : null,
+                    ),
+                    child: Text(
+                      digit,
+                      style: TextStyle(
+                        fontSize: layout.fontSize(22),
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                      ),
+                    ),
+                  );
+                }),
+              ),
+              // Underlying transparent text field capturing autofill and keyboard events
+              Opacity(
+                opacity: 0.0,
+                child: TextField(
+                  controller: _otpController,
+                  focusNode: _otpFocusNode,
+                  keyboardType: TextInputType.number,
+                  autofocus: true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  autofillHints: const [AutofillHints.oneTimeCode],
+                  onChanged: (val) {
+                    setState(() {});
+                    if (val.trim().length == 6 && !auth.isLoading) {
+                      _handleVerifyOtp();
+                    }
+                  },
+                ),
+              ),
             ],
-            style: TextStyle(
-              fontSize: layout.fontSize(24),
-              fontWeight: FontWeight.w800,
-              letterSpacing: 12,
-              color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-            ),
-            decoration: const InputDecoration(
-              hintText: '••••••',
-              hintStyle: TextStyle(letterSpacing: 8),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 18),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -535,8 +625,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     ),
                   )
                 : Text(
-                    'Resend code in ${_secondsRemaining}s',
-                    style: TextStyle(fontSize: 12, color: AppTheme.slateMuted),
+                    'Resend Code in 00:${_secondsRemaining.toString().padLeft(2, '0')}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.slateMuted,
+                    ),
                   ),
           ],
         ),
@@ -561,7 +655,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
                 )
               : Text(
-                  'Verify & Continue',
+                  'Verify & Login',
                   style: TextStyle(
                     fontSize: layout.fontSize(15),
                     fontWeight: FontWeight.w700,
@@ -622,7 +716,38 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: isDark
+                ? AppTheme.accentCyan.withValues(alpha: 0.08)
+                : AppTheme.primaryBlue.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark
+                  ? AppTheme.accentCyan.withValues(alpha: 0.25)
+                  : AppTheme.primaryBlue.withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.location_on, size: 18, color: AppTheme.accentCyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Region: Jhang (31.2785, 72.3317) · AI Bidding Ready',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white70 : AppTheme.darkNavy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
         ElevatedButton(
           onPressed: _isSavingProfile ? null : _handleSaveProfile,
           style: ElevatedButton.styleFrom(

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:swiftride/services/native_map_service.dart';
 import 'package:swiftride/presentation/common/map_marker_icons.dart';
 import 'package:swiftride/presentation/common/map_markers.dart';
 

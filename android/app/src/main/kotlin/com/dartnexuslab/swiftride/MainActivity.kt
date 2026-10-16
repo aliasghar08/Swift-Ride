@@ -6,26 +6,18 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Geocoder
-import android.location.Location
-import android.location.LocationListener
-import android.location.LocationManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -33,7 +25,6 @@ import java.util.Locale
 import java.util.UUID
 
 class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
-    private val locationChannel = "com.swiftride.app/location"
     private val paymentChannel = "com.swiftride.app/payment"
     private val safetyChannel = "com.swiftride.app/safety"
     private val deviceChannel = "com.swiftride.app/device"
@@ -42,10 +33,21 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private val launcherChannel = "com.swiftride.app/launcher"
     private val connectivityChannel = "com.swiftride.app/connectivity"
     private val audioChannel = "com.swiftride.app/audio"
-    private val mapChannel = "com.swiftride.app/map"
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+
+    private var nativeLocationService: NativeLocationService? = null
+    private var nativeMapService: NativeMapService? = null
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        nativeLocationService?.handleRequestPermissionsResult(requestCode, grantResults)
+    }
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
@@ -65,92 +67,18 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
         val messenger = flutterEngine.dartExecutor.binaryMessenger
 
-        // 1. Native Location & Geocoding Channel
-        MethodChannel(messenger, locationChannel).setMethodCallHandler { call, result ->
-            val locationManager = getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        // 1. Register custom native map PlatformView
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            "com.swiftride.app/native_map_view",
+            NativeMapViewFactory(messenger)
+        )
 
-            when (call.method) {
-                "checkLocationPermissions" -> {
-                    result.success(hasLocationPermission())
-                }
+        // 2. Modular Location & Map Services
+        val locService = NativeLocationService.registerWith(messenger, this)
+        nativeLocationService = locService
+        nativeMapService = NativeMapService.registerWith(messenger, locService)
 
-                "requestLocationPermissions" -> {
-                    if (hasLocationPermission()) {
-                        result.success(true)
-                    } else {
-                        ActivityCompat.requestPermissions(
-                            this,
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION
-                            ),
-                            1001
-                        )
-                        // Report the *current* state; caller polls or retries after
-                        // the user answers the system dialog.
-                        result.success(false)
-                    }
-                }
-
-                "getCurrentLocation" -> {
-                    if (!hasLocationPermission()) {
-                        result.error(
-                            "PERMISSION_DENIED",
-                            "Location permission not granted.",
-                            null
-                        )
-                        return@setMethodCallHandler
-                    }
-                    if (locationManager == null) {
-                        result.error(
-                            "NO_SERVICE",
-                            "LocationManager unavailable.",
-                            null
-                        )
-                        return@setMethodCallHandler
-                    }
-                    requestFreshLocation(locationManager, result)
-                }
-
-                "startLocationUpdates" -> result.success(true)
-                "stopLocationUpdates" -> result.success(true)
-
-                "reverseGeocode" -> {
-                    val lat = call.argument<Double>("latitude")
-                    val lng = call.argument<Double>("longitude")
-                    if (lat == null || lng == null) {
-                        result.error("INVALID_ARGS", "latitude/longitude required", null)
-                        return@setMethodCallHandler
-                    }
-                    try {
-                        val geocoder = Geocoder(this, Locale.getDefault())
-                        @Suppress("DEPRECATION")
-                        val addresses = geocoder.getFromLocation(lat, lng, 1)
-                        if (!addresses.isNullOrEmpty()) {
-                            val addr = addresses[0]
-                            val parts = mutableListOf<String>()
-                            addr.featureName?.let { if (it.isNotBlank()) parts.add(it) }
-                            addr.subLocality?.let { if (it.isNotBlank()) parts.add(it) }
-                            addr.locality?.let { if (it.isNotBlank()) parts.add(it) }
-                            result.success(
-                                if (parts.isNotEmpty())
-                                    parts.joinToString(", ")
-                                else
-                                    addr.getAddressLine(0)
-                            )
-                        } else {
-                            result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
-                        }
-                    } catch (e: Exception) {
-                        result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
-                    }
-                }
-
-                else -> result.notImplemented()
-            }
-        }
-
-        // 2. Native Payment Channel (Google Pay / Stripe native sheet)
+        // 3. Native Payment Channel (Google Pay / Stripe native sheet)
         MethodChannel(messenger, paymentChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "checkNativePaySupport" -> {
@@ -172,7 +100,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 3. Native Safety Channel (SOS Alert, Telephony, Siren Vibrations)
+        // 4. Native Safety Channel (SOS Alert, Telephony, Siren Vibrations)
         MethodChannel(messenger, safetyChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "triggerEmergencyAlert" -> {
@@ -215,7 +143,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 4. Native Device Channel
+        // 5. Native Device Channel
         MethodChannel(messenger, deviceChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "setKeepScreenOn" -> {
@@ -259,7 +187,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 5. Native Storage Channel
+        // 6. Native Storage Channel
         MethodChannel(messenger, storageChannel).setMethodCallHandler { call, result ->
             val prefs = getSharedPreferences("swiftride_native_prefs", Context.MODE_PRIVATE)
             val key = call.argument<String>("key")
@@ -320,7 +248,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 6. Native Notifications Channel
+        // 7. Native Notifications Channel
         MethodChannel(messenger, notificationChannel).setMethodCallHandler { call, result ->
             val nm = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             when (call.method) {
@@ -358,7 +286,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 7. Native Launcher Channel
+        // 8. Native Launcher Channel
         MethodChannel(messenger, launcherChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "launchDialer" -> {
@@ -413,7 +341,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 8. Native Connectivity Channel
+        // 9. Native Connectivity Channel
         MethodChannel(messenger, connectivityChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getConnectivityStatus" -> {
@@ -433,7 +361,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             }
         }
 
-        // 9. Native Audio & Speech Channel
+        // 10. Native Audio & Speech Channel
         MethodChannel(messenger, audioChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "speakText" -> {
@@ -457,150 +385,6 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 else -> result.notImplemented()
             }
         }
-
-        // 10. Native Map Utility Channel
-        MethodChannel(messenger, mapChannel).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "calculateDistance" -> {
-                    val lat1 = call.argument<Double>("lat1") ?: 0.0
-                    val lon1 = call.argument<Double>("lon1") ?: 0.0
-                    val lat2 = call.argument<Double>("lat2") ?: 0.0
-                    val lon2 = call.argument<Double>("lon2") ?: 0.0
-                    val results = FloatArray(1)
-                    Location.distanceBetween(lat1, lon1, lat2, lon2, results)
-                    result.success((results[0] / 1000.0).toDouble())
-                }
-                "animateCamera", "addMarker", "clearMarkers", "setPolyline" -> result.success(true)
-                else -> result.notImplemented()
-            }
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Location helpers
-    // ─────────────────────────────────────────────────────────────────────
-
-    private fun hasLocationPermission(): Boolean {
-        val fine = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        return fine || coarse
-    }
-
-    /**
-     * Returns a fresh location fix, or an error if none could be obtained
-     * within 12 seconds. Never returns fabricated coordinates.
-     *
-     * A cached fix is used only if it is less than 60 seconds old and
-     * accurate to better than 100m. Otherwise we wait for a real new fix.
-     */
-    private fun requestFreshLocation(
-        lm: LocationManager,
-        result: MethodChannel.Result
-    ) {
-        // 1. Fast path: recent, accurate cached fix.
-        val cached = bestLastKnownLocation(lm)
-        if (cached != null &&
-            System.currentTimeMillis() - cached.time < 60_000L &&
-            cached.accuracy in 0f..100f
-        ) {
-            result.success(serializeLocation(cached))
-            return
-        }
-
-        // 2. Slow path: wait for a fresh fix from any enabled provider.
-        val handler = Handler(Looper.getMainLooper())
-        var completed = false
-
-        val listener = object : LocationListener {
-            override fun onLocationChanged(location: Location) {
-                if (completed) return
-                // Reject obviously bad fixes.
-                if (location.accuracy < 0f || location.accuracy > 200f) return
-                completed = true
-                try { lm.removeUpdates(this) } catch (_: Exception) {}
-                result.success(serializeLocation(location))
-            }
-
-            override fun onProviderEnabled(provider: String) {}
-            override fun onProviderDisabled(provider: String) {}
-
-            @Deprecated("Deprecated in Java")
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
-        }
-
-        try {
-            var requested = false
-            if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                lm.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER, 0L, 0f, listener, Looper.getMainLooper()
-                )
-                requested = true
-            }
-            if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                lm.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER, 0L, 0f, listener, Looper.getMainLooper()
-                )
-                requested = true
-            }
-            if (!requested) {
-                result.error(
-                    "LOCATION_DISABLED",
-                    "Location services are disabled on this device.",
-                    null
-                )
-                return
-            }
-        } catch (se: SecurityException) {
-            result.error("PERMISSION_DENIED", se.message, null)
-            return
-        } catch (e: Exception) {
-            result.error("LOCATION_ERROR", e.message, null)
-            return
-        }
-
-        handler.postDelayed({
-            if (!completed) {
-                completed = true
-                try { lm.removeUpdates(listener) } catch (_: Exception) {}
-                result.error(
-                    "LOCATION_TIMEOUT",
-                    "No GPS fix within 12 seconds.",
-                    null
-                )
-            }
-        }, 12_000L)
-    }
-
-    private fun bestLastKnownLocation(lm: LocationManager): Location? {
-        var best: Location? = null
-        try {
-            @Suppress("MissingPermission")
-            for (provider in lm.getProviders(true)) {
-                @Suppress("MissingPermission")
-                val l = lm.getLastKnownLocation(provider) ?: continue
-                if (best == null || l.accuracy < best.accuracy) best = l
-            }
-        } catch (_: SecurityException) {
-        } catch (_: Exception) {
-        }
-        return best
-    }
-
-    private fun serializeLocation(loc: Location): Map<String, Any> {
-        return mapOf(
-            "latitude" to loc.latitude,
-            "longitude" to loc.longitude,
-            "heading" to if (loc.hasBearing()) loc.bearing.toDouble() else 0.0,
-            "speed" to if (loc.hasSpeed()) loc.speed.toDouble() else 0.0,
-            "altitude" to loc.altitude,
-            "accuracy" to loc.accuracy.toDouble(),
-            "timestamp" to loc.time,
-            "isMock" to (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) loc.isMock else false)
-        )
     }
 
     private fun readDouble(prefs: android.content.SharedPreferences, key: String): Double? {

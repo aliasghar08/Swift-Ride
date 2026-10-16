@@ -18,9 +18,6 @@ import '../../services/firestore/firestore_driver_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
 import '../../services/map_service.dart';
 
-import 'package:flutter/foundation.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-
 import '../common/confirm_action.dart';
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
@@ -48,8 +45,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   late final RiderViewModel _viewModel;
   GoogleMapController? _mapController;
 
-  bool _viewModelInitialized = false;
   bool _waitingForGps = true;
+  bool _userCustomPickup = false;
+  VoidCallback? _locProvListener;
+  LocationProvider? _attachedLocProv;
 
   // UI Minimization States
   bool _isTopCardMinimized = false;
@@ -93,17 +92,33 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       final locProv = CustomChangeNotifierProvider.of<LocationProvider>(
         context,
       );
+      _attachedLocProv = locProv;
 
       final fix = await locProv.waitForFirstFix(
         timeout: const Duration(seconds: 4),
       );
       if (!mounted) return;
 
-      final lat = fix?.latitude ?? (locProv.hasRealFix ? locProv.latitude : 31.5580);
-      final lng = fix?.longitude ?? (locProv.hasRealFix ? locProv.longitude : 74.3507);
+      final lat = fix?.latitude ?? locProv.latitude;
+      final lng = fix?.longitude ?? locProv.longitude;
       _viewModel.initializeFromCoordinates(lat, lng);
       setState(() => _waitingForGps = false);
-      _viewModelInitialized = true;
+
+      _locProvListener = () {
+        if (!mounted || _userCustomPickup) return;
+        if (locProv.hasRealFix) {
+          final cur = _viewModel.pickupLocation;
+          if (cur == null ||
+              (cur.latitude - locProv.latitude).abs() > 0.0001 ||
+              (cur.longitude - locProv.longitude).abs() > 0.0001) {
+            _viewModel.initializeFromCoordinates(
+              locProv.latitude,
+              locProv.longitude,
+            );
+          }
+        }
+      };
+      locProv.addListener(_locProvListener!);
     });
   }
 
@@ -158,14 +173,23 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         builder: (_) => AddressSearchScreen(
           title: isPickup ? 'Set Pickup Location' : 'Set Destination',
           initialQuery: isPickup
-              ? _viewModel.pickupController.text
+              ? (_userCustomPickup ? _viewModel.pickupController.text : '')
               : _viewModel.dropoffController.text,
         ),
       ),
     );
     if (result != null) {
       if (isPickup) {
+        _userCustomPickup = true;
         _viewModel.setPickup(result);
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(result.latitude, result.longitude),
+              zoom: 16.0,
+            ),
+          ),
+        );
       } else {
         _viewModel.setDropoff(result);
         if (_fareSheetController.isAttached) {
@@ -181,6 +205,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   @override
   void dispose() {
+    if (_locProvListener != null && _attachedLocProv != null) {
+      _attachedLocProv!.removeListener(_locProvListener!);
+      _locProvListener = null;
+    }
     _fareSheetController.dispose();
     _activeRideSheetController.dispose();
     _mapController = null;
@@ -218,7 +246,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           }
         });
 
-        const casingWidth = 16;
+        const casingWidth = 15;
         const fillWidth = 10;
 
         final polylines = <Polyline>{
@@ -229,8 +257,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   Polyline(
                     polylineId: PolylineId('rider_route_$i'),
                     points: _viewModel.routes[i].polylinePoints,
-                    color: AppTheme.slateMuted.withValues(alpha: 0.45),
-                    width: 6,
+                    color: const Color(0xFF94A3B8).withValues(alpha: 0.65),
+                    width: 7,
+                    jointType: JointType.round,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    geodesic: true,
                     zIndex: -1,
                   ),
               if (_viewModel.selectedRoute != null) ...[
@@ -239,8 +271,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     'rider_route_${_viewModel.selectedRouteIndex}_casing',
                   ),
                   points: _viewModel.selectedRoute!.polylinePoints,
-                  color: AppTheme.primaryNavy,
+                  color: AppTheme.darkNavy,
                   width: casingWidth,
+                  jointType: JointType.round,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  geodesic: true,
                   zIndex: 0,
                 ),
                 Polyline(
@@ -250,6 +286,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   points: _viewModel.selectedRoute!.polylinePoints,
                   color: AppTheme.accentCyan,
                   width: fillWidth,
+                  jointType: JointType.round,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  geodesic: true,
                   zIndex: 1,
                 ),
                 ...TrafficInterval.segment(
@@ -264,6 +304,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     points: entry.value.points,
                     color: _trafficColour(interval),
                     width: fillWidth,
+                    jointType: JointType.round,
+                    startCap: Cap.roundCap,
+                    endCap: Cap.roundCap,
+                    geodesic: true,
                     zIndex: 2,
                   );
                 }),
@@ -274,8 +318,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   'rider_preview_route_casing',
                 ),
                 points: _viewModel.routePolyline,
-                color: AppTheme.primaryNavy,
+                color: AppTheme.darkNavy,
                 width: casingWidth,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: true,
                 zIndex: 0,
               ),
               Polyline(
@@ -285,6 +333,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 points: _viewModel.routePolyline,
                 color: AppTheme.accentCyan,
                 width: fillWidth,
+                jointType: JointType.round,
+                startCap: Cap.roundCap,
+                endCap: Cap.roundCap,
+                geodesic: true,
                 zIndex: 1,
               ),
               ...TrafficInterval.segment(
@@ -299,6 +351,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   points: entry.value.points,
                   color: _trafficColour(interval),
                   width: fillWidth,
+                  jointType: JointType.round,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  geodesic: true,
                   zIndex: 2,
                 );
               }),
@@ -326,8 +382,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   currentRide.dropoff.longitude,
                 ),
               ],
-              color: AppTheme.primaryNavy,
+              color: AppTheme.darkNavy,
               width: casingWidth,
+              jointType: JointType.round,
+              startCap: Cap.roundCap,
+              endCap: Cap.roundCap,
+              geodesic: true,
               zIndex: 0,
             ),
             Polyline(
@@ -354,6 +414,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               ],
               color: AppTheme.accentCyan,
               width: fillWidth,
+              jointType: JointType.round,
+              startCap: Cap.roundCap,
+              endCap: Cap.roundCap,
+              geodesic: true,
               zIndex: 1,
             ),
           ],
@@ -416,9 +480,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                     ] else ...[
                       if (currentRide == null &&
-                          _viewModel.pickupLocation != null &&
-                          (_viewModel.isPinMode ||
-                              _viewModel.dropoffLocation != null))
+                          _viewModel.pickupLocation != null)
                         MapMarkers.pickup(
                           LatLng(
                             _viewModel.pickupLocation!.latitude,
@@ -597,18 +659,16 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           CustomChangeNotifierProvider.read<LocationProvider>(
                             context,
                           );
-                      if (loc.hasRealFix && _mapController != null) {
+                      _userCustomPickup = false;
+                      _viewModel.initializeFromCoordinates(
+                        loc.latitude,
+                        loc.longitude,
+                      );
+                      if (_mapController != null) {
                         _mapController!.animateCamera(
-                          CameraUpdate.newLatLng(
+                          CameraUpdate.newLatLngZoom(
                             LatLng(loc.latitude, loc.longitude),
-                          ),
-                        );
-                      } else if (!loc.hasRealFix) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Waiting for GPS signal...'),
-                            backgroundColor: AppTheme.amberWarning,
-                            duration: Duration(seconds: 2),
+                            15.5,
                           ),
                         );
                       }
@@ -851,12 +911,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       child: IgnorePointer(
                         child: TextField(
                           controller: _viewModel.pickupController,
-                          style: TextStyle(fontSize: layout.fontSize(14)),
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            color: AppColors.of(context).textPrimary,
+                            fontSize: layout.fontSize(14),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
                             hintText: 'Pickup Location',
+                            hintStyle: TextStyle(
+                              color: AppColors.of(context).textMuted,
+                              fontSize: layout.fontSize(14),
+                            ),
                             isDense: true,
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 6),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 6),
                           ),
                         ),
                       ),
@@ -891,12 +959,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       child: IgnorePointer(
                         child: TextField(
                           controller: _viewModel.dropoffController,
-                          style: TextStyle(fontSize: layout.fontSize(14)),
-                          decoration: const InputDecoration(
+                          style: TextStyle(
+                            color: AppColors.of(context).textPrimary,
+                            fontSize: layout.fontSize(14),
+                            fontWeight: FontWeight.w600,
+                          ),
+                          decoration: InputDecoration(
                             hintText: 'Where to? (Destination)',
+                            hintStyle: TextStyle(
+                              color: AppColors.of(context).textMuted,
+                              fontSize: layout.fontSize(14),
+                            ),
                             isDense: true,
                             border: InputBorder.none,
-                            contentPadding: EdgeInsets.symmetric(vertical: 6),
+                            contentPadding: const EdgeInsets.symmetric(vertical: 6),
                           ),
                         ),
                       ),
@@ -940,6 +1016,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             child: GlassContainer(
               borderRadius: 28,
               blur: 24,
+              backgroundColor: AppColors.of(context).surface,
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.of(context).surface,
+                  AppColors.of(context).surface,
+                ],
+              ),
               padding: EdgeInsets.fromLTRB(
                 layout.horizontalPadding,
                 14,
@@ -1016,21 +1099,41 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.primaryBlue.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'Suggested: ${CurrencyFormatter.format(displayedFare)}',
-                                  style: TextStyle(
-                                    color: AppTheme.primaryBlue,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: layout.fontSize(12),
+                              InkWell(
+                                onTap: () => _viewModel.applyAiSuggestedFare(),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 9,
+                                    vertical: 5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accentCyan.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: AppTheme.accentCyan.withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.auto_awesome,
+                                        size: 13,
+                                        color: AppTheme.accentCyan,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _viewModel.aiSuggestedSweetSpot != null
+                                            ? 'AI Suggested Sweet Spot: ${CurrencyFormatter.format(_viewModel.aiSuggestedSweetSpot!)}'
+                                            : 'Suggested: ${CurrencyFormatter.format(displayedFare)}',
+                                        style: TextStyle(
+                                          color: AppTheme.accentCyan,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: layout.fontSize(11.5),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -1281,7 +1384,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                       final ok = await _viewModel.submitRideRequest(
                                         rideProv: rideProv,
                                       );
-                                      if (!mounted || ok) return;
+                                      if (!mounted || !context.mounted || ok) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(
                                           content: Text(
@@ -1338,6 +1441,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             child: GlassContainer(
               borderRadius: 28,
               blur: 24,
+              backgroundColor: AppColors.of(context).surface,
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.of(context).surface,
+                  AppColors.of(context).surface,
+                ],
+              ),
               padding: EdgeInsets.fromLTRB(
                 layout.horizontalPadding,
                 14,
@@ -1505,7 +1615,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   borderRadius: 14,
                   blur: 10,
                   padding: const EdgeInsets.all(12),
-                  backgroundColor: Colors.white.withValues(alpha: 0.8),
+                  backgroundColor: AppColors.of(context).surfaceRaised,
                   borderColor: AppTheme.emeraldGreen.withValues(alpha: 0.3),
                   child: Row(
                     children: [
@@ -1530,6 +1640,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                         ? 'Finding your driver…'
                                         : 'Driver assigned'),
                               style: TextStyle(
+                                color: AppColors.of(context).textPrimary,
                                 fontWeight: FontWeight.w700,
                                 fontSize: layout.fontSize(13),
                               ),
@@ -1541,7 +1652,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                       : 'Loading vehicle details…'),
                               style: TextStyle(
                                 fontSize: layout.fontSize(11),
-                                color: AppTheme.slateMuted,
+                                color: AppColors.of(context).textMuted,
                               ),
                             ),
                           ],
@@ -1636,7 +1747,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             safetyProv: safetyProv,
                             rideProv: rideProv,
                           );
-                          if (!mounted) return;
+                          if (!mounted || !context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
@@ -1733,7 +1844,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         borderRadius: 14,
         blur: 12,
         padding: const EdgeInsets.all(12),
-        backgroundColor: Colors.white.withValues(alpha: 0.9),
+        backgroundColor: AppColors.of(context).surfaceRaised,
         borderColor: AppTheme.primaryBlue.withValues(alpha: 0.2),
         shadows: AppTheme.glowShadow(
           AppTheme.primaryBlue,
@@ -1756,6 +1867,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       Text(
                         offer.driverName,
                         style: TextStyle(
+                          color: AppColors.of(context).textPrimary,
                           fontWeight: FontWeight.w700,
                           fontSize: layout.fontSize(13),
                         ),
@@ -1774,7 +1886,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     '${offer.vehicleSummary} • ${offer.etaMinutes} min away',
                     style: TextStyle(
                       fontSize: layout.fontSize(11),
-                      color: AppTheme.slateMuted,
+                      color: AppColors.of(context).textMuted,
                     ),
                   ),
                 ],
@@ -1897,7 +2009,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           decoration: BoxDecoration(
             color: isSelected
                 ? AppTheme.primaryBlue.withValues(alpha: 0.08)
-                : Colors.white.withValues(alpha: 0.6),
+                : c.surfaceRaised,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
               color: isSelected

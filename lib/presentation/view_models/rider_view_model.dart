@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../services/native_map_service.dart';
 import '../../core/utils/distance_calculator.dart';
 import '../../domain/models/location_point_model.dart';
 import '../../providers/ride_provider.dart';
@@ -13,6 +13,7 @@ import '../../services/native/native_launcher_service.dart';
 import '../../services/native/native_notification_service.dart';
 import '../../services/native/native_safety_service.dart';
 import '../../domain/models/payment_rail.dart';
+import '../../services/pricing_ml_service.dart';
 
 /// ViewModel managing Rider UI state, address search, pin-dropping,
 /// route polylines, PKR fare negotiation, and native safety integrations.
@@ -24,10 +25,13 @@ class RiderViewModel extends ChangeNotifier {
   final NativeLauncherService _launcherService;
   final MapService _mapService = MapService();
   final FirestoreSafetyService _safetyEvents = FirestoreSafetyService();
+  final PricingMLService _pricingMLService = PricingMLService();
 
   final TextEditingController pickupController = TextEditingController();
   final TextEditingController dropoffController = TextEditingController();
   final TextEditingController fareController = TextEditingController();
+
+  double? _aiSuggestedSweetSpot;
 
   double _estimatedDistanceKm = 0;
   double _estimatedDurationMin = 0;
@@ -48,6 +52,7 @@ class RiderViewModel extends ChangeNotifier {
 
   bool _isPinMode = false;
   PaymentRail _selectedRail = PaymentRail.fallback;
+  bool _isDisposed = false;
 
   /// True once a real GPS-backed pickup has been set (either from the platform
   /// fix or from the user's own pin/search). False means "we don't actually
@@ -90,8 +95,20 @@ class RiderViewModel extends ChangeNotifier {
   bool get hasPickupFromGps => _hasPickupFromGps;
 
   double get suggestedFare =>
+      _aiSuggestedSweetSpot ??
       selectedEconomics?.riderFare ??
       DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+
+  double? get aiSuggestedSweetSpot => _aiSuggestedSweetSpot;
+
+  void applyAiSuggestedFare() {
+    if (_aiSuggestedSweetSpot != null) {
+      fareController.text = _aiSuggestedSweetSpot!.round().toString();
+      _fareTouchedByUser = true;
+      _deviceService.triggerHaptic('selection');
+      notifyListeners();
+    }
+  }
 
   /// Sets the pickup address from a real device fix.
   ///
@@ -115,6 +132,7 @@ class RiderViewModel extends ChangeNotifier {
     // "Current Location" string alone rather than inventing a place name.
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
+      if (_isDisposed) return;
       if (realAddress.isNotEmpty) {
         pickupController.text = realAddress;
         _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
@@ -192,10 +210,38 @@ class RiderViewModel extends ChangeNotifier {
     _routeTraffic = sel.trafficIntervals;
     _estimatedDistanceKm = double.parse(sel.distanceKm.toStringAsFixed(1));
     _estimatedDurationMin = double.parse(sel.durationMin.toStringAsFixed(0));
+
+    _pricingMLService.predictSuggestedBid(
+      distanceKm: _estimatedDistanceKm,
+      trafficMultiplier: _routeTraffic.isNotEmpty ? 1.25 : 1.15,
+    ).then((bid) {
+      _aiSuggestedSweetSpot = bid;
+      if (!_fareTouchedByUser) {
+        fareController.text = bid.round().toString();
+      }
+      notifyListeners();
+    }).catchError((e) {
+      debugPrint('[RiderViewModel] AI Pricing ML error on route select: $e');
+    });
+
     if (!_fareTouchedByUser) {
       fareController.text = sel.economics.riderFare.round().toString();
     }
     _deviceService.triggerHaptic('selection');
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setTestRoutes(List<RouteOption> routes, {int defaultIndex = 0}) {
+    _routes = routes;
+    _selectedRouteIndex = defaultIndex;
+    if (_routes.isNotEmpty && _selectedRouteIndex < _routes.length) {
+      final sel = _routes[_selectedRouteIndex];
+      _routePolyline = sel.polylinePoints;
+      _routeTraffic = sel.trafficIntervals;
+      _estimatedDistanceKm = sel.distanceKm;
+      _estimatedDurationMin = sel.durationMin;
+    }
     notifyListeners();
   }
 
@@ -219,6 +265,7 @@ class RiderViewModel extends ChangeNotifier {
       _routeTraffic = [];
       _estimatedDistanceKm = 0;
       _estimatedDurationMin = 0;
+      _aiSuggestedSweetSpot = null;
       _routeError = 'Could not compute a route. Check your connection.';
       notifyListeners();
       return;
@@ -242,14 +289,25 @@ class RiderViewModel extends ChangeNotifier {
       _estimatedDistanceKm = double.parse(sel.distanceKm.toStringAsFixed(1));
       _estimatedDurationMin = double.parse(sel.durationMin.toStringAsFixed(0));
 
+      try {
+        _aiSuggestedSweetSpot = await _pricingMLService.predictSuggestedBid(
+          distanceKm: _estimatedDistanceKm,
+          trafficMultiplier: _routeTraffic.isNotEmpty ? 1.25 : 1.15,
+        );
+      } catch (e) {
+        debugPrint('[RiderViewModel] AI pricing prediction error: $e');
+      }
+
       if (!_fareTouchedByUser) {
-        fareController.text = sel.economics.riderFare.round().toString();
+        final fareToUse = _aiSuggestedSweetSpot ?? sel.economics.riderFare;
+        fareController.text = fareToUse.round().toString();
       }
     } else {
       _routePolyline = [];
       _routeTraffic = [];
       _estimatedDistanceKm = 0;
       _estimatedDurationMin = 0;
+      _aiSuggestedSweetSpot = null;
     }
 
     notifyListeners();
@@ -394,6 +452,7 @@ class RiderViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _routeDebounce?.cancel();
     pickupController.dispose();
     dropoffController.dispose();

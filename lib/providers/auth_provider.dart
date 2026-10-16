@@ -56,8 +56,14 @@ class AuthProvider extends ChangeNotifier {
         _activeRole = UserRole.driver;
         notifyListeners();
       } else if (roleStr == 'admin' && _activeRole != UserRole.admin) {
-        _activeRole = UserRole.admin;
-        notifyListeners();
+        if (_currentUser.role == UserRole.admin) {
+          _activeRole = UserRole.admin;
+          notifyListeners();
+        } else {
+          _activeRole = UserRole.rider;
+          _storage.setString('active_user_role', 'rider');
+          notifyListeners();
+        }
       } else if (roleStr == 'rider' && _activeRole != UserRole.rider) {
         _activeRole = UserRole.rider;
         notifyListeners();
@@ -147,6 +153,7 @@ class AuthProvider extends ChangeNotifier {
       // fail closed: a fabricated uid would mint a fake authenticated session
       // (and, before this fix, did so in release builds too).
       final uid = credential?.user?.uid ??
+          _authService.currentUser?.uid ??
           (kDebugMode ? 'debug_user_${DateTime.now().millisecondsSinceEpoch}' : null);
       if (uid == null) {
         _isLoading = false;

@@ -22,8 +22,8 @@ class LocationService {
       final nav = html.window.navigator;
       final loc = html.window.location;
       debugPrint('[WEB] userAgent          = ${nav.userAgent}');
-      debugPrint('[WEB] platform           = ${nav.platform}');
-      debugPrint('[WEB] hasGeolocation?    = ${nav.geolocation != null}');
+      final dynamic geoObj = nav.geolocation;
+      debugPrint('[WEB] hasGeolocation?    = ${geoObj != null}');
       debugPrint('[WEB] location.protocol  = ${loc.protocol}');
       debugPrint('[WEB] location.host      = ${loc.host}');
       debugPrint('[WEB] location.hostname  = ${loc.hostname}');
@@ -82,7 +82,7 @@ class LocationService {
   Future<LocationFetchResult> fetchCurrentPositionDetailed() async {
     debugPrint('[WEB] ═══ fetchCurrentPositionDetailed: START ═══');
     try {
-      final geo = html.window.navigator.geolocation;
+      final dynamic geo = html.window.navigator.geolocation;
       debugPrint('[WEB] geolocation object: $geo');
       if (geo == null) {
         debugPrint('[WEB] ✗ geolocation is NULL — browser refuses to expose it');

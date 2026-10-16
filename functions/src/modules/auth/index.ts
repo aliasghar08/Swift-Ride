@@ -26,9 +26,13 @@ export const registerUser = onCall(
     const timestamp = FieldValue.serverTimestamp();
     const fcmTokens = data.fcmToken ? [data.fcmToken] : [];
 
+    // Guarantee phone number matches cryptographically verified SMS token if available
+    const tokenPhone = request.auth?.token?.phone_number as string | undefined;
+    const finalPhone = tokenPhone || data.phone;
+
     if (!existing.exists) {
       await userRef.set({
-        phone: data.phone,
+        phone: finalPhone,
         email: data.email || null,
         fullName: data.fullName,
         role: data.role,
@@ -40,17 +44,29 @@ export const registerUser = onCall(
         location: null,
       });
 
-      // Set custom claims
-      await auth.setCustomUserClaims(caller.uid, { role: data.role });
+      // Mint signed custom claims on ID token
+      await auth.setCustomUserClaims(caller.uid, {
+        role: data.role,
+        admin: false,
+        phone: finalPhone,
+      });
     } else {
       await userRef.update({
         fullName: data.fullName,
-        phone: data.phone,
+        phone: finalPhone,
         email: data.email || null,
         updatedAt: timestamp,
         ...(data.fcmToken
           ? { fcmTokens: FieldValue.arrayUnion(data.fcmToken) }
           : {}),
+      });
+
+      // Refresh custom claims
+      const currentClaims = (await auth.getUser(caller.uid)).customClaims || {};
+      await auth.setCustomUserClaims(caller.uid, {
+        ...currentClaims,
+        role: data.role,
+        phone: finalPhone,
       });
     }
 

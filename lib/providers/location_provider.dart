@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:swiftride/services/location_models.dart';
 import 'package:swiftride/services/location_service.dart';
 import '../core/constants/app_constants.dart';
 

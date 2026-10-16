@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../domain/models/driver_profile_model.dart';
+import '../../domain/models/ride_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
@@ -9,17 +10,42 @@ import '../../services/native/native_audio_service.dart';
 import '../../services/native/native_device_service.dart';
 import '../../services/native/native_launcher_service.dart';
 import '../../services/native/native_notification_service.dart';
+import '../../services/pricing_ml_service.dart';
+import '../../services/native_map_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../services/firestore/firestore_driver_service.dart';
+import '../../services/map_service.dart';
+
+/// Valuation assessment for an incoming rider bid compared to the on-device AI sweet spot.
+class AiValuationAnalysis {
+  final double aiValuation;
+  final double differencePercent;
+  final bool isLow;
+  final bool isSignificantlyLow;
+  final bool isFair;
+  final bool isHigh;
+  final String tagMessage;
+
+  const AiValuationAnalysis({
+    required this.aiValuation,
+    required this.differencePercent,
+    required this.isLow,
+    required this.isSignificantlyLow,
+    required this.isFair,
+    required this.isHigh,
+    required this.tagMessage,
+  });
+}
 
 /// ViewModel managing Driver Cockpit UI state, PIN verification inputs,
-/// counter-bidding, and native hardware wake locks.
+/// counter-bidding, native hardware wake locks, and AI market valuations.
 class DriverViewModel extends ChangeNotifier {
   final NativeDeviceService _deviceService;
   final FirestoreDriverService _driverService;
   final NativeNotificationService _notificationService;
   final NativeAudioService _audioService;
   final NativeLauncherService _launcherService;
+  final PricingMLService _pricingMLService;
 
   final TextEditingController pinController = TextEditingController();
   final TextEditingController counterFareController = TextEditingController();
@@ -27,6 +53,10 @@ class DriverViewModel extends ChangeNotifier {
   String? _pinErrorMessage;
   bool _isProcessingPayout = false;
   String? _payoutIdempotencyKey;
+  bool _isDisposed = false;
+
+  final Map<String, double> _aiMarketValuations = {};
+  bool _autoAcceptAiValuedRides = false;
 
   DriverViewModel({
     NativeDeviceService? deviceService,
@@ -34,14 +64,124 @@ class DriverViewModel extends ChangeNotifier {
     NativeNotificationService? notificationService,
     NativeAudioService? audioService,
     NativeLauncherService? launcherService,
+    PricingMLService? pricingMLService,
   })  : _deviceService = deviceService ?? NativeDeviceService(),
         _driverService = driverService ?? FirestoreDriverService(),
         _notificationService = notificationService ?? NativeNotificationService(),
         _audioService = audioService ?? NativeAudioService(),
-        _launcherService = launcherService ?? NativeLauncherService();
+        _launcherService = launcherService ?? NativeLauncherService(),
+        _pricingMLService = pricingMLService ?? PricingMLService();
 
   String? get pinErrorMessage => _pinErrorMessage;
   bool get isProcessingPayout => _isProcessingPayout;
+  bool get autoAcceptAiValuedRides => _autoAcceptAiValuedRides;
+
+  void toggleAutoAcceptAiValuedRides(bool value) {
+    _autoAcceptAiValuedRides = value;
+    notifyListeners();
+  }
+
+  /// Returns cached AI market valuation for a ride, if computed.
+  double? getCachedAiValuation(String rideId) => _aiMarketValuations[rideId];
+
+  /// Asynchronously evaluates or returns cached AI market valuation for a ride.
+  Future<double> getOrCalculateAiValuation(RideModel ride) async {
+    if (_aiMarketValuations.containsKey(ride.id)) {
+      return _aiMarketValuations[ride.id]!;
+    }
+
+    final distance = ride.distanceKm > 0.1 ? ride.distanceKm : 5.0;
+    final fare = await _pricingMLService.predictSuggestedBid(
+      distanceKm: distance,
+    );
+
+    _aiMarketValuations[ride.id] = fare;
+    if (!_isDisposed) {
+      notifyListeners();
+    }
+    return fare;
+  }
+
+  final Map<String, RoutePlan> _cachedRoutePlans = {};
+
+  /// Returns cached RoutePlan for a ride if already loaded.
+  RoutePlan? getCachedRoutePlan(String rideId) => _cachedRoutePlans[rideId];
+
+  /// Asynchronously loads or returns cached RoutePlan for a ride.
+  Future<RoutePlan?> getOrFetchRoute(RideModel ride) async {
+    if (_cachedRoutePlans.containsKey(ride.id)) {
+      return _cachedRoutePlans[ride.id];
+    }
+    try {
+      final origin = LatLng(ride.pickup.latitude, ride.pickup.longitude);
+      final dest = LatLng(ride.dropoff.latitude, ride.dropoff.longitude);
+      final plan = await MapService().fetchRoute(origin, dest);
+      if (plan != null) {
+        _cachedRoutePlans[ride.id] = plan;
+        if (!_isDisposed) notifyListeners();
+      }
+      return plan;
+    } catch (e) {
+      debugPrint('[DriverViewModel] getOrFetchRoute error: $e');
+      return null;
+    }
+  }
+
+  /// Analyzes a rider's offered bid relative to the AI sweet-spot market value.
+  AiValuationAnalysis analyzeFare({
+    required double offeredFare,
+    required double aiValuation,
+  }) {
+    if (aiValuation <= 0) {
+      return AiValuationAnalysis(
+        aiValuation: aiValuation,
+        differencePercent: 0,
+        isLow: false,
+        isSignificantlyLow: false,
+        isFair: true,
+        isHigh: false,
+        tagMessage: 'AI Market Value: PKR ${aiValuation.toInt()}',
+      );
+    }
+
+    final diff = offeredFare - aiValuation;
+    final pct = (diff / aiValuation) * 100.0;
+    final isLow = pct < -7.0;
+    final isSignificantlyLow = pct <= -15.0;
+    final isHigh = pct > 5.0;
+
+    String tag;
+    if (isSignificantlyLow) {
+      tag = 'AI Market Value: PKR ${aiValuation.toInt()} (Rider bid is ${pct.abs().toStringAsFixed(0)}% low - Counter-offer recommended)';
+    } else if (isLow) {
+      tag = 'AI Market Value: PKR ${aiValuation.toInt()} (Rider bid is ${pct.abs().toStringAsFixed(0)}% below market)';
+    } else if (isHigh) {
+      tag = 'AI Market Value: PKR ${aiValuation.toInt()} (High Value Offer +${pct.toStringAsFixed(0)}%)';
+    } else {
+      tag = 'AI Market Value: PKR ${aiValuation.toInt()} (Fair Market Offer)';
+    }
+
+    return AiValuationAnalysis(
+      aiValuation: aiValuation,
+      differencePercent: pct,
+      isLow: isLow,
+      isSignificantlyLow: isSignificantlyLow,
+      isFair: !isLow && !isHigh,
+      isHigh: isHigh,
+      tagMessage: tag,
+    );
+  }
+
+  /// Checks if an incoming ride qualifies for auto-acceptance within ±5% of the AI valuation.
+  bool shouldAutoAccept({
+    required double offeredFare,
+    required double aiValuation,
+  }) {
+    if (!_autoAcceptAiValuedRides || aiValuation <= 0) return false;
+    final diffRatio = (offeredFare - aiValuation) / aiValuation;
+    // Auto-accept if offer is within -5% or above market value
+    return diffRatio >= -0.05;
+  }
 
   bool _isConfirmingCash = false;
   bool get isConfirmingCash => _isConfirmingCash;
@@ -260,7 +400,14 @@ class DriverViewModel extends ChangeNotifier {
   }
 
   @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _isDisposed = true;
     _deviceService.setKeepScreenOn(false);
     pinController.dispose();
     counterFareController.dispose();

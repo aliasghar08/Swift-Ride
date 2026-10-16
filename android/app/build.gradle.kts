@@ -23,6 +23,13 @@ val localProperties = Properties().apply {
     }
 }
 
+val keystoreProperties = Properties().apply {
+    val keystorePropertiesFile = rootProject.file("key.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 val googleMapsApiKey: String =
     localProperties.getProperty("GOOGLE_MAPS_ANDROID_API_KEY")
         ?: System.getenv("GOOGLE_MAPS_ANDROID_API_KEY")
@@ -65,11 +72,31 @@ android {
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
+    signingConfigs {
+        create("release") {
+            val keyAliasProp = keystoreProperties.getProperty("keyAlias")
+            val keyPasswordProp = keystoreProperties.getProperty("keyPassword")
+            val storePasswordProp = keystoreProperties.getProperty("storePassword")
+            val storeFileProp = keystoreProperties.getProperty("storeFile")
+
+            if (storeFileProp != null) {
+                keyAlias = keyAliasProp
+                keyPassword = keyPasswordProp
+                storePassword = storePasswordProp
+                val keystoreFile = file(storeFileProp)
+                storeFile = if (keystoreFile.exists()) keystoreFile else rootProject.file(storeFileProp)
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val hasReleaseKeystore = keystoreProperties.getProperty("storeFile") != null
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
@@ -86,4 +113,6 @@ flutter {
 
 dependencies {
     implementation("com.google.firebase:firebase-appcheck-playintegrity:18.0.0")
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 }

@@ -15,7 +15,7 @@ class GlassContainer extends StatelessWidget {
   final Color? backgroundColor;
   final Color? borderColor;
   final List<BoxShadow>? shadows;
-  final bool isDark;
+  final bool? isDark;
   final Gradient? gradient;
 
   const GlassContainer({
@@ -30,18 +30,20 @@ class GlassContainer extends StatelessWidget {
     this.backgroundColor,
     this.borderColor,
     this.shadows,
-    this.isDark = false,
+    this.isDark,
     this.gradient,
   });
 
   @override
   Widget build(BuildContext context) {
+    final themeIsDark = Theme.of(context).brightness == Brightness.dark;
+    final resolvedIsDark = isDark ?? themeIsDark;
     final effectiveBg = backgroundColor ??
-        (isDark ? AppTheme.glassDarkBackground : AppTheme.glassLightBackground);
+        (resolvedIsDark ? AppTheme.glassDarkBackground : AppTheme.glassLightBackground);
     final effectiveBorder = borderColor ??
-        (isDark ? AppTheme.glassDarkBorder : AppTheme.glassLightBorder);
+        (resolvedIsDark ? AppTheme.glassDarkBorder : AppTheme.glassLightBorder);
     final effectiveShadows = shadows ??
-        (isDark ? AppTheme.darkElevation : AppTheme.premiumElevation);
+        (resolvedIsDark ? AppTheme.darkElevation : AppTheme.premiumElevation);
 
     return Container(
       width: width,
@@ -68,7 +70,7 @@ class GlassContainer extends StatelessWidget {
                   LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: isDark
+                    colors: resolvedIsDark
                         ? [
                             Colors.white.withValues(alpha: 0.05),
                             Colors.white.withValues(alpha: 0.01),

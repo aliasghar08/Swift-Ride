@@ -1,4 +1,4 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'native_map_service.dart';
 
 /// In-house zero-dependency Google Polyline Algorithm implementation.
 /// Encodes and decodes coordinates to/from Google's encoded polyline format.

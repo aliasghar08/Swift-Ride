@@ -15,12 +15,12 @@ import '../../providers/ride_provider.dart';
 import '../../services/ride_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
 
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
 import '../common/staggered_animation.dart';
+import '../rider/route_preview_screen.dart';
+import '../../services/map_service.dart';
 import '../view_models/driver_view_model.dart';
 import '../view_models/responsive_layout_helper.dart';
 
@@ -113,6 +113,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   Widget build(BuildContext context) {
     final layout = ResponsiveLayoutHelper(context);
     final c = AppColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final driverProv = CustomChangeNotifierProvider.of<DriverProvider>(context);
     final rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     final locProv = CustomChangeNotifierProvider.of<LocationProvider>(context);
@@ -164,38 +165,44 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 },
                 polylines: {
                   if (currentRide != null) ...[
-                    Polyline(
-                      polylineId: const PolylineId('driver_route_casing'),
-                      points: [
-                        LatLng(locProv.latitude, locProv.longitude),
-                        LatLng(
-                          currentRide.pickup.latitude,
-                          currentRide.pickup.longitude,
+                    ...() {
+                      final cachedPlan =
+                          _viewModel.getCachedRoutePlan(currentRide.id);
+                      if (cachedPlan == null) {
+                        _viewModel.getOrFetchRoute(currentRide);
+                      }
+                      final routePoints =
+                          cachedPlan?.routes.firstOrNull?.polylinePoints;
+                      final points = (routePoints != null &&
+                              routePoints.isNotEmpty)
+                          ? routePoints
+                          : [
+                              LatLng(locProv.latitude, locProv.longitude),
+                              LatLng(
+                                currentRide.pickup.latitude,
+                                currentRide.pickup.longitude,
+                              ),
+                              LatLng(
+                                currentRide.dropoff.latitude,
+                                currentRide.dropoff.longitude,
+                              ),
+                            ];
+
+                      return [
+                        Polyline(
+                          polylineId: const PolylineId('driver_route_casing'),
+                          points: points,
+                          color: AppTheme.primaryNavy,
+                          width: 9,
                         ),
-                        LatLng(
-                          currentRide.dropoff.latitude,
-                          currentRide.dropoff.longitude,
+                        Polyline(
+                          polylineId: const PolylineId('driver_route'),
+                          points: points,
+                          color: AppTheme.amberWarning,
+                          width: 5,
                         ),
-                      ],
-                      color: AppTheme.primaryNavy,
-                      width: 9,
-                    ),
-                    Polyline(
-                      polylineId: const PolylineId('driver_route'),
-                      points: [
-                        LatLng(locProv.latitude, locProv.longitude),
-                        LatLng(
-                          currentRide.pickup.latitude,
-                          currentRide.pickup.longitude,
-                        ),
-                        LatLng(
-                          currentRide.dropoff.latitude,
-                          currentRide.dropoff.longitude,
-                        ),
-                      ],
-                      color: AppTheme.amberWarning,
-                      width: 5,
-                    ),
+                      ];
+                    }(),
                   ],
                 },
               ),
@@ -236,7 +243,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       child: StaggeredEntryWidget(
                         index: 0,
                         child: GlassContainer(
-                          isDark: true,
                           borderRadius: 20,
                           blur: 20,
                           padding: EdgeInsets.symmetric(
@@ -249,7 +255,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   opacity: 0.25,
                                   blur: 16,
                                 )
-                              : AppTheme.darkElevation,
+                              : (isDark ? AppTheme.darkElevation : AppTheme.subtleElevation),
                           child: Row(
                             children: [
                               driverProv.isOnline
@@ -293,7 +299,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     Text(
                                       'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 0% Fee',
                                       style: TextStyle(
-                                        color: Colors.white70,
+                                        color: isDark ? Colors.white70 : c.textMuted,
                                         fontSize: layout.fontSize(12),
                                       ),
                                     ),
@@ -381,10 +387,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
                     child: GlassContainer(
-                      isDark: true,
                       borderRadius: 28,
                       blur: 24,
-                      shadows: AppTheme.darkElevation,
+                      shadows: isDark ? AppTheme.darkElevation : AppTheme.premiumElevation,
                       padding: EdgeInsets.fromLTRB(
                         layout.horizontalPadding,
                         14,
@@ -586,6 +591,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     RideProvider rideProv,
     AuthProvider authProv,
   ) {
+    final c = AppColors.of(layout.context);
+    final isDark = Theme.of(layout.context).brightness == Brightness.dark;
     final requests = driverProv.isOnline
         ? rideProv.availableRides
         : const <RideModel>[];
@@ -599,7 +606,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: isDark ? Colors.white24 : Colors.black26,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -607,12 +614,70 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         SizedBox(height: layout.scale(12)),
 
         if (driverProv.isOnline) ...[
+          // AI Market Value Auto-Acceptance Setting Toggle
+          Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: layout.scale(12),
+              vertical: layout.scale(8),
+            ),
+            decoration: BoxDecoration(
+              color: c.surfaceRaised,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _viewModel.autoAcceptAiValuedRides
+                    ? AppTheme.accentCyan.withValues(alpha: 0.5)
+                    : c.border,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.auto_awesome,
+                  size: layout.scale(18),
+                  color: _viewModel.autoAcceptAiValuedRides
+                      ? AppTheme.accentCyan
+                      : c.textMuted,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Auto-accept bids within ±5% of AI Value',
+                        style: TextStyle(
+                          color: isDark ? Colors.white : c.textPrimary,
+                          fontSize: layout.fontSize(11.5),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Instant auto-acceptance for fair rides',
+                        style: TextStyle(
+                          color: c.textMuted,
+                          fontSize: layout.fontSize(10),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _viewModel.autoAcceptAiValuedRides,
+                  onChanged: (val) => _viewModel.toggleAutoAcceptAiValuedRides(val),
+                  activeColor: AppTheme.accentCyan,
+                ),
+              ],
+            ),
+          ),
+
           if (requests.isEmpty)
             Container(
               padding: EdgeInsets.all(layout.scale(12)),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: c.surfaceRaised,
                 borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: c.border),
               ),
               child: Row(
                 children: [
@@ -632,8 +697,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       child: Text(
                         'Waiting for ride requests nearby…',
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: c.textMuted,
                           fontSize: layout.fontSize(12),
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
@@ -643,106 +709,197 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             )
           else
             for (final request in requests)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: EdgeInsets.all(layout.scale(12)),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentCyan.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: AppTheme.accentCyan.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              Builder(
+                builder: (context) {
+                  final cachedAiFare = _viewModel.getCachedAiValuation(request.id);
+                  if (cachedAiFare == null) {
+                    _viewModel.getOrCalculateAiValuation(request);
+                  }
+                  final aiFare = cachedAiFare ?? request.offeredFare;
+                  final analysis = _viewModel.analyzeFare(
+                    offeredFare: request.offeredFare,
+                    aiValuation: aiFare,
+                  );
+
+                  // Highlight card border & background if rider's bid is significantly low or fair
+                  final cardBorderColor = analysis.isLow
+                      ? Colors.amber.withValues(alpha: 0.6)
+                      : AppTheme.accentCyan.withValues(alpha: 0.35);
+                  final cardBgColor = analysis.isLow
+                      ? Colors.amber.withValues(alpha: 0.08)
+                      : AppTheme.accentCyan.withValues(alpha: 0.10);
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.all(layout.scale(12)),
+                    decoration: BoxDecoration(
+                      color: cardBgColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: cardBorderColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.local_taxi,
-                          color: AppTheme.accentCyan,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Semantics(
-                            liveRegion: true,
-                            label:
-                                'New ride request for ${CurrencyFormatter.format(request.offeredFare)}',
-                            child: Text(
-                              'New request • ${CurrencyFormatter.format(request.offeredFare)}',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: layout.fontSize(13),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_taxi,
+                              color: analysis.isLow ? Colors.amber : AppTheme.accentCyan,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Semantics(
+                                liveRegion: true,
+                                label:
+                                    'New ride request for ${CurrencyFormatter.format(request.offeredFare)}',
+                                child: Text(
+                                  'New request • ${CurrencyFormatter.format(request.offeredFare)}',
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white : c.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: layout.fontSize(13),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          request.pickup.address.isEmpty
+                              ? '${request.distanceKm.toStringAsFixed(1)} km trip'
+                              : request.pickup.address,
+                          style: TextStyle(
+                            color: c.textMuted,
+                            fontSize: layout.fontSize(11),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                        // AI Market Valuation guidance tag
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: analysis.isLow
+                                ? Colors.amber.withValues(alpha: 0.15)
+                                : AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: analysis.isLow
+                                  ? Colors.amber.withValues(alpha: 0.4)
+                                  : AppTheme.emeraldGreen.withValues(alpha: 0.3),
                             ),
                           ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                analysis.isLow ? Icons.warning_amber_rounded : Icons.auto_awesome,
+                                size: 13,
+                                color: analysis.isLow ? Colors.amber.shade700 : AppTheme.emeraldGreen,
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  analysis.tagMessage,
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(10.5),
+                                    fontWeight: FontWeight.w700,
+                                    color: analysis.isLow
+                                        ? (isDark ? Colors.amber.shade300 : Colors.amber.shade900)
+                                        : (isDark ? AppTheme.emeraldGreen : Colors.green.shade800),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SizedBox(
+                                height: layout.touchTarget(44),
+                                child: OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
+                                  ),
+                                  onPressed: () => _viewModel.submitCounterOffer(
+                                    rideProv: rideProv,
+                                    driver: driver,
+                                    driverName: authProv.currentUser.fullName,
+                                    rideId: request.id,
+                                    fare: request.offeredFare,
+                                  ),
+                                  child: Text(
+                                    'Match ${CurrencyFormatter.format(request.offeredFare)}',
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            // Match AI Recommended Fare Button
+                            Expanded(
+                              child: SizedBox(
+                                height: layout.touchTarget(44),
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: analysis.isLow
+                                        ? Colors.amber.shade700
+                                        : AppTheme.accentCyan,
+                                    foregroundColor: analysis.isLow
+                                        ? Colors.white
+                                        : AppTheme.primaryNavy,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  ),
+                                  onPressed: () => _viewModel.submitCounterOffer(
+                                    rideProv: rideProv,
+                                    driver: driver,
+                                    driverName: authProv.currentUser.fullName,
+                                    rideId: request.id,
+                                    fare: aiFare,
+                                  ),
+                                  child: Text(
+                                    'Match AI (${CurrencyFormatter.format(aiFare)})',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              height: layout.touchTarget(44),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.accentCyan,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                                onPressed: () => _viewModel.submitCounterOffer(
+                                  rideProv: rideProv,
+                                  driver: driver,
+                                  driverName: authProv.currentUser.fullName,
+                                  rideId: request.id,
+                                  fare: request.offeredFare + 50.0,
+                                ),
+                                child: const Text(
+                                  '+50',
+                                  style: TextStyle(fontSize: 11),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      request.pickup.address.isEmpty
-                          ? '${request.distanceKm.toStringAsFixed(1)} km trip'
-                          : request.pickup.address,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: layout.fontSize(11),
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: layout.touchTarget(44),
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                              ),
-                              onPressed: () => _viewModel.submitCounterOffer(
-                                rideProv: rideProv,
-                                driver: driver,
-                                driverName: authProv.currentUser.fullName,
-                                rideId: request.id,
-                                fare: request.offeredFare,
-                              ),
-                              child: Text(
-                                'Match ${CurrencyFormatter.format(request.offeredFare)}',
-                                style: const TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: SizedBox(
-                            height: layout.touchTarget(44),
-                            child: OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppTheme.accentCyan,
-                              ),
-                              onPressed: () => _viewModel.submitCounterOffer(
-                                rideProv: rideProv,
-                                driver: driver,
-                                driverName: authProv.currentUser.fullName,
-                                rideId: request.id,
-                                fare: request.offeredFare + 50.0,
-                              ),
-                              child: const Text(
-                                'Counter +50',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
           SizedBox(height: layout.scale(12)),
         ],
@@ -1004,7 +1161,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               Text(
                 value,
                 style: TextStyle(
-                  color: Colors.white,
+                  color: c.textPrimary,
                   fontWeight: FontWeight.bold,
                   fontSize: layout.fontSize(14),
                 ),
@@ -1012,7 +1169,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               Text(
                 label,
                 style: TextStyle(
-                  color: Colors.white60,
+                  color: c.textMuted,
                   fontSize: layout.fontSize(10),
                 ),
               ),
@@ -1030,6 +1187,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     DriverProvider driverProv,
     AuthProvider authProv,
   ) {
+    final c = AppColors.of(layout.context);
+    final isDark = Theme.of(layout.context).brightness == Brightness.dark;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1039,7 +1198,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: isDark ? Colors.white24 : Colors.black26,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1083,7 +1242,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         Text(
           'Pickup: ${ride.pickup.address}',
           style: TextStyle(
-            color: Colors.white,
+            color: isDark ? Colors.white : c.textPrimary,
             fontWeight: FontWeight.w600,
             fontSize: layout.fontSize(13),
           ),
@@ -1093,65 +1252,232 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         Text(
           'Dropoff: ${ride.dropoff.address}',
           style: TextStyle(
-            color: Colors.white70,
+            color: c.textMuted,
             fontSize: layout.fontSize(12),
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        SizedBox(height: layout.scale(12)),
+        SizedBox(height: layout.scale(8)),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              var plan = _viewModel.getCachedRoutePlan(ride.id);
+              plan ??= await _viewModel.getOrFetchRoute(ride);
+              final routeOption = plan?.routes.firstOrNull ??
+                  RouteOption(
+                    id: 'ride_${ride.id}',
+                    polylinePoints: [
+                      LatLng(ride.pickup.latitude, ride.pickup.longitude),
+                      LatLng(ride.dropoff.latitude, ride.dropoff.longitude),
+                    ],
+                    distanceKm: ride.distanceKm,
+                    durationMin: (ride.distanceKm * 2.0).clamp(5.0, 999.0),
+                    staticDurationMin:
+                        (ride.distanceKm * 2.0).clamp(5.0, 999.0),
+                    summary: '${ride.pickup.address} to ${ride.dropoff.address}',
+                    labels: const ['FASTEST'],
+                    trafficLevel: 'NORMAL',
+                    trafficIntervals: const [],
+                    steps: const [],
+                    economics: const RouteEconomics(
+                      fuelCost: 0,
+                      maintenanceCost: 0,
+                      tollCost: 0,
+                      driverCost: 0,
+                      riderFare: 0,
+                      commission: 0,
+                      driverProfit: 0,
+                      profitPerMin: 0,
+                    ),
+                  );
 
-        if (ride.status == RideStatus.requested) ...[
-          Text(
-            'Counter-Offer (inDrive Bidding):',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: layout.fontSize(12),
+              if (!context.mounted) return;
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => RoutePreviewScreen(
+                    explicitPickup: ride.pickup,
+                    explicitDropoff: ride.dropoff,
+                    explicitRoutes: [routeOption],
+                  ),
+                ),
+              );
+            },
+            icon: const Icon(
+              Icons.directions,
+              size: 16,
+              color: AppTheme.accentCyan,
+            ),
+            label: const Text(
+              'Turn-by-Turn Directions',
+              style: TextStyle(
+                color: AppTheme.accentCyan,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(
+                color: AppTheme.accentCyan,
+                width: 1.2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: layout.touchTarget(48),
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
+        ),
+        SizedBox(height: layout.scale(10)),
+
+        if (ride.status == RideStatus.requested) ...[
+          Builder(
+            builder: (context) {
+              final cachedAiFare = _viewModel.getCachedAiValuation(ride.id);
+              if (cachedAiFare == null) {
+                _viewModel.getOrCalculateAiValuation(ride);
+              }
+              final aiFare = cachedAiFare ?? ride.offeredFare;
+              final analysis = _viewModel.analyzeFare(
+                offeredFare: ride.offeredFare,
+                aiValuation: aiFare,
+              );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: analysis.isLow
+                          ? Colors.amber.withValues(alpha: 0.15)
+                          : AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: analysis.isLow
+                            ? Colors.amber.withValues(alpha: 0.4)
+                            : AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                      ),
                     ),
-                    onPressed: () => _viewModel.submitCounterOffer(
-                      rideProv: rideProv,
-                      driver: driverProv.driverProfile,
-                      driverName: authProv.currentUser.fullName,
-                      rideId: ride.id,
-                      fare: ride.offeredFare,
-                    ),
-                    child: Text(
-                      'Match ${CurrencyFormatter.format(ride.offeredFare)}',
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          analysis.isLow ? Icons.warning_amber_rounded : Icons.auto_awesome,
+                          size: 13,
+                          color: analysis.isLow ? Colors.amber.shade700 : AppTheme.emeraldGreen,
+                        ),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            analysis.tagMessage,
+                            style: TextStyle(
+                              fontSize: layout.fontSize(10.5),
+                              fontWeight: FontWeight.w700,
+                              color: analysis.isLow
+                                  ? (isDark ? Colors.amber.shade300 : Colors.amber.shade900)
+                                  : (isDark ? AppTheme.emeraldGreen : Colors.green.shade800),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: layout.touchTarget(48),
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppTheme.accentCyan,
+                  Text(
+                    'Counter-Offer (inDrive Bidding):',
+                    style: TextStyle(
+                      color: c.textMuted,
+                      fontSize: layout.fontSize(12),
+                      fontWeight: FontWeight.w600,
                     ),
-                    onPressed: () => _viewModel.submitCounterOffer(
-                      rideProv: rideProv,
-                      driver: driverProv.driverProfile,
-                      driverName: authProv.currentUser.fullName,
-                      rideId: ride.id,
-                      fare: ride.offeredFare + 50.0,
-                    ),
-                    child: const Text('Counter +PKR 50'),
                   ),
-                ),
-              ),
-            ],
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: layout.touchTarget(48),
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
+                            ),
+                            onPressed: () => _viewModel.submitCounterOffer(
+                              rideProv: rideProv,
+                              driver: driverProv.driverProfile,
+                              driverName: authProv.currentUser.fullName,
+                              rideId: ride.id,
+                              fare: ride.offeredFare,
+                            ),
+                            child: Text(
+                              'Match ${CurrencyFormatter.format(ride.offeredFare)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: SizedBox(
+                          height: layout.touchTarget(48),
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: analysis.isLow
+                                  ? Colors.amber.shade700
+                                  : AppTheme.accentCyan,
+                              foregroundColor: analysis.isLow
+                                  ? Colors.white
+                                  : AppTheme.primaryNavy,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                            ),
+                            onPressed: () => _viewModel.submitCounterOffer(
+                              rideProv: rideProv,
+                              driver: driverProv.driverProfile,
+                              driverName: authProv.currentUser.fullName,
+                              rideId: ride.id,
+                              fare: aiFare,
+                            ),
+                            child: Text(
+                              'Match AI (${CurrencyFormatter.format(aiFare)})',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        height: layout.touchTarget(48),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.accentCyan,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                          onPressed: () => _viewModel.submitCounterOffer(
+                            rideProv: rideProv,
+                            driver: driverProv.driverProfile,
+                            driverName: authProv.currentUser.fullName,
+                            rideId: ride.id,
+                            fare: ride.offeredFare + 50.0,
+                          ),
+                          child: const Text(
+                            '+50',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
           ),
         ] else if (ride.status == RideStatus.accepted) ...[
           Row(
@@ -1229,7 +1555,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     Text(
                       'Ask Rider for 4-Digit Verification PIN:',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: isDark ? Colors.white : c.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: layout.fontSize(12),
                       ),
@@ -1248,16 +1574,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           maxLength: 4,
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: Colors.white,
+                            color: isDark ? Colors.white : c.textPrimary,
                             fontSize: layout.fontSize(18),
                             letterSpacing: 8,
                             fontWeight: FontWeight.bold,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             counterText: '',
                             hintText: 'PIN',
                             hintStyle: TextStyle(
-                              color: Colors.white30,
+                              color: isDark ? Colors.white30 : c.textMuted.withValues(alpha: 0.5),
                               letterSpacing: 4,
                             ),
                           ),
@@ -1347,7 +1673,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       child: Text(
                         'Collect ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} in cash',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: isDark ? Colors.white : c.textPrimary,
                           fontWeight: FontWeight.w700,
                           fontSize: layout.fontSize(13),
                         ),

@@ -1,7 +1,6 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import '../../services/native_map_service.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -39,8 +38,10 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   void initState() {
     super.initState();
     _searchController.text = widget.initialQuery;
-    if (widget.initialQuery.trim().isNotEmpty) {
-      _handleQuery(widget.initialQuery);
+    if (widget.initialQuery.trim().isNotEmpty &&
+        widget.initialQuery != 'Current Location' &&
+        widget.initialQuery != 'Loading current location...') {
+      _fetchSuggestions(widget.initialQuery);
     }
   }
 
@@ -53,55 +54,37 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
   void _onQueryChanged(String query) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
-      _handleQuery(query);
+    _debounce = Timer(const Duration(milliseconds: 250), () {
+      _fetchSuggestions(query);
     });
   }
 
-  Future<void> _handleQuery(String query) async {
-    final parsed = CoordinateParser.tryParse(query);
+  Future<void> _handleSubmit(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return;
+
+    final riderPos = _riderLatLng();
+    final parsed = CoordinateParser.tryParse(
+      trimmed,
+      referenceLat: riderPos?.latitude,
+      referenceLng: riderPos?.longitude,
+    );
+
     if (parsed != null) {
-      _debounce?.cancel();
-      setState(() {
-        _isLoading = true;
-        _suggestions = [];
-        _hasSearched = true;
-      });
-
-      String address;
-      try {
-        debugPrint(
-          '[GEO-DEBUG] parsed: lat=${parsed.latitude}, lng=${parsed.longitude}',
-        );
-        address = await _mapService.reverseGeocode(
-          parsed.latitude,
-          parsed.longitude,
-        );
-        debugPrint('[GEO-DEBUG] reverseGeocode resolved address: $address');
-        if (address.trim().isEmpty || address.startsWith('Pinned Spot') || address.startsWith('Location (')) {
-          address =
-              'Pinned Location (${parsed.latitude.toStringAsFixed(4)}, ${parsed.longitude.toStringAsFixed(4)})';
-        }
-      } catch (e) {
-        debugPrint('[GEO-DEBUG] reverseGeocode error: $e');
-        address =
-            'Pinned Location (${parsed.latitude.toStringAsFixed(4)}, ${parsed.longitude.toStringAsFixed(4)})';
-      }
-
       if (!mounted) return;
-      setState(() => _isLoading = false);
-
       Navigator.of(context).pop(
         LocationPoint(
           latitude: parsed.latitude,
           longitude: parsed.longitude,
-          address: address,
+          address: parsed.label ?? trimmed,
         ),
       );
       return;
     }
 
-    _fetchSuggestions(query);
+    if (_suggestions.isNotEmpty) {
+      _selectPlace(_suggestions.first);
+    }
   }
 
   LatLng? _riderLatLng() {
@@ -136,6 +119,20 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
   Future<void> _selectPlace(PlaceSuggestion place) async {
     var coords = place.coordinates;
+    if (coords == null && (place.placeId.startsWith('pinned:') || place.placeId.startsWith('plus:'))) {
+      final parts = place.placeId.split(':');
+      if (parts.length >= 2) {
+        final coordParts = parts[1].split(',');
+        if (coordParts.length == 2) {
+          final lat = double.tryParse(coordParts[0]);
+          final lng = double.tryParse(coordParts[1]);
+          if (lat != null && lng != null) {
+            coords = LatLng(lat, lng);
+          }
+        }
+      }
+    }
+
     if (coords == null) {
       setState(() => _isLoading = true);
       coords = await _mapService.resolvePlace(place.placeId);
@@ -154,10 +151,13 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
       return;
     }
 
-    final address = [
-      place.mainText,
-      place.secondaryText,
-    ].where((s) => s.trim().isNotEmpty).join(', ');
+    final address = place.placeId.startsWith('pinned:') ||
+            place.placeId.startsWith('plus:')
+        ? place.mainText
+        : [
+            place.mainText,
+            place.secondaryText,
+          ].where((s) => s.trim().isNotEmpty).join(', ');
 
     Navigator.of(context).pop(
       LocationPoint(
@@ -180,12 +180,12 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          widget.title,
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-            color: c.textPrimary,
-          ),
+            widget.title,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 18,
+              color: c.textPrimary,
+            ),
         ),
         leading: IconButton(
           tooltip: 'Back',
@@ -227,9 +227,11 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                           color: c.textPrimary,
                           fontSize: 16,
                         ),
+                        textInputAction: TextInputAction.search,
+                        onSubmitted: (val) => _handleSubmit(val),
                         decoration: InputDecoration(
                           hintText:
-                              'Search street, area, landmark in Pakistan...',
+                              'Search street, Plus Code, coordinates...',
                           hintStyle: TextStyle(
                             color: c.textMuted,
                             fontSize: 14,
@@ -305,6 +307,10 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                         ),
                         itemBuilder: (context, index) {
                           final item = _suggestions[index];
+                          final isPinned = item.placeId.startsWith('pinned:') ||
+                              item.placeId.startsWith('plus:') ||
+                              item.placeId.startsWith('coord:');
+
                           return ListTile(
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -313,22 +319,69 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                             leading: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: isDark ? c.surfaceRaised : c.surfaceMuted,
+                                color: isPinned
+                                    ? (isDark
+                                        ? AppTheme.accentCyan.withValues(alpha: 0.18)
+                                        : AppTheme.emeraldGreen.withValues(alpha: 0.15))
+                                    : (isDark ? c.surfaceRaised : c.surfaceMuted),
                                 shape: BoxShape.circle,
                               ),
                               child: Icon(
-                                Icons.location_on,
-                                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                                isPinned
+                                    ? Icons.push_pin_rounded
+                                    : Icons.location_on,
+                                color: isPinned
+                                    ? (isDark
+                                        ? AppTheme.accentCyan
+                                        : AppTheme.emeraldGreen)
+                                    : (isDark
+                                        ? AppTheme.accentCyan
+                                        : AppTheme.primaryBlue),
                                 size: 20,
                               ),
                             ),
-                            title: Text(
-                              item.mainText,
-                              style: TextStyle(
-                                color: c.textPrimary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
+                            title: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.mainText,
+                                    style: TextStyle(
+                                      color: isPinned
+                                          ? (isDark
+                                              ? AppTheme.accentCyan
+                                              : AppTheme.primaryBlue)
+                                          : c.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ),
+                                if (isPinned)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: (isDark
+                                              ? AppTheme.accentCyan
+                                              : AppTheme.emeraldGreen)
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'PINNED',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        color: isDark
+                                            ? AppTheme.accentCyan
+                                            : AppTheme.emeraldGreen,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             subtitle: item.secondaryText.isNotEmpty
                                 ? Text(
@@ -353,31 +406,92 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
   Widget _buildEmptyState(String trimmed, AppColors c) {
     if (trimmed.isEmpty && !_hasSearched) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.search, color: c.textMuted, size: 32),
-              const SizedBox(height: 12),
-              Text(
-                'Type a destination or area name',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.textSecondary, fontSize: 14),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Tip: paste coordinates to set exact location',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: c.textMuted,
-                  fontSize: 12,
+              child: const Icon(
+                Icons.my_location,
+                color: AppTheme.emeraldGreen,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              'Use Current Location',
+              style: TextStyle(
+                color: c.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            subtitle: Text(
+              'Start trip from your GPS position',
+              style: TextStyle(
+                color: c.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            onTap: () async {
+              final loc = CustomChangeNotifierProvider.read<LocationProvider>(
+                context,
+              );
+              String address = 'Current Location';
+              try {
+                final resolved = await _mapService.reverseGeocode(
+                  loc.latitude,
+                  loc.longitude,
+                );
+                if (resolved.isNotEmpty) address = resolved;
+              } catch (_) {}
+              if (!mounted) return;
+              Navigator.of(context).pop(
+                LocationPoint(
+                  latitude: loc.latitude,
+                  longitude: loc.longitude,
+                  address: address,
                 ),
-              ),
-            ],
+              );
+            },
           ),
-        ),
+          Divider(color: c.border, height: 1),
+          const SizedBox(height: 24),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.search, color: c.textMuted, size: 32),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Type a destination or area name',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: c.textSecondary, fontSize: 14),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tip: paste coordinates to set exact location',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: c.textMuted,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       );
     } else if (trimmed.isEmpty || trimmed.length < 2) {
       return Center(

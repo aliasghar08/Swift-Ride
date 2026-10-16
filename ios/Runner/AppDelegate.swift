@@ -1,6 +1,5 @@
 import Flutter
 import UIKit
-import CoreLocation
 import PassKit
 import UserNotifications
 import GoogleMaps
@@ -8,20 +7,10 @@ import AVFoundation
 import Network
 
 @main
-@objc class AppDelegate: FlutterAppDelegate, CLLocationManagerDelegate {
+@objc class AppDelegate: FlutterAppDelegate {
   private let speechSynthesizer = AVSpeechSynthesizer()
   private let networkMonitor = NWPathMonitor()
   private var currentNetworkStatus: String = "wifi"
-
-  // MARK: - Location state
-  private let locationManager = CLLocationManager()
-  private let geocoder = CLGeocoder()
-  private var lastKnownLocation: CLLocation?
-
-  /// In-flight `getCurrentLocation` calls that are waiting for a fresh GPS fix.
-  /// Each gets a UUID so we can time it out individually and never call a
-  /// FlutterResult twice (which crashes the engine).
-  private var pendingLocationRequests: [(id: UUID, result: FlutterResult)] = []
 
   override func application(
     _ application: UIApplication,
@@ -36,14 +25,17 @@ import Network
 
     GeneratedPluginRegistrant.register(with: self)
 
-    locationManager.delegate = self
-    locationManager.desiredAccuracy = kCLLocationAccuracyBest
-    locationManager.distanceFilter = 5.0
-    locationManager.pausesLocationUpdatesAutomatically = false
-    locationManager.allowsBackgroundLocationUpdates = false
-
     if let registrar = self.registrar(forPlugin: "SwiftRideApp") {
-      setupMethodChannels(binaryMessenger: registrar.messenger())
+      let messenger = registrar.messenger()
+      setupMethodChannels(binaryMessenger: messenger)
+
+      let locationService = NativeLocationService.register(with: messenger)
+      _ = NativeMapService.register(with: messenger, locationService: locationService)
+
+      registrar.register(
+        NativeMapViewFactory(messenger: messenger),
+        withId: "com.swiftride.app/native_map_view"
+      )
     }
 
     let queue = DispatchQueue(label: "com.swiftride.networkMonitor")
@@ -77,97 +69,9 @@ import Network
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
   }
 
-  // MARK: - CLLocationManagerDelegate
-
-  func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-    guard let loc = locations.last else { return }
-    // Reject stale / wildly inaccurate fixes.
-    guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy < 200 else { return }
-    lastKnownLocation = loc
-    NSLog("[SwiftRide] fix: %.5f, %.5f (±%.1fm)",
-          loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
-    resolvePendingLocationRequests(with: loc)
-  }
-
-  func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-    // kCLError codes:
-    //   0 = locationUnknown    → transient, GPS warming up. Ignore and keep waiting.
-    //   1 = denied             → permission revoked mid-flight. Fail fast.
-    //   2 = network            → no route to location services.
-    //   3 = headingFailure     → heading unavailable, ignore.
-    let nsError = error as NSError
-    let code = nsError.code
-
-    NSLog("[SwiftRide] location error: %@ (code=%ld)", error.localizedDescription, code)
-
-    if nsError.domain == kCLErrorDomain {
-      switch code {
-      case 0, 3:
-        // Transient. Do NOT fail pending requests — the fresh fix will arrive
-        // shortly (or the 12s timeout will fire and fail them cleanly).
-        return
-      default:
-        break
-      }
-    }
-
-    // Real failure: denied, network, etc. Fail everything waiting.
-    failAllPendingLocationRequests(
-      code: "LOCATION_ERROR",
-      message: error.localizedDescription
-    )
-  }
-
-  func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-    let status = manager.authorizationStatus
-    NSLog("[SwiftRide] authorization status changed: %ld", status.rawValue)
-    switch status {
-    case .authorizedWhenInUse, .authorizedAlways:
-      manager.startUpdatingLocation()
-    case .denied, .restricted:
-      failAllPendingLocationRequests(
-        code: "PERMISSION_DENIED",
-        message: "Location permission was denied."
-      )
-    default:
-      break
-    }
-  }
-
-  private func resolvePendingLocationRequests(with loc: CLLocation) {
-    guard !pendingLocationRequests.isEmpty else { return }
-    let payload = Self.serialize(loc)
-    let pending = pendingLocationRequests
-    pendingLocationRequests.removeAll()
-    for req in pending { req.result(payload) }
-  }
-
-  private func failAllPendingLocationRequests(code: String, message: String) {
-    guard !pendingLocationRequests.isEmpty else { return }
-    let pending = pendingLocationRequests
-    pendingLocationRequests.removeAll()
-    for req in pending {
-      req.result(FlutterError(code: code, message: message, details: nil))
-    }
-  }
-
-  private static func serialize(_ loc: CLLocation) -> [String: Any] {
-    return [
-      "latitude": loc.coordinate.latitude,
-      "longitude": loc.coordinate.longitude,
-      "heading": loc.course >= 0 ? loc.course : 0.0,
-      "speed": loc.speed >= 0 ? loc.speed : 0.0,
-      "altitude": loc.altitude,
-      "accuracy": loc.horizontalAccuracy,
-      "timestamp": loc.timestamp.timeIntervalSince1970 * 1000.0,
-      "isMock": false,
-    ]
-  }
-
   // MARK: - Method Channels
 
   private func setupMethodChannels(binaryMessenger: FlutterBinaryMessenger) {
-    let locationChannel = FlutterMethodChannel(name: "com.swiftride.app/location", binaryMessenger: binaryMessenger)
     let paymentChannel = FlutterMethodChannel(name: "com.swiftride.app/payment", binaryMessenger: binaryMessenger)
     let safetyChannel = FlutterMethodChannel(name: "com.swiftride.app/safety", binaryMessenger: binaryMessenger)
     let deviceChannel = FlutterMethodChannel(name: "com.swiftride.app/device", binaryMessenger: binaryMessenger)
@@ -176,118 +80,8 @@ import Network
     let launcherChannel = FlutterMethodChannel(name: "com.swiftride.app/launcher", binaryMessenger: binaryMessenger)
     let connectivityChannel = FlutterMethodChannel(name: "com.swiftride.app/connectivity", binaryMessenger: binaryMessenger)
     let audioChannel = FlutterMethodChannel(name: "com.swiftride.app/audio", binaryMessenger: binaryMessenger)
-    let mapChannel = FlutterMethodChannel(name: "com.swiftride.app/map", binaryMessenger: binaryMessenger)
 
-    // 1. Native Location & Geocoding
-    locationChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      guard let self = self else {
-        result(FlutterError(code: "NO_APPDELEGATE", message: "AppDelegate deallocated", details: nil))
-        return
-      }
-      switch call.method {
-
-      case "checkLocationPermissions":
-        let status = self.locationManager.authorizationStatus
-        let ok = (status == .authorizedWhenInUse || status == .authorizedAlways)
-        result(ok)
-
-      case "requestLocationPermissions":
-        let status = self.locationManager.authorizationStatus
-        if status == .notDetermined {
-          self.locationManager.requestWhenInUseAuthorization()
-          result(false)
-        } else {
-          result(status == .authorizedWhenInUse || status == .authorizedAlways)
-        }
-
-      case "getCurrentLocation":
-        let status = self.locationManager.authorizationStatus
-        if status == .denied || status == .restricted {
-          result(FlutterError(code: "PERMISSION_DENIED",
-                              message: "Location permission not granted.",
-                              details: nil))
-          return
-        }
-
-        // Fast path 1: If we have an existing valid fix, return it immediately.
-        // Never discard fixes for stationary devices just because time elapsed without 5m movement.
-        if let loc = self.lastKnownLocation,
-           loc.horizontalAccuracy >= 0,
-           loc.horizontalAccuracy < 200 {
-          result(Self.serialize(loc))
-          return
-        }
-
-        // Fast path 2: Check locationManager.location if lastKnownLocation was not yet assigned.
-        if let loc = self.locationManager.location,
-           loc.horizontalAccuracy >= 0,
-           loc.horizontalAccuracy < 200 {
-          self.lastKnownLocation = loc
-          result(Self.serialize(loc))
-          return
-        }
-
-        // Slow path: Request fresh location and hold FlutterResult until fix arrives or times out.
-        let id = UUID()
-        self.pendingLocationRequests.append((id: id, result: result))
-
-        if status == .notDetermined {
-          self.locationManager.requestWhenInUseAuthorization()
-        }
-        self.locationManager.startUpdatingLocation()
-        if status == .authorizedWhenInUse || status == .authorizedAlways {
-          self.locationManager.requestLocation()
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
-          guard let self = self else { return }
-          if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
-            let req = self.pendingLocationRequests.remove(at: idx)
-            if let fallback = self.lastKnownLocation ?? self.locationManager.location,
-               fallback.horizontalAccuracy >= 0, fallback.horizontalAccuracy < 200 {
-              req.result(Self.serialize(fallback))
-            } else {
-              req.result(FlutterError(code: "LOCATION_TIMEOUT",
-                                      message: "No GPS fix within 12s.",
-                                      details: nil))
-            }
-          }
-        }
-
-      case "startLocationUpdates":
-        self.locationManager.startUpdatingLocation()
-        result(true)
-
-      case "stopLocationUpdates":
-        self.locationManager.stopUpdatingLocation()
-        result(true)
-
-      case "reverseGeocode":
-        if let args = call.arguments as? [String: Any],
-           let lat = args["latitude"] as? Double,
-           let lng = args["longitude"] as? Double {
-          let loc = CLLocation(latitude: lat, longitude: lng)
-          self.geocoder.reverseGeocodeLocation(loc) { placemarks, _ in
-            if let p = placemarks?.first {
-              var parts: [String] = []
-              if let name = p.name, !name.isEmpty { parts.append(name) }
-              if let subLoc = p.subLocality, !subLoc.isEmpty { parts.append(subLoc) }
-              if let city = p.locality, !city.isEmpty { parts.append(city) }
-              result(parts.joined(separator: ", "))
-            } else {
-              result(String(format: "Location (%.4f, %.4f)", lat, lng))
-            }
-          }
-        } else {
-          result("Selected Location")
-        }
-
-      default:
-        result(FlutterMethodNotImplemented)
-      }
-    }
-
-    // 2. Payment Channel
+    // 1. Payment Channel
     paymentChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "checkNativePaySupport":
@@ -306,7 +100,7 @@ import Network
       }
     }
 
-    // 3. Safety Channel
+    // 2. Safety Channel
     safetyChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "triggerEmergencyAlert", "sendEmergencySms":
@@ -319,7 +113,7 @@ import Network
       }
     }
 
-    // 4. Device Channel
+    // 3. Device Channel
     deviceChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "setKeepScreenOn":
@@ -348,7 +142,7 @@ import Network
       }
     }
 
-    // 5. Storage Channel
+    // 4. Storage Channel
     storageChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       let defaults = UserDefaults.standard
       guard let args = call.arguments as? [String: Any],
@@ -377,7 +171,7 @@ import Network
       }
     }
 
-    // 6. Notifications
+    // 5. Notifications
     notificationChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "requestNotificationPermissions":
@@ -411,7 +205,7 @@ import Network
       }
     }
 
-    // 7. Launcher
+    // 6. Launcher
     launcherChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "launchDialer":
@@ -445,7 +239,7 @@ import Network
       }
     }
 
-    // 8. Connectivity
+    // 7. Connectivity
     connectivityChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "getConnectivityStatus": result(self?.currentNetworkStatus ?? "wifi")
@@ -453,7 +247,7 @@ import Network
       }
     }
 
-    // 9. Audio
+    // 8. Audio
     audioChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard let self = self else { return }
       switch call.method {
@@ -471,25 +265,6 @@ import Network
         result(true)
       case "stopAudio":
         self.speechSynthesizer.stopSpeaking(at: .immediate)
-        result(true)
-      default:
-        result(FlutterMethodNotImplemented)
-      }
-    }
-
-    // 10. Map utility
-    mapChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
-      switch call.method {
-      case "calculateDistance":
-        let args = call.arguments as? [String: Any]
-        let lat1 = args?["lat1"] as? Double ?? 0.0
-        let lon1 = args?["lon1"] as? Double ?? 0.0
-        let lat2 = args?["lat2"] as? Double ?? 0.0
-        let lon2 = args?["lon2"] as? Double ?? 0.0
-        let meters = CLLocation(latitude: lat1, longitude: lon1)
-          .distance(from: CLLocation(latitude: lat2, longitude: lon2))
-        result(meters / 1000.0)
-      case "animateCamera", "addMarker", "clearMarkers", "setPolyline":
         result(true)
       default:
         result(FlutterMethodNotImplemented)

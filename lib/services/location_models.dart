@@ -1,5 +1,6 @@
 /// Shared location data types used by every platform implementation of
 /// LocationService (io, web, stub).
+library;
 
 class NativeLocationPoint {
   final double latitude;

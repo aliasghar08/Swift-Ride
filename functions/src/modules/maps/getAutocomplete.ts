@@ -86,6 +86,34 @@ export const getAutocomplete = onCall(
       targetRadiusMeters = 50000;
     }
 
+    // 2b. Detect Plus Code in query (e.g. "78G5+48 Jhang, Pakistan", "8J3J78G5+48")
+    const plusCodeRegex = /\b([23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,4})\b/i;
+    const plusMatch = data.query.match(plusCodeRegex);
+    const plusPredictions: any[] = [];
+
+    if (plusMatch) {
+      try {
+        const geoUrl = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+        geoUrl.searchParams.set('address', data.query);
+        geoUrl.searchParams.set('key', apiKey);
+        geoUrl.searchParams.set('components', 'country:pk');
+
+        const geoRes = await fetch(geoUrl.toString());
+        const geoJson = await geoRes.json();
+        if (geoJson.status === 'OK' && geoJson.results?.length > 0) {
+          const first = geoJson.results[0];
+          plusPredictions.push({
+            placeId: `plus:${first.geometry.location.lat},${first.geometry.location.lng}:${first.formatted_address}`,
+            description: first.formatted_address,
+            mainText: `Pinned Location (${plusMatch[1].toUpperCase()})`,
+            secondaryText: first.formatted_address,
+          });
+        }
+      } catch (plusErr) {
+        console.warn('[getAutocomplete] Geocoding API lookup for Plus Code failed:', plusErr);
+      }
+    }
+
     // 3. Try Places API (New) Autocomplete with Pakistan region filter & hard location restriction
     try {
       const newPlacesBody: Record<string, any> = {
@@ -135,7 +163,7 @@ export const getAutocomplete = onCall(
             })
             .filter((p: any) => p && p.placeId);
 
-          return { available: true, predictions };
+          return { available: true, predictions: [...plusPredictions, ...predictions] };
         }
       } else {
         console.warn('[getAutocomplete] Places API (New) returned status', newRes.status, await newRes.text());
@@ -166,21 +194,23 @@ export const getAutocomplete = onCall(
 
       if (json.status !== 'OK' && json.status !== 'ZERO_RESULTS') {
         console.warn('[getAutocomplete] Legacy Places Autocomplete returned', json.status, json.error_message);
-        return { predictions: [], available: false };
+        return { predictions: plusPredictions, available: plusPredictions.length > 0 };
       }
+
+      const legacyPreds = (json.predictions || []).map((p: any) => ({
+        placeId: p.place_id,
+        description: p.description,
+        mainText: p.structured_formatting?.main_text || p.description,
+        secondaryText: p.structured_formatting?.secondary_text || '',
+      }));
 
       return {
         available: true,
-        predictions: (json.predictions || []).map((p: any) => ({
-          placeId: p.place_id,
-          description: p.description,
-          mainText: p.structured_formatting?.main_text || p.description,
-          secondaryText: p.structured_formatting?.secondary_text || '',
-        })),
+        predictions: [...plusPredictions, ...legacyPreds],
       };
     } catch (err) {
       console.warn('[getAutocomplete] Places Autocomplete failed completely', err);
-      return { predictions: [], available: false };
+      return { predictions: plusPredictions, available: plusPredictions.length > 0 };
     }
   }
 );

@@ -25,9 +25,9 @@ class AppConstants {
   static const double subscriptionMonthly = 3500.00; // PKR 3,500/month
   static const double subscriptionYearly = 35000.00; // PKR 35,000/year
 
-  // Default coordinate center (Islamabad, Pakistan)
-  static const double defaultLat = 33.6844;
-  static const double defaultLng = 73.0479;
+  // Default coordinate center (Jhang, Punjab, Pakistan)
+  static const double defaultLat = 31.2785;
+  static const double defaultLng = 72.3317;
 
   // Firestore Collection Names
   static const String usersCollection = 'users';

@@ -8,9 +8,7 @@ import 'package:swiftride/providers/location_provider.dart';
 import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/providers/safety_provider.dart';
 import 'package:swiftride/ai/ai.dart';
-import 'package:swiftride/domain/models/location_point_model.dart';
 import 'package:swiftride/main.dart';
-import 'package:swiftride/presentation/rider/address_search_screen.dart';
 
 void main() {
   testWidgets('SwiftRide App loads with Rider Mode and Zero Commission branding', (WidgetTester tester) async {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 import '../../services/native_map_service.dart';
 
@@ -12,14 +13,42 @@ import '../../services/map_service.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
 
+/// Hybrid signal returned when rider chooses to select location on map.
+/// Inherits from [LocationPoint] for compatibility with [Navigator.push<LocationPoint>]
+/// and mixes in [MapMixin] for compatibility with [Navigator.pop({'chooseOnMap': true})].
+class ChooseOnMapSignal extends LocationPoint with MapMixin<String, dynamic> {
+  final Map<String, dynamic> _data;
+
+  ChooseOnMapSignal({bool isPickup = false})
+      : _data = {'chooseOnMap': true, 'isPickup': isPickup},
+        super(latitude: 0, longitude: 0, address: '__CHOOSE_ON_MAP__');
+
+  @override
+  dynamic operator [](Object? key) => _data[key];
+
+  @override
+  void operator []=(String key, dynamic value) => _data[key] = value;
+
+  @override
+  void clear() => _data.clear();
+
+  @override
+  Iterable<String> get keys => _data.keys;
+
+  @override
+  dynamic remove(Object? key) => _data.remove(key);
+}
+
 class AddressSearchScreen extends StatefulWidget {
   final String title;
   final String initialQuery;
+  final bool isPickup;
 
   const AddressSearchScreen({
     super.key,
     this.title = 'Select Address',
     this.initialQuery = '',
+    this.isPickup = false,
   });
 
   @override
@@ -283,11 +312,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                 borderRadius: BorderRadius.circular(12),
                 onTap: () {
                   Navigator.of(context).pop(
-                    const LocationPoint(
-                      latitude: 0,
-                      longitude: 0,
-                      address: '__CHOOSE_ON_MAP__',
-                    ),
+                    ChooseOnMapSignal(isPickup: widget.isPickup),
                   );
                 },
                 child: Container(

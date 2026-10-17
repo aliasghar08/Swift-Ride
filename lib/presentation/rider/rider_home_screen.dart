@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/provider/custom_provider.dart';
@@ -49,6 +50,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   bool _userCustomPickup = false;
   VoidCallback? _locProvListener;
   LocationProvider? _attachedLocProv;
+
+  // Choose on Map & Camera Pinning State
+  bool _isPinningOnMap = false;
+  bool _isPinningDestination = true;
+  LatLng _mapCenterLocation = const LatLng(31.2785, 72.3317);
+  String _pinnedAddress = '';
+  Timer? _cameraIdleDebounce;
 
   // UI Minimization States
   bool _isTopCardMinimized = false;
@@ -168,32 +176,39 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   }
 
   Future<void> _openAddressSearch({required bool isPickup}) async {
-    final result = await Navigator.of(context).push<LocationPoint>(
+    final result = await Navigator.of(context).push<dynamic>(
       MaterialPageRoute(
         builder: (_) => AddressSearchScreen(
           title: isPickup ? 'Set Pickup Location' : 'Set Destination',
           initialQuery: isPickup
               ? (_userCustomPickup ? _viewModel.pickupController.text : '')
-              : _viewModel.dropoffController.text,
+              : _viewModel.dropoffLocation?.address ?? _viewModel.dropoffController.text,
+          isPickup: isPickup,
         ),
       ),
     );
     if (!mounted || result == null) return;
 
-    if (result.address == '__CHOOSE_ON_MAP__') {
-      _startPinPicking(isPickup: isPickup);
+    if ((result is Map && result['chooseOnMap'] == true) ||
+        (result is LocationPoint && result.address == '__CHOOSE_ON_MAP__')) {
+      final isPick = (result is Map && result.containsKey('isPickup'))
+          ? (result['isPickup'] as bool)
+          : isPickup;
+      _startPinPicking(isPickup: isPick);
       return;
     }
+
+    final point = result as LocationPoint;
     if (isPickup) {
       _userCustomPickup = true;
       _userMovedMap = false;
       _lastRouteId = null;
-      _viewModel.setPickup(result);
+      await _viewModel.setPickup(point);
       if (_viewModel.dropoffLocation == null) {
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
-              target: LatLng(result.latitude, result.longitude),
+              target: LatLng(point.latitude, point.longitude),
               zoom: 16.0,
             ),
           ),
@@ -206,7 +221,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       }
       _userMovedMap = false;
       _lastRouteId = null;
-      _viewModel.setDropoff(result);
+      await _viewModel.setDestination(point);
       if (_fareSheetController.isAttached) {
         _fareSheetController.animateTo(
           0.45,
@@ -218,25 +233,65 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   }
 
   void _startPinPicking({required bool isPickup}) {
+    setState(() {
+      _isPinningOnMap = true;
+      _isPinningDestination = !isPickup;
+    });
     final current = isPickup ? _viewModel.pickupLocation : _viewModel.dropoffLocation;
     _viewModel.startPinPicker(
       isPickup: isPickup,
       initialPoint: current,
     );
-    if (current != null && _mapController != null) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(current.latitude, current.longitude),
-            zoom: 16.5,
+    if (current != null) {
+      _mapCenterLocation = LatLng(current.latitude, current.longitude);
+      _pinnedAddress = current.address;
+      if (_mapController != null) {
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(current.latitude, current.longitude),
+              zoom: 16.5,
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } else {
+      try {
+        final loc = CustomChangeNotifierProvider.read<LocationProvider>(context);
+        _mapCenterLocation = LatLng(loc.latitude, loc.longitude);
+      } catch (_) {}
+      _pinnedAddress = 'Positioning pin...';
     }
   }
 
-  void _confirmAndApplyPin() {
-    final isPickup = _viewModel.isPinningPickup;
+  void _cancelPinPicking() {
+    _cameraIdleDebounce?.cancel();
+    setState(() {
+      _isPinningOnMap = false;
+    });
+    _viewModel.cancelPinPicker();
+  }
+
+  Future<void> _confirmAndApplyPin() async {
+    final isPickup = _isPinningOnMap ? !_isPinningDestination : _viewModel.isPinningPickup;
+    final lat = _mapCenterLocation.latitude;
+    final lng = _mapCenterLocation.longitude;
+    final addr = _pinnedAddress.trim().isNotEmpty
+        ? _pinnedAddress
+        : (_viewModel.tempPinLocation?.address.trim().isNotEmpty ?? false
+            ? _viewModel.tempPinLocation!.address
+            : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}');
+
+    final point = LocationPoint(
+      latitude: lat,
+      longitude: lng,
+      address: addr,
+    );
+
+    setState(() {
+      _isPinningOnMap = false;
+    });
+
     if (!isPickup && _viewModel.pickupLocation == null) {
       final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
       _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
@@ -244,9 +299,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     _viewModel.confirmPinLocation();
     _userMovedMap = false;
     _lastRouteId = null;
+
     if (isPickup) {
       _userCustomPickup = true;
+      await _viewModel.setPickup(point);
     } else {
+      await _viewModel.setDestination(point);
       if (_fareSheetController.isAttached) {
         _fareSheetController.animateTo(
           0.45,
@@ -255,21 +313,27 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         );
       }
     }
-    final target = isPickup ? _viewModel.pickupLocation : _viewModel.dropoffLocation;
-    if (target != null && _mapController != null && (_viewModel.routes.isEmpty || isPickup)) {
-      _mapController?.animateCamera(
-        CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target: LatLng(target.latitude, target.longitude),
-            zoom: 16.0,
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_viewModel.selectedRoute != null &&
+          _viewModel.selectedRoute!.polylinePoints.isNotEmpty) {
+        _fitSelectedRoute();
+      } else {
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(point.latitude, point.longitude),
+              zoom: 16.0,
+            ),
           ),
-        ),
-      );
-    }
+        );
+      }
+    });
   }
 
   @override
   void dispose() {
+    _cameraIdleDebounce?.cancel();
     if (_locProvListener != null && _attachedLocProv != null) {
       _attachedLocProv!.removeListener(_locProvListener!);
       _locProvListener = null;
@@ -499,7 +563,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             children: [
               Listener(
                 onPointerDown: (_) {
-                  if (!_userMovedMap && !_viewModel.isPinMode) {
+                  if (!_userMovedMap && !_isPinningOnMap && !_viewModel.isPinMode) {
                     setState(() => _userMovedMap = true);
                   }
                 },
@@ -507,12 +571,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   initialCenter: LatLng(locProv.latitude, locProv.longitude),
                   initialZoom: 15,
                   showCenterPin: false,
-                  semanticsLabel: _viewModel.isPinMode
+                  semanticsLabel: (_isPinningOnMap || _viewModel.isPinMode)
                       ? 'Map with a pin at the centre. Drag to choose a location.'
                       : (currentRide != null
                             ? 'Live map of your trip. Status: ${currentRide.status.displayName}.'
                             : 'Map of your area. Choose a pickup and destination to see a route.'),
-                  mode: _viewModel.isPinMode
+                  mode: (_isPinningOnMap || _viewModel.isPinMode)
                       ? MapMode.pinPicker
                       : (currentRide != null
                             ? MapMode.liveTracking
@@ -522,14 +586,39 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   onControllerCreated: (controller) {
                     _mapController = controller;
                   },
-                  onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(
-                    coords.latitude,
-                    coords.longitude,
-                  ),
-                  onCameraIdle: (coords) => _viewModel.updatePinnedCoordinates(
-                    coords.latitude,
-                    coords.longitude,
-                  ),
+                  onCameraMove: (target) {
+                    _mapCenterLocation = target;
+                  },
+                  onPinChanged: (coords) {
+                    _mapCenterLocation = coords;
+                    _viewModel.updatePinnedCoordinates(
+                      coords.latitude,
+                      coords.longitude,
+                    );
+                  },
+                  onCameraIdle: (coords) {
+                    _mapCenterLocation = coords;
+                    _cameraIdleDebounce?.cancel();
+                    _cameraIdleDebounce = Timer(const Duration(milliseconds: 300), () async {
+                      if (!mounted) return;
+                      try {
+                        final address = await MapService.instance.reverseGeocode(
+                          coords.latitude,
+                          coords.longitude,
+                        );
+                        if (!mounted) return;
+                        setState(() {
+                          _pinnedAddress = address;
+                        });
+                      } catch (e) {
+                        debugPrint('[RiderHome] reverseGeocode error: $e');
+                      }
+                    });
+                    _viewModel.updatePinnedCoordinates(
+                      coords.latitude,
+                      coords.longitude,
+                    );
+                  },
                   markers: {
                     if (currentRide == null &&
                         _viewModel.dropoffLocation != null &&
@@ -597,7 +686,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
               ),
 
-              if (currentRide == null && !_viewModel.isPinMode)
+              if (currentRide == null && !_isPinningOnMap && !_viewModel.isPinMode)
                 SafeArea(
                   child: Align(
                     alignment: Alignment.topCenter,
@@ -625,7 +714,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
 
-              if (_viewModel.isPinMode) ...[
+              if (_isPinningOnMap || _viewModel.isPinMode) ...[
                 // Centered Pin Pointer that stays anchored while map drags beneath it
                 Positioned.fill(
                   child: IgnorePointer(
@@ -641,7 +730,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                               color: Colors.black.withValues(alpha: 0.25),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: (_viewModel.isPinningPickup
+                                color: ((_isPinningOnMap
+                                            ? !_isPinningDestination
+                                            : _viewModel.isPinningPickup)
                                         ? AppTheme.emeraldGreen
                                         : AppTheme.sunsetCoral)
                                     .withValues(alpha: 0.8),
@@ -651,7 +742,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           ),
                           // Pin Needle & Mode Pill anchored above center
                           Padding(
-                            padding: const EdgeInsets.only(bottom: 38.0),
+                            padding: const EdgeInsets.only(bottom: 36.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -660,7 +751,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                 Icon(
                                   Icons.location_pin,
                                   size: 46,
-                                  color: _viewModel.isPinningPickup
+                                  color: (_isPinningOnMap
+                                          ? !_isPinningDestination
+                                          : _viewModel.isPinningPickup)
                                       ? AppTheme.emeraldGreen
                                       : AppTheme.sunsetCoral,
                                 ),
@@ -692,7 +785,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
               ],
 
-              if (!_viewModel.isPinMode && (currentRide != null || _viewModel.dropoffLocation != null))
+              if (!_isPinningOnMap &&
+                  !_viewModel.isPinMode &&
+                  (currentRide != null || _viewModel.dropoffLocation != null))
                 Positioned.fill(
                   child: currentRide == null
                       ? _buildFareProposalSheet(
@@ -1175,8 +1270,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   }
 
   Widget _buildPinPickerTooltip(ResponsiveLayoutHelper layout) {
-    final isPickup = _viewModel.isPinningPickup;
-    final isResolving = _viewModel.isResolvingPinAddress;
+    final isPickup = _isPinningOnMap ? !_isPinningDestination : _viewModel.isPinningPickup;
+    final isResolving = _viewModel.isResolvingPinAddress && _pinnedAddress.isEmpty;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1230,7 +1325,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   Widget _buildPinPickerTopBar(ResponsiveLayoutHelper layout) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = AppColors.of(context);
-    final isPickup = _viewModel.isPinningPickup;
+    final isPickup = _isPinningOnMap ? !_isPinningDestination : _viewModel.isPinningPickup;
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -1248,7 +1343,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               icon: const Icon(Icons.arrow_back_rounded, size: 22),
               color: c.textPrimary,
               tooltip: 'Cancel Map Pinning',
-              onPressed: () => _viewModel.cancelPinPicker(),
+              onPressed: () => _cancelPinPicking(),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -1275,7 +1370,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               ),
             ),
             TextButton(
-              onPressed: () => _viewModel.cancelPinPicker(),
+              onPressed: () => _cancelPinPicking(),
               child: const Text(
                 'Cancel',
                 style: TextStyle(
@@ -1296,8 +1391,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = AppColors.of(context);
-    final isPickup = _viewModel.isPinningPickup;
-    final currentAddress = _viewModel.tempPinLocation?.address ?? 'Positioning pin...';
+    final isPickup = _isPinningOnMap ? !_isPinningDestination : _viewModel.isPinningPickup;
+    final currentAddress = _pinnedAddress.trim().isNotEmpty
+        ? _pinnedAddress
+        : (_viewModel.tempPinLocation?.address ?? 'Positioning pin...');
 
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -1316,15 +1413,19 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             elevation: 4,
             tooltip: 'Snap to Current GPS',
             onPressed: () {
+              final lat = locProv.latitude;
+              final lng = locProv.longitude;
+              _mapCenterLocation = LatLng(lat, lng);
+              _pinnedAddress = '';
               if (_mapController != null) {
                 _mapController!.animateCamera(
                   CameraPosition(
-                    target: LatLng(locProv.latitude, locProv.longitude),
+                    target: LatLng(lat, lng),
                     zoom: 16.5,
                   ),
                 );
               }
-              _viewModel.updatePinnedCoordinates(locProv.latitude, locProv.longitude);
+              _viewModel.updatePinnedCoordinates(lat, lng);
             },
             child: const Icon(Icons.my_location_rounded, size: 20),
           ),
@@ -1375,7 +1476,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            _viewModel.isResolvingPinAddress
+                            (_viewModel.isResolvingPinAddress && _pinnedAddress.isEmpty)
                                 ? 'Locating...'
                                 : currentAddress,
                             maxLines: 2,

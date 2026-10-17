@@ -28,6 +28,9 @@ class RealMapView extends StatefulWidget {
   /// Fires when the camera settles.
   final ValueChanged<LatLng>? onCameraIdle;
 
+  /// Fires when camera position moves / drags.
+  final ValueChanged<LatLng>? onCameraMove;
+
   /// Fires on map tap.
   final ValueChanged<LatLng>? onMapTap;
 
@@ -55,6 +58,7 @@ class RealMapView extends StatefulWidget {
     this.circles = const {},
     this.onPinChanged,
     this.onCameraIdle,
+    this.onCameraMove,
     this.onMapTap,
     this.showCenterPin = true,
     this.showMyLocationButton = true,
@@ -207,6 +211,8 @@ class _RealMapViewState extends State<RealMapView> {
     if (!hasGesture && widget.mode != MapMode.pinPicker) return;
     _currentCenter = center;
     if (hasGesture) _lastUserPan = DateTime.now();
+
+    widget.onCameraMove?.call(center);
 
     if (widget.mode == MapMode.pinPicker) {
       _debounce?.cancel();

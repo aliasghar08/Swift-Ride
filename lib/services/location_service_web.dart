@@ -2,7 +2,7 @@
 // Uses the browser's native navigator.geolocation API.
 
 import 'dart:async';
-// ignore: deprecated_member_use
+// ignore: deprecated_member_use, avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 import 'package:flutter/foundation.dart';
 import '../core/constants/app_constants.dart';

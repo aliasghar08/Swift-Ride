@@ -251,6 +251,12 @@ class RiderViewModel extends ChangeNotifier {
     await setDestination(point);
   }
 
+  /// Automatically fetches the route polyline and calculates AI sweet-spot pricing.
+  Future<void> fetchRoute() => autoFetchRoute();
+
+  /// Alias for route calculation and AI sweet-spot fare prediction.
+  Future<void> getDirections() => autoFetchRoute();
+
   Future<void> autoFetchRoute() async {
     final pickup = _pickupLocation;
     final dropoff = _dropoffLocation;

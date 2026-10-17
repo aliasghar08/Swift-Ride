@@ -16,6 +16,7 @@ class GoogleMapView extends StatelessWidget {
   final Set<Circle> circles;
   final ValueChanged<LatLng>? onPinChanged;
   final ValueChanged<LatLng>? onCameraIdle;
+  final ValueChanged<LatLng>? onCameraMove;
   final ValueChanged<LatLng>? onMapTap;
   final bool showCenterPin;
   final bool showMyLocationButton;
@@ -37,6 +38,7 @@ class GoogleMapView extends StatelessWidget {
     this.circles = const {},
     this.onPinChanged,
     this.onCameraIdle,
+    this.onCameraMove,
     this.onMapTap,
     this.showCenterPin = true,
     this.showMyLocationButton = true,
@@ -58,6 +60,7 @@ class GoogleMapView extends StatelessWidget {
       circles: circles,
       onPinChanged: onPinChanged,
       onCameraIdle: onCameraIdle,
+      onCameraMove: onCameraMove,
       onMapTap: onMapTap,
       showCenterPin: showCenterPin,
       showMyLocationButton: showMyLocationButton,

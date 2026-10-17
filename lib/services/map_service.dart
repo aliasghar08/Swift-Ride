@@ -387,6 +387,7 @@ class RouteDetails {
 class MapService {
   static final MapService _instance = MapService._internal();
   factory MapService() => _instance;
+  static MapService get instance => _instance;
   MapService._internal();
 
 

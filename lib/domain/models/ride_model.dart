@@ -177,14 +177,35 @@ class RideModel {
         if (driverLocation != null) 'driverLocation': driverLocation!.toMap(),
       };
 
+  static DateTime? _parseNullableDateTime(dynamic val) {
+    if (val == null) return null;
+    if (val is DateTime) return val;
+    try {
+      final dt = (val as dynamic).toDate();
+      if (dt is DateTime) return dt;
+    } catch (_) {}
+    if (val is num) {
+      return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+    }
+    return DateTime.tryParse(val.toString());
+  }
+
+  static DateTime _parseDateTime(dynamic val) {
+    return _parseNullableDateTime(val) ?? DateTime.now();
+  }
+
   factory RideModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return RideModel(
       id: docId ?? map['id'] ?? '',
       riderId: map['riderId'] ?? '',
       driverId: map['driverId'],
       status: RideStatus.fromString(map['status']),
-      pickup: LocationPoint.fromMap(map['pickup'] as Map<String, dynamic>? ?? {}),
-      dropoff: LocationPoint.fromMap(map['dropoff'] as Map<String, dynamic>? ?? {}),
+      pickup: LocationPoint.fromMap(
+        map['pickup'] is Map ? Map<String, dynamic>.from(map['pickup'] as Map) : {},
+      ),
+      dropoff: LocationPoint.fromMap(
+        map['dropoff'] is Map ? Map<String, dynamic>.from(map['dropoff'] as Map) : {},
+      ),
       offeredFare: (map['offeredFare'] as num?)?.toDouble() ?? 0.0,
       acceptedFare: (map['acceptedFare'] as num?)?.toDouble(),
       suggestedFare: (map['suggestedFare'] as num?)?.toDouble() ?? 0.0,
@@ -197,14 +218,12 @@ class RideModel {
       safetyFlags: (map['safetyFlags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
       shareToken: map['shareToken'],
       pin: map['pin'] ?? '1234',
-      createdAt: map['createdAt'] != null
-          ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      completedAt: map['completedAt'] != null
-          ? DateTime.tryParse(map['completedAt'].toString())
-          : null,
+      createdAt: _parseDateTime(map['createdAt']),
+      completedAt: _parseNullableDateTime(map['completedAt']),
       driverLocation: DriverTelemetry.fromMap(
-        map['driverLocation'] as Map<String, dynamic>?,
+        map['driverLocation'] is Map
+            ? Map<String, dynamic>.from(map['driverLocation'] as Map)
+            : null,
       ),
     );
   }

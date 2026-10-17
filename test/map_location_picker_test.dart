@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:swiftride/core/provider/custom_provider.dart';
 import 'package:swiftride/domain/models/location_point_model.dart';
 import 'package:swiftride/presentation/rider/address_search_screen.dart';
 import 'package:swiftride/presentation/view_models/rider_view_model.dart';
 import 'package:swiftride/providers/auth_provider.dart';
-import 'package:swiftride/providers/location_provider.dart';
-import 'package:swiftride/services/auth_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

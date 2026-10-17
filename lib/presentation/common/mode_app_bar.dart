@@ -332,6 +332,24 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     );
                   },
                 ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.history_rounded,
+                    color: AppTheme.primaryBlue,
+                  ),
+                  title: const Text(
+                    'Trip & Ride History',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'View past rides, route locations, and receipts',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.pushNamed(context, '/history');
+                  },
+                ),
                 if (auth.isAuthenticated)
                   ListTile(
                     leading: const Icon(

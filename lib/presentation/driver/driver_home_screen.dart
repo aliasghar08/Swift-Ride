@@ -419,20 +419,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
             ],
           ),
-          floatingActionButton: PulsingGlowWidget(
-            glowColor: AppTheme.accentCyan,
-            minSpread: 1.0,
-            maxSpread: 5.0,
-            child: FloatingActionButton.extended(
-              onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
-              backgroundColor: AppTheme.primaryNavy,
-              foregroundColor: AppTheme.accentCyan,
-              icon: const Icon(Icons.auto_awesome, size: 20),
-              label: const Text(
-                'AI Assistant',
-                style: TextStyle(fontWeight: FontWeight.bold),
+          floatingActionButton: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              FloatingActionButton.small(
+                heroTag: 'driver_history_btn',
+                tooltip: 'Trip History',
+                backgroundColor: AppTheme.primaryNavy,
+                foregroundColor: AppTheme.accentCyan,
+                child: const Icon(Icons.history_rounded, size: 20),
+                onPressed: () => Navigator.of(context).pushNamed('/history'),
               ),
-            ),
+              const SizedBox(height: 12),
+              PulsingGlowWidget(
+                glowColor: AppTheme.accentCyan,
+                minSpread: 1.0,
+                maxSpread: 5.0,
+                child: FloatingActionButton.extended(
+                  onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
+                  backgroundColor: AppTheme.primaryNavy,
+                  foregroundColor: AppTheme.accentCyan,
+                  icon: const Icon(Icons.auto_awesome, size: 20),
+                  label: const Text(
+                    'AI Assistant',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
           ),
         );
       },

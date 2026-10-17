@@ -750,6 +750,15 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
+              FloatingActionButton.small(
+                heroTag: 'ride_history_btn',
+                tooltip: 'My Trips',
+                backgroundColor: AppTheme.primaryNavy,
+                foregroundColor: AppTheme.accentCyan,
+                child: const Icon(Icons.history_rounded, size: 20),
+                onPressed: () => Navigator.of(context).pushNamed('/history'),
+              ),
+              const SizedBox(height: 12),
               PulsingGlowWidget(
                 glowColor: AppTheme.accentCyan,
                 minSpread: 1.0,

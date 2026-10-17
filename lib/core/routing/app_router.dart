@@ -12,6 +12,7 @@ import '../../presentation/admin/admin_dashboard_screen.dart';
 import '../../presentation/common/shared_trip_screen.dart';
 import '../../ai/ai.dart';
 import '../../presentation/auth/phone_auth_screen.dart';
+import '../../presentation/rider/ride_history_screen.dart';
 
 /// The central shell displaying the active role view (Rider, Driver, or Admin)
 /// with the persistent top ModeAppBar.
@@ -145,6 +146,13 @@ class AppRouter {
     if (uri.path == '/earnings-advisor') {
       return MaterialPageRoute(
         builder: (_) => const EarningsAdvisorScreen(),
+        settings: settings,
+      );
+    }
+
+    if (uri.path == '/history') {
+      return MaterialPageRoute(
+        builder: (_) => const RideHistoryScreen(),
         settings: settings,
       );
     }

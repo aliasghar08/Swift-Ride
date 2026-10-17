@@ -397,18 +397,24 @@ class RideProvider extends ChangeNotifier {
     );
   }
 
-  /// Loads the first page of persisted ride history for [riderId].
-  ///
-  /// History previously existed only for the current session — closing the app
-  /// lost it, and the ride log showed nothing for a returning user.
-  Future<void> loadRideHistory(String riderId) async {
+  /// Loads the first page of persisted ride history for [userId].
+  /// Supports both riders and drivers with optional status filtering.
+  Future<void> loadRideHistory(
+    String userId, {
+    bool asDriver = false,
+    String? status,
+  }) async {
     if (_isLoadingHistory) return;
 
     _isLoadingHistory = true;
     _historyError = null;
     notifyListeners();
 
-    final page = await _firestore.fetchRideHistoryPage(riderId: riderId);
+    final page = await _firestore.fetchRideHistoryPage(
+      riderId: userId,
+      asDriver: asDriver,
+      status: status,
+    );
 
     _rideHistory = page.rides;
     _historyCursor = page.lastDocument;
@@ -419,7 +425,11 @@ class RideProvider extends ChangeNotifier {
   }
 
   /// Appends the next page of ride history, if there is one.
-  Future<void> loadMoreHistory(String riderId) async {
+  Future<void> loadMoreHistory(
+    String userId, {
+    bool asDriver = false,
+    String? status,
+  }) async {
     final cursor = _historyCursor;
     if (_isLoadingHistory || !_hasMoreHistory || cursor == null) return;
 
@@ -427,7 +437,9 @@ class RideProvider extends ChangeNotifier {
     notifyListeners();
 
     final page = await _firestore.fetchRideHistoryPage(
-      riderId: riderId,
+      riderId: userId,
+      asDriver: asDriver,
+      status: status,
       startAfter: cursor,
     );
 
@@ -441,6 +453,19 @@ class RideProvider extends ChangeNotifier {
     _hasMoreHistory = page.hasMore;
     _historyError = page.error;
     _isLoadingHistory = false;
+    notifyListeners();
+  }
+
+  /// Explicitly persists a ride into trip history in Firestore with full location data.
+  Future<void> saveRideToHistory(RideModel ride) async {
+    await _firestore.saveRideHistory(ride);
+    // Refresh local list if this ride belongs to current history
+    final idx = _rideHistory.indexWhere((r) => r.id == ride.id);
+    if (idx >= 0) {
+      _rideHistory[idx] = ride;
+    } else {
+      _rideHistory.insert(0, ride);
+    }
     notifyListeners();
   }
 

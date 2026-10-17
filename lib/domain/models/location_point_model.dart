@@ -32,9 +32,23 @@ class LocationPoint {
       };
 
   factory LocationPoint.fromMap(Map<String, dynamic> map) {
-    final geo = map['geopoint'] as Map<String, dynamic>?;
-    final lat = (geo?['latitude'] ?? map['latitude']) as num?;
-    final lng = (geo?['longitude'] ?? map['longitude']) as num?;
+    num? lat;
+    num? lng;
+
+    final geo = map['geopoint'];
+    if (geo is Map) {
+      lat = (geo['latitude'] ?? geo['lat']) as num?;
+      lng = (geo['longitude'] ?? geo['lng']) as num?;
+    } else if (geo != null) {
+      // Handles cloud_firestore GeoPoint object dynamically without forcing compile-time dependency
+      try {
+        lat = (geo as dynamic).latitude as num?;
+        lng = (geo as dynamic).longitude as num?;
+      } catch (_) {}
+    }
+
+    lat ??= (map['latitude'] ?? map['lat']) as num?;
+    lng ??= (map['longitude'] ?? map['lng']) as num?;
 
     // No silent fallback. A point without coordinates is corrupt, and
     // substituting a hardcoded city centre silently relocated real users to
@@ -46,8 +60,8 @@ class LocationPoint {
     return LocationPoint(
       latitude: lat.toDouble(),
       longitude: lng.toDouble(),
-      address: map['address'] ?? '',
-      geohash: map['geohash'] ?? '',
+      address: map['address']?.toString() ?? '',
+      geohash: map['geohash']?.toString() ?? '',
     );
   }
 }

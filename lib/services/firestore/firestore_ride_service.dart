@@ -287,29 +287,42 @@ class FirestoreRideService {
     }
   }
 
-  /// Fetches one page of a rider's ride history, newest first.
-  ///
-  /// Pass the previous page's [lastDocument] to fetch the next page. Errors are
-  /// returned in [RideHistoryPage.error] rather than surfacing as an empty list,
-  /// so the UI can distinguish "no rides" from "could not load".
+  /// Fetches one page of a user's (rider or driver) ride history, newest first.
+  /// Supports optional filtering by [asDriver] and [status].
+  /// Matches composite indexes:
+  /// - `rides (riderId ASC, createdAt DESC)`
+  /// - `rides (riderId ASC, status ASC, createdAt DESC)`
+  /// - `rides (driverId ASC, createdAt DESC)`
+  /// - `rides (driverId ASC, status ASC, createdAt DESC)`
   Future<RideHistoryPage> fetchRideHistoryPage({
     required String riderId,
+    bool asDriver = false,
+    String? status,
     int limit = 20,
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
   }) async {
     final fs = _firestore;
+    final userField = asDriver ? 'driverId' : 'riderId';
+
     if (fs == null) {
-      final rides = _memoryRides.values.where((r) => r.riderId == riderId).toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-      return RideHistoryPage(rides: rides, hasMore: false);
+      var filtered = _memoryRides.values.where((r) => (asDriver ? r.driverId : r.riderId) == riderId);
+      if (status != null && status.isNotEmpty && status != 'ALL') {
+        filtered = filtered.where((r) => r.status.toDbString().toUpperCase() == status.toUpperCase());
+      }
+      final list = filtered.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return RideHistoryPage(rides: list, hasMore: false);
     }
 
     try {
       Query<Map<String, dynamic>> query = fs
           .collection(AppConstants.ridesCollection)
-          .where('riderId', isEqualTo: riderId)
-          .orderBy('createdAt', descending: true)
-          .limit(limit);
+          .where(userField, isEqualTo: riderId);
+
+      if (status != null && status.isNotEmpty && status != 'ALL') {
+        query = query.where('status', isEqualTo: status.toUpperCase());
+      }
+
+      query = query.orderBy('createdAt', descending: true).limit(limit);
 
       if (startAfter != null) {
         query = query.startAfterDocument(startAfter);
@@ -333,6 +346,99 @@ class FirestoreRideService {
         hasMore: false,
         error: 'We could not load your ride history. Check your connection and try again.',
       );
+    }
+  }
+
+  /// Explicitly saves or updates a ride document into Firestore trip history.
+  /// Captures full location metadata, geohashes, addresses, fares, and timestamps.
+  Future<void> saveRideHistory(RideModel ride) async {
+    _memoryRides[ride.id] = ride;
+    final fs = _firestore;
+    if (fs == null) return;
+
+    try {
+      await fs.collection(AppConstants.ridesCollection).doc(ride.id).set({
+        'riderId': ride.riderId,
+        'driverId': ride.driverId,
+        'status': ride.status.toDbString(),
+        'pickup': {
+          'geopoint': GeoPoint(ride.pickup.latitude, ride.pickup.longitude),
+          'address': ride.pickup.address,
+          'geohash': ride.pickup.geohash,
+        },
+        'dropoff': {
+          'geopoint': GeoPoint(ride.dropoff.latitude, ride.dropoff.longitude),
+          'address': ride.dropoff.address,
+          'geohash': ride.dropoff.geohash,
+        },
+        'offeredFare': ride.offeredFare,
+        'acceptedFare': ride.acceptedFare,
+        'suggestedFare': ride.suggestedFare,
+        'distanceKm': ride.distanceKm,
+        'durationMin': ride.durationMin,
+        'commissionAmount': ride.commissionAmount,
+        'paymentIntentId': ride.paymentIntentId,
+        'paymentStatus': ride.paymentStatus,
+        'paymentMethod': ride.paymentMethod ?? 'CASH',
+        'safetyFlags': ride.safetyFlags,
+        'shareToken': ride.shareToken,
+        'pin': ride.pin,
+        'createdAt': Timestamp.fromDate(ride.createdAt),
+        'completedAt': ride.completedAt != null ? Timestamp.fromDate(ride.completedAt!) : null,
+        if (ride.driverLocation != null) 'driverLocation': ride.driverLocation!.toMap(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Also record pickup waypoint in location_history
+      await saveLocationHistoryPoint(
+        userId: ride.riderId,
+        rideId: ride.id,
+        latitude: ride.pickup.latitude,
+        longitude: ride.pickup.longitude,
+        address: ride.pickup.address,
+        pointType: 'PICKUP',
+      );
+
+      // Record dropoff waypoint if trip reached terminal status
+      if (ride.status == RideStatus.completed) {
+        await saveLocationHistoryPoint(
+          userId: ride.riderId,
+          rideId: ride.id,
+          latitude: ride.dropoff.latitude,
+          longitude: ride.dropoff.longitude,
+          address: ride.dropoff.address,
+          pointType: 'DROPOFF',
+        );
+      }
+    } catch (e) {
+      debugPrint('[FirestoreRideService] saveRideHistory failed: $e');
+    }
+  }
+
+  /// Records a waypoint or trip breadcrumb in the `location_history` collection.
+  /// Indexed by: `location_history (userId ASC, timestamp DESC)` and `(rideId ASC, timestamp ASC)`.
+  Future<void> saveLocationHistoryPoint({
+    required String userId,
+    required String rideId,
+    required double latitude,
+    required double longitude,
+    String? address,
+    String pointType = 'WAYPOINT',
+  }) async {
+    final fs = _firestore;
+    if (fs == null) return;
+
+    try {
+      await fs.collection('location_history').add({
+        'userId': userId,
+        'rideId': rideId,
+        'pointType': pointType,
+        'location': GeoPoint(latitude, longitude),
+        'address': address ?? '',
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('[FirestoreRideService] saveLocationHistoryPoint failed: $e');
     }
   }
 

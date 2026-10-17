@@ -101,13 +101,15 @@ Future<void> main() async {
               child: child,
             ),
       ],
-      child: const SwiftRideApp(),
+      child: const SwiftRideApp(initialRoute: '/login'),
     ),
   );
 }
 
 class SwiftRideApp extends StatelessWidget {
-  const SwiftRideApp({super.key});
+  final String? initialRoute;
+
+  const SwiftRideApp({super.key, this.initialRoute});
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +121,7 @@ class SwiftRideApp extends StatelessWidget {
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: auth.activeRole == UserRole.driver ? ThemeMode.dark : ThemeMode.light,
-          initialRoute: AppRouter.initialRoute,
+          initialRoute: initialRoute ?? AppRouter.initialRoute,
           onGenerateRoute: AppRouter.onGenerateRoute,
         );
       },

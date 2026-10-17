@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../domain/models/location_point_model.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../services/map_service.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
@@ -563,6 +564,18 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                                     }).join(' · ')
                                   : 'Route ${idx + 1}';
 
+                              final isDark =
+                                  Theme.of(context).brightness == Brightness.dark;
+                              final c = AppColors.of(context);
+                              final chipBg = isSelected
+                                  ? AppTheme.primaryBlue
+                                  : (isDark ? c.surfaceRaised : const Color(0xFFF1F5F9));
+                              final isChipBgDark =
+                                  ThemeData.estimateBrightnessForColor(chipBg) == Brightness.dark;
+                              final chipTextColor = isSelected
+                                  ? Colors.white
+                                  : (isChipBgDark ? c.textPrimary : const Color(0xFF0F172A));
+
                               return Padding(
                                 padding: const EdgeInsets.only(right: 8),
                                 child: ChoiceChip(
@@ -572,11 +585,17 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                                   selected: isSelected,
                                   onSelected: (_) => _selectRoute(idx),
                                   selectedColor: AppTheme.primaryBlue,
-                                  backgroundColor: AppTheme.slateMuted.withValues(alpha: 0.2),
+                                  backgroundColor: chipBg,
                                   labelStyle: TextStyle(
-                                    color: isSelected ? Colors.white : Colors.white70,
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                    color: chipTextColor,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                                     fontSize: 12,
+                                  ),
+                                  side: BorderSide(
+                                    color: isSelected
+                                        ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+                                        : c.border,
+                                    width: isSelected ? 1.5 : 1.0,
                                   ),
                                 ),
                               );

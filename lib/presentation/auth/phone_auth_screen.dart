@@ -38,6 +38,27 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _canResend = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+      if (auth.currentUser.phone.isNotEmpty) {
+        final p = auth.currentUser.phone;
+        if (p.startsWith('+92')) {
+          _phoneController.text = p.substring(3);
+        } else {
+          _phoneController.text = p;
+        }
+      }
+      if (auth.currentUser.fullName.isNotEmpty) {
+        _nameController.text = auth.currentUser.fullName;
+      }
+      _selectedRole = auth.activeRole;
+    });
+  }
+
+  @override
   void dispose() {
     _countdownTimer?.cancel();
     _phoneController.dispose();
@@ -45,6 +66,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     _otpFocusNode.dispose();
     _nameController.dispose();
     super.dispose();
+  }
+
+  void _onSuccessNavigate() {
+    if (widget.onAuthSuccess != null) {
+      widget.onAuthSuccess!();
+    } else if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushReplacementNamed('/');
+    }
   }
 
   void _startResendTimer() {
@@ -178,11 +209,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       onSuccess: () {
         _countdownTimer?.cancel();
         if (_nameController.text.trim().isNotEmpty) {
-          if (widget.onAuthSuccess != null) {
-            widget.onAuthSuccess!();
-          } else if (Navigator.of(context).canPop()) {
-            Navigator.of(context).pop();
-          }
+          _onSuccessNavigate();
         } else {
           setState(() {
             _currentStep = AuthStep.profile;
@@ -222,11 +249,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (mounted) setState(() => _isSavingProfile = false);
 
     if (!mounted) return;
-    if (widget.onAuthSuccess != null) {
-      widget.onAuthSuccess!();
-    } else if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
+    _onSuccessNavigate();
   }
 
   @override
@@ -257,7 +280,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             : IconButton(
                 tooltip: 'Close',
                 icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: _onSuccessNavigate,
               ),
       ),
       body: SafeArea(
@@ -483,11 +506,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               await authProv.authService.signInAnonymously();
             }
             if (!mounted) return;
-            if (widget.onAuthSuccess != null) {
-              widget.onAuthSuccess!();
-            } else if (Navigator.of(context).canPop()) {
-              Navigator.of(context).pop();
-            }
+            _onSuccessNavigate();
           },
           icon: const Icon(Icons.auto_awesome, size: 18),
           label: const Text(

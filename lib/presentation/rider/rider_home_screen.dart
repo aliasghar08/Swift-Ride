@@ -860,6 +860,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   Widget _buildRouteSelector(ResponsiveLayoutHelper layout) {
     if (_viewModel.routes.length <= 1) return const SizedBox.shrink();
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -891,6 +894,25 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           final line2Text =
               '$distText km · ${route.durationMin.round()} min · PKR $fareText';
 
+          final Color buttonBg = isSelected
+              ? AppTheme.primaryBlue
+              : (isDark ? c.surfaceRaised : const Color(0xFFF1F5F9));
+
+          final isBgDark =
+              ThemeData.estimateBrightnessForColor(buttonBg) == Brightness.dark;
+
+          final Color titleColor = isSelected
+              ? Colors.white
+              : (isBgDark ? c.textPrimary : const Color(0xFF0F172A));
+
+          final Color subtitleColor = isSelected
+              ? Colors.white.withValues(alpha: 0.9)
+              : (isBgDark ? c.textSecondary : const Color(0xFF475569));
+
+          final Color borderColor = isSelected
+              ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+              : c.border;
+
           return Padding(
             padding: EdgeInsets.only(
               right: i < _viewModel.routes.length - 1 ? 8.0 : 0,
@@ -906,13 +928,21 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color:
-                        isSelected ? AppTheme.primaryBlue : Colors.transparent,
+                    color: buttonBg,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: AppTheme.primaryBlue,
-                      width: 1.5,
+                      color: borderColor,
+                      width: isSelected ? 2.0 : 1.2,
                     ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: AppTheme.primaryBlue.withValues(alpha: 0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -923,8 +953,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         style: TextStyle(
                           fontSize: layout.fontSize(12),
                           fontWeight: FontWeight.bold,
-                          color:
-                              isSelected ? Colors.white : AppTheme.primaryBlue,
+                          color: titleColor,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -933,9 +962,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         style: TextStyle(
                           fontSize: layout.fontSize(11),
                           fontWeight: FontWeight.w500,
-                          color: isSelected
-                              ? Colors.white.withValues(alpha: 0.9)
-                              : AppTheme.primaryBlue,
+                          color: subtitleColor,
                         ),
                       ),
                     ],

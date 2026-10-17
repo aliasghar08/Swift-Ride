@@ -665,7 +665,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 Switch.adaptive(
                   value: _viewModel.autoAcceptAiValuedRides,
                   onChanged: (val) => _viewModel.toggleAutoAcceptAiValuedRides(val),
-                  activeColor: AppTheme.accentCyan,
+                  activeThumbColor: AppTheme.accentCyan,
                 ),
               ],
             ),
@@ -1293,7 +1293,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   );
 
-              if (!context.mounted) return;
+              if (!mounted) return;
               Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => RoutePreviewScreen(

@@ -278,6 +278,86 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
               const SizedBox(height: 12),
 
+              // Professional "Choose on Map" Action Bar
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {
+                  Navigator.of(context).pop(
+                    const LocationPoint(
+                      latitude: 0,
+                      longitude: 0,
+                      address: '__CHOOSE_ON_MAP__',
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppTheme.accentCyan.withValues(alpha: 0.1)
+                        : AppTheme.primaryBlue.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? AppTheme.accentCyan.withValues(alpha: 0.28)
+                          : AppTheme.primaryBlue.withValues(alpha: 0.22),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.brandGradient,
+                          shape: BoxShape.circle,
+                          boxShadow: AppTheme.glowShadow(
+                            AppTheme.primaryBlue,
+                            blur: 8,
+                            opacity: 0.25,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.map_rounded,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Choose on Map',
+                              style: TextStyle(
+                                color: c.textPrimary,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Pinpoint exact spot with interactive map pin',
+                              style: TextStyle(
+                                color: c.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                        size: 22,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
               if (_isLoading)
                 LinearProgressIndicator(
                   backgroundColor: Colors.transparent,
@@ -405,6 +485,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
   }
 
   Widget _buildEmptyState(String trimmed, AppColors c) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     if (trimmed.isEmpty && !_hasSearched) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -459,6 +540,50 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                   latitude: loc.latitude,
                   longitude: loc.longitude,
                   address: address,
+                ),
+              );
+            },
+          ),
+          Divider(color: c.border, height: 1),
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+                    .withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.pin_drop_rounded,
+                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                size: 20,
+              ),
+            ),
+            title: Text(
+              'Set Location on Map',
+              style: TextStyle(
+                color: c.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 14,
+              ),
+            ),
+            subtitle: Text(
+              'Move and place pin directly on the map',
+              style: TextStyle(
+                color: c.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            onTap: () {
+              Navigator.of(context).pop(
+                const LocationPoint(
+                  latitude: 0,
+                  longitude: 0,
+                  address: '__CHOOSE_ON_MAP__',
                 ),
               );
             },

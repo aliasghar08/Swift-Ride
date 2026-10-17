@@ -311,13 +311,49 @@ class _RealMapViewState extends State<RealMapView> {
         if (widget.mode == MapMode.pinPicker)
           IgnorePointer(
             child: Center(
-              child: Transform.translate(
-                offset: const Offset(0, -18),
-                child: const Icon(
-                  Icons.location_pin,
-                  size: 38,
-                  color: AppTheme.sunsetCoral,
-                ),
+              child: Stack(
+                alignment: Alignment.center,
+                clipBehavior: Clip.none,
+                children: [
+                  // Ground contact target ring
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.25),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.sunsetCoral.withValues(alpha: 0.7),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: const Offset(0, -20),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.35),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.location_pin,
+                            size: 44,
+                            color: AppTheme.sunsetCoral,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ),

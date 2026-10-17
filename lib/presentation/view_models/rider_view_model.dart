@@ -51,6 +51,12 @@ class RiderViewModel extends ChangeNotifier {
   String? _routeError;
 
   bool _isPinMode = false;
+  LocationPoint? _tempPinLocation;
+  LocationPoint? get tempPinLocation => _tempPinLocation;
+  bool _isResolvingPinAddress = false;
+  bool get isResolvingPinAddress => _isResolvingPinAddress;
+  bool _isPinningPickup = true;
+  bool get isPinningPickup => _isPinningPickup;
   PaymentRail _selectedRail = PaymentRail.fallback;
   bool _isDisposed = false;
 
@@ -144,30 +150,70 @@ class RiderViewModel extends ChangeNotifier {
     }
   }
 
-  void togglePinMode() {
-    _isPinMode = !_isPinMode;
+  void startPinPicker({bool isPickup = true, LocationPoint? initialPoint}) {
+    _isPinMode = true;
+    _isPinningPickup = isPickup;
+    _tempPinLocation = initialPoint ?? (isPickup ? _pickupLocation : _dropoffLocation);
     _deviceService.triggerHaptic('light');
     notifyListeners();
   }
 
+  void cancelPinPicker() {
+    _isPinMode = false;
+    _tempPinLocation = null;
+    _isResolvingPinAddress = false;
+    _deviceService.triggerHaptic('light');
+    notifyListeners();
+  }
+
+  void togglePinMode({bool isPickup = true}) {
+    if (_isPinMode) {
+      confirmPinLocation();
+    } else {
+      startPinPicker(isPickup: isPickup);
+    }
+  }
+
   Future<void> updatePinnedCoordinates(double lat, double lng) async {
-    _pickupLocation = LocationPoint(
+    _isResolvingPinAddress = true;
+    _tempPinLocation = LocationPoint(
       latitude: lat,
       longitude: lng,
-      address: 'Locating...',
+      address: _tempPinLocation?.address ?? 'Pinning location...',
     );
-    _hasPickupFromGps = true;
     notifyListeners();
 
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
-      pickupController.text = realAddress;
-      _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+      if (_isDisposed) return;
+      _tempPinLocation = LocationPoint(
+        latitude: lat,
+        longitude: lng,
+        address: realAddress.isNotEmpty
+            ? realAddress
+            : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+      );
     } catch (e) {
       debugPrint('[RiderViewModel] reverseGeocode failed: $e');
+    } finally {
+      _isResolvingPinAddress = false;
+      notifyListeners();
     }
+  }
 
-    _recalculateRouteIfPossible();
+  void confirmPinLocation() {
+    final chosen = _tempPinLocation;
+    if (chosen != null) {
+      if (_isPinningPickup) {
+        setPickup(chosen);
+      } else {
+        setDropoff(chosen);
+      }
+    }
+    _isPinMode = false;
+    _tempPinLocation = null;
+    _isResolvingPinAddress = false;
+    _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
 

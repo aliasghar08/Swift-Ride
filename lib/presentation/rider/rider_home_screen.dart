@@ -179,6 +179,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       ),
     );
     if (result != null) {
+      if (result.address == '__CHOOSE_ON_MAP__') {
+        _startPinPicking(isPickup: isPickup);
+        return;
+      }
       if (isPickup) {
         _userCustomPickup = true;
         _viewModel.setPickup(result);
@@ -200,6 +204,43 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           );
         }
       }
+    }
+  }
+
+  void _startPinPicking({required bool isPickup}) {
+    final current = isPickup ? _viewModel.pickupLocation : _viewModel.dropoffLocation;
+    _viewModel.startPinPicker(
+      isPickup: isPickup,
+      initialPoint: current,
+    );
+    if (current != null && _mapController != null) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(current.latitude, current.longitude),
+            zoom: 16.5,
+          ),
+        ),
+      );
+    }
+  }
+
+  void _confirmAndApplyPin() {
+    final isPickup = _viewModel.isPinningPickup;
+    _viewModel.confirmPinLocation();
+    if (isPickup) {
+      _userCustomPickup = true;
+    }
+    final target = isPickup ? _viewModel.pickupLocation : _viewModel.dropoffLocation;
+    if (target != null && _mapController != null) {
+      _mapController?.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: LatLng(target.latitude, target.longitude),
+            zoom: 16.0,
+          ),
+        ),
+      );
     }
   }
 
@@ -527,7 +568,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
               ),
 
-              if (currentRide == null)
+              if (currentRide == null && !_viewModel.isPinMode)
                 SafeArea(
                   child: Align(
                     alignment: Alignment.topCenter,
@@ -555,7 +596,39 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
 
-              if (currentRide != null || _viewModel.dropoffLocation != null)
+              if (_viewModel.isPinMode) ...[
+                // Pin Picker Tooltip hovering above center pin
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Transform.translate(
+                        offset: const Offset(0, -68),
+                        child: _buildPinPickerTooltip(layout),
+                      ),
+                    ),
+                  ),
+                ),
+                // Dedicated Top Bar for Pin Picker Mode
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    child: _buildPinPickerTopBar(layout),
+                  ),
+                ),
+                // Dedicated Bottom Sheet for Pin Picker Mode
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    child: _buildPinPickerBottomBar(layout, locProv),
+                  ),
+                ),
+              ],
+
+              if (!_viewModel.isPinMode && (currentRide != null || _viewModel.dropoffLocation != null))
                 Positioned.fill(
                   child: currentRide == null
                       ? _buildFareProposalSheet(
@@ -930,17 +1003,18 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: Icon(
-                      _viewModel.isPinMode
-                          ? Icons.check_circle
-                          : Icons.pin_drop,
-                      color: _viewModel.isPinMode
-                          ? AppTheme.emeraldGreen
-                          : AppTheme.primaryBlue,
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: AppTheme.emeraldGreen,
                     ),
-                    tooltip: 'Set Pickup Pin on Map',
-                    onPressed: () => _viewModel.togglePinMode(),
+                    icon: const Icon(Icons.pin_drop_rounded, size: 16),
+                    label: const Text(
+                      'Map',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () => _startPinPicking(isPickup: true),
                   ),
                 ],
               ),
@@ -978,11 +1052,284 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                     ),
                   ),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: AppTheme.sunsetCoral,
+                    ),
+                    icon: const Icon(Icons.pin_drop_rounded, size: 16),
+                    label: const Text(
+                      'Map',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                    onPressed: () => _startPinPicking(isPickup: false),
+                  ),
                 ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPinPickerTooltip(ResponsiveLayoutHelper layout) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+    final isPickup = _viewModel.isPinningPickup;
+    final isResolving = _viewModel.isResolvingPinAddress;
+    final currentAddress = _viewModel.tempPinLocation?.address ?? 'Target spot';
+
+    return Container(
+      constraints: BoxConstraints(maxWidth: layout.scale(260)),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: isDark ? c.surfaceRaised : Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isPickup
+              ? (isDark ? AppTheme.accentCyan : AppTheme.emeraldGreen)
+              : AppTheme.sunsetCoral,
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: isResolving
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: isPickup
+                        ? (isDark ? AppTheme.accentCyan : AppTheme.emeraldGreen)
+                        : AppTheme.sunsetCoral,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Pinpointing location...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              currentAddress,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: c.textPrimary,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildPinPickerTopBar(ResponsiveLayoutHelper layout) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+    final isPickup = _viewModel.isPinningPickup;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: layout.horizontalPadding,
+        vertical: layout.scale(8),
+      ),
+      child: GlassContainer(
+        backgroundColor: isDark ? c.surfaceRaised : Colors.white.withValues(alpha: 0.95),
+        borderColor: c.border,
+        isDark: isDark,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, size: 22),
+              color: c.textPrimary,
+              tooltip: 'Cancel Map Pinning',
+              onPressed: () => _viewModel.cancelPinPicker(),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    isPickup ? 'Choose Pickup Spot on Map' : 'Choose Destination on Map',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: c.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    'Drag map to align center pin at exact spot',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: c.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: () => _viewModel.cancelPinPicker(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.sunsetCoral,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPinPickerBottomBar(
+    ResponsiveLayoutHelper layout,
+    LocationProvider locProv,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+    final isPickup = _viewModel.isPinningPickup;
+    final currentAddress = _viewModel.tempPinLocation?.address ?? 'Positioning pin...';
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: layout.horizontalPadding,
+        vertical: layout.scale(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Floating "Snap to My Location" GPS button
+          FloatingActionButton.small(
+            heroTag: 'map_picker_gps_locate',
+            backgroundColor: isDark ? c.surfaceRaised : Colors.white,
+            foregroundColor: AppTheme.primaryBlue,
+            elevation: 4,
+            tooltip: 'Snap to Current GPS',
+            onPressed: () {
+              if (_mapController != null) {
+                _mapController!.animateCamera(
+                  CameraPosition(
+                    target: LatLng(locProv.latitude, locProv.longitude),
+                    zoom: 16.5,
+                  ),
+                );
+              }
+              _viewModel.updatePinnedCoordinates(locProv.latitude, locProv.longitude);
+            },
+            child: const Icon(Icons.my_location_rounded, size: 20),
+          ),
+          const SizedBox(height: 10),
+
+          // Bottom Confirmation Card
+          GlassContainer(
+            backgroundColor: isDark ? c.surfaceRaised : Colors.white,
+            borderColor: c.border,
+            isDark: isDark,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isPickup
+                            ? AppTheme.emeraldGreen.withValues(alpha: 0.15)
+                            : AppTheme.sunsetCoral.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isPickup ? Icons.my_location_rounded : Icons.location_on_rounded,
+                        color: isPickup ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isPickup ? 'PICKUP SPOT' : 'DESTINATION',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              color: isPickup
+                                  ? AppTheme.emeraldGreen
+                                  : AppTheme.sunsetCoral,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            currentAddress,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: c.textPrimary,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: () => _confirmAndApplyPin(),
+                  icon: const Icon(Icons.check_circle_rounded, size: 20),
+                  label: Text(
+                    isPickup ? 'Confirm Pickup Spot' : 'Confirm Destination',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isPickup
+                        ? AppTheme.emeraldGreen
+                        : AppTheme.sunsetCoral,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

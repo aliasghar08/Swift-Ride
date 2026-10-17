@@ -206,14 +206,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final name = _nameController.text.trim();
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
 
-    if (name.isNotEmpty) {
-      final updated = auth.currentUser.copyWith(
-        fullName: name,
-        role: _selectedRole,
-      );
-      auth.updateUser(updated);
-      auth.switchRole(_selectedRole);
+    final resolvedName = name.isNotEmpty ? name : 'SwiftRide User';
+    final updated = auth.currentUser.copyWith(
+      fullName: resolvedName,
+      role: _selectedRole,
+    );
+    auth.updateUser(updated);
+    auth.switchRole(_selectedRole);
+    try {
       await auth.firestoreUserService.saveUser(updated);
+    } catch (e) {
+      debugPrint('[PhoneAuthScreen] Save user warning: $e');
     }
 
     if (mounted) setState(() => _isSavingProfile = false);
@@ -269,6 +272,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               // Header & Branding (Secret long-press to autofill test credentials for developers)
               Center(
                 child: GestureDetector(
+                  onTap: _useTestNumber,
                   onLongPress: _useTestNumber,
                   child: Container(
                     width: layout.scale(72),
@@ -634,7 +638,42 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? AppTheme.accentCyan.withValues(alpha: 0.1)
+                : AppTheme.primaryBlue.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDark
+                  ? AppTheme.accentCyan.withValues(alpha: 0.2)
+                  : AppTheme.primaryBlue.withValues(alpha: 0.15),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: 16,
+                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Demo / Test Account? Enter code 123456 to verify.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : AppTheme.darkNavy,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         ElevatedButton(
           onPressed: auth.isLoading ? null : _handleVerifyOtp,
           style: ElevatedButton.styleFrom(

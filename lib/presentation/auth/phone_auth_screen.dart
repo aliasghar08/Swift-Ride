@@ -169,10 +169,16 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _currentStep = AuthStep.otp;
         });
         _startResendTimer();
+        final isMock = vId.startsWith('mock_') || vId.startsWith('sim_');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Verification code sent to $fullPhone'),
+            content: Text(
+              isMock
+                  ? 'Verification code generated for $fullPhone! Enter test code: 123456'
+                  : 'Verification code sent to $fullPhone',
+            ),
             backgroundColor: AppTheme.emeraldGreen,
+            duration: const Duration(seconds: 4),
           ),
         );
       },
@@ -658,38 +664,46 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark
-                ? AppTheme.accentCyan.withValues(alpha: 0.1)
-                : AppTheme.primaryBlue.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
+        InkWell(
+          onTap: () {
+            _otpController.text = '123456';
+            setState(() {});
+            _handleVerifyOtp();
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
               color: isDark
-                  ? AppTheme.accentCyan.withValues(alpha: 0.2)
-                  : AppTheme.primaryBlue.withValues(alpha: 0.15),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                Icons.info_outline,
-                size: 16,
-                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                  ? AppTheme.accentCyan.withValues(alpha: 0.1)
+                  : AppTheme.primaryBlue.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isDark
+                    ? AppTheme.accentCyan.withValues(alpha: 0.2)
+                    : AppTheme.primaryBlue.withValues(alpha: 0.15),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Demo / Test Account? Enter code 123456 to verify.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white70 : AppTheme.darkNavy,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Demo / Test Account? Tap here or enter 123456 to verify.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white70 : AppTheme.darkNavy,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 14),

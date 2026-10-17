@@ -178,14 +178,18 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         ),
       ),
     );
-    if (result != null) {
-      if (result.address == '__CHOOSE_ON_MAP__') {
-        _startPinPicking(isPickup: isPickup);
-        return;
-      }
-      if (isPickup) {
-        _userCustomPickup = true;
-        _viewModel.setPickup(result);
+    if (!mounted || result == null) return;
+
+    if (result.address == '__CHOOSE_ON_MAP__') {
+      _startPinPicking(isPickup: isPickup);
+      return;
+    }
+    if (isPickup) {
+      _userCustomPickup = true;
+      _userMovedMap = false;
+      _lastRouteId = null;
+      _viewModel.setPickup(result);
+      if (_viewModel.dropoffLocation == null) {
         _mapController?.animateCamera(
           CameraUpdate.newCameraPosition(
             CameraPosition(
@@ -194,15 +198,21 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             ),
           ),
         );
-      } else {
-        _viewModel.setDropoff(result);
-        if (_fareSheetController.isAttached) {
-          _fareSheetController.animateTo(
-            0.45,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
+      }
+    } else {
+      if (_viewModel.pickupLocation == null) {
+        final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
+        _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+      }
+      _userMovedMap = false;
+      _lastRouteId = null;
+      _viewModel.setDropoff(result);
+      if (_fareSheetController.isAttached) {
+        _fareSheetController.animateTo(
+          0.45,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     }
   }
@@ -227,12 +237,26 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   void _confirmAndApplyPin() {
     final isPickup = _viewModel.isPinningPickup;
+    if (!isPickup && _viewModel.pickupLocation == null) {
+      final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
+      _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+    }
     _viewModel.confirmPinLocation();
+    _userMovedMap = false;
+    _lastRouteId = null;
     if (isPickup) {
       _userCustomPickup = true;
+    } else {
+      if (_fareSheetController.isAttached) {
+        _fareSheetController.animateTo(
+          0.45,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     }
     final target = isPickup ? _viewModel.pickupLocation : _viewModel.dropoffLocation;
-    if (target != null && _mapController != null) {
+    if (target != null && _mapController != null && (_viewModel.routes.isEmpty || isPickup)) {
       _mapController?.animateCamera(
         CameraUpdate.newCameraPosition(
           CameraPosition(
@@ -475,13 +499,14 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             children: [
               Listener(
                 onPointerDown: (_) {
-                  if (!_userMovedMap) {
+                  if (!_userMovedMap && !_viewModel.isPinMode) {
                     setState(() => _userMovedMap = true);
                   }
                 },
                 child: GoogleMapView(
                   initialCenter: LatLng(locProv.latitude, locProv.longitude),
                   initialZoom: 15,
+                  showCenterPin: false,
                   semanticsLabel: _viewModel.isPinMode
                       ? 'Map with a pin at the centre. Drag to choose a location.'
                       : (currentRide != null
@@ -498,6 +523,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     _mapController = controller;
                   },
                   onPinChanged: (coords) => _viewModel.updatePinnedCoordinates(
+                    coords.latitude,
+                    coords.longitude,
+                  ),
+                  onCameraIdle: (coords) => _viewModel.updatePinnedCoordinates(
                     coords.latitude,
                     coords.longitude,
                   ),
@@ -597,13 +626,48 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
 
               if (_viewModel.isPinMode) ...[
-                // Pin Picker Tooltip hovering above center pin
+                // Centered Pin Pointer that stays anchored while map drags beneath it
                 Positioned.fill(
                   child: IgnorePointer(
                     child: Center(
-                      child: Transform.translate(
-                        offset: const Offset(0, -68),
-                        child: _buildPinPickerTooltip(layout),
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Ground contact target ring / shadow pulse at dead center
+                          Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.25),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: (_viewModel.isPinningPickup
+                                        ? AppTheme.emeraldGreen
+                                        : AppTheme.sunsetCoral)
+                                    .withValues(alpha: 0.8),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          // Pin Needle & Mode Pill anchored above center
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 38.0),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _buildPinPickerTooltip(layout),
+                                const SizedBox(height: 2),
+                                Icon(
+                                  Icons.location_pin,
+                                  size: 46,
+                                  color: _viewModel.isPinningPickup
+                                      ? AppTheme.emeraldGreen
+                                      : AppTheme.sunsetCoral,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1084,29 +1148,19 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   }
 
   Widget _buildPinPickerTooltip(ResponsiveLayoutHelper layout) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final c = AppColors.of(context);
     final isPickup = _viewModel.isPinningPickup;
     final isResolving = _viewModel.isResolvingPinAddress;
-    final currentAddress = _viewModel.tempPinLocation?.address ?? 'Target spot';
 
     return Container(
-      constraints: BoxConstraints(maxWidth: layout.scale(260)),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: isDark ? c.surfaceRaised : Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isPickup
-              ? (isDark ? AppTheme.accentCyan : AppTheme.emeraldGreen)
-              : AppTheme.sunsetCoral,
-          width: 1.5,
-        ),
+        color: Colors.black87,
+        borderRadius: BorderRadius.circular(8),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -1115,35 +1169,32 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 SizedBox(
-                  width: 12,
-                  height: 12,
+                  width: 10,
+                  height: 10,
                   child: CircularProgressIndicator(
-                    strokeWidth: 2,
+                    strokeWidth: 1.5,
                     color: isPickup
-                        ? (isDark ? AppTheme.accentCyan : AppTheme.emeraldGreen)
+                        ? AppTheme.emeraldGreen
                         : AppTheme.sunsetCoral,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  'Pinpointing location...',
+                const SizedBox(width: 6),
+                const Text(
+                  'Locating...',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: c.textPrimary,
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             )
           : Text(
-              currentAddress,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: c.textPrimary,
+              isPickup ? 'Set Pickup' : 'Set Destination',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
               ),
             ),
     );
@@ -1297,7 +1348,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            currentAddress,
+                            _viewModel.isResolvingPinAddress
+                                ? 'Locating...'
+                                : currentAddress,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1317,7 +1370,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   onPressed: () => _confirmAndApplyPin(),
                   icon: const Icon(Icons.check_circle_rounded, size: 20),
                   label: Text(
-                    isPickup ? 'Confirm Pickup Spot' : 'Confirm Destination',
+                    isPickup ? 'Confirm Pickup' : 'Confirm Location',
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,

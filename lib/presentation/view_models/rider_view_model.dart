@@ -49,6 +49,7 @@ class RiderViewModel extends ChangeNotifier {
   bool _fareTouchedByUser = false;
   bool _routeIsEstimated = false;
   String? _routeError;
+  bool _isLoadingRoute = false;
 
   bool _isPinMode = false;
   LocationPoint? _tempPinLocation;
@@ -78,6 +79,9 @@ class RiderViewModel extends ChangeNotifier {
         _launcherService = launcherService ?? NativeLauncherService();
 
   bool get isPinMode => _isPinMode;
+  bool get isLoadingRoute => _isLoadingRoute;
+  LocationPoint? get destination => _dropoffLocation;
+  LocationPoint? get pickup => _pickupLocation;
   PaymentRail get selectedRail => _selectedRail;
   String get selectedPaymentMethod => _selectedRail.label;
   double get estimatedDistanceKm => _estimatedDistanceKm;
@@ -174,7 +178,10 @@ class RiderViewModel extends ChangeNotifier {
     }
   }
 
+  int _geocodeRequestId = 0;
+
   Future<void> updatePinnedCoordinates(double lat, double lng) async {
+    final reqId = ++_geocodeRequestId;
     _isResolvingPinAddress = true;
     _tempPinLocation = LocationPoint(
       latitude: lat,
@@ -185,7 +192,7 @@ class RiderViewModel extends ChangeNotifier {
 
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
-      if (_isDisposed) return;
+      if (_isDisposed || reqId != _geocodeRequestId) return;
       _tempPinLocation = LocationPoint(
         latitude: lat,
         longitude: lng,
@@ -196,8 +203,10 @@ class RiderViewModel extends ChangeNotifier {
     } catch (e) {
       debugPrint('[RiderViewModel] reverseGeocode failed: $e');
     } finally {
-      _isResolvingPinAddress = false;
-      notifyListeners();
+      if (reqId == _geocodeRequestId) {
+        _isResolvingPinAddress = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -207,7 +216,7 @@ class RiderViewModel extends ChangeNotifier {
       if (_isPinningPickup) {
         setPickup(chosen);
       } else {
-        setDropoff(chosen);
+        setDestination(chosen);
       }
     }
     _isPinMode = false;
@@ -217,33 +226,76 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setPickup(LocationPoint point) {
+  Future<void> setPickup(LocationPoint point) async {
     _pickupLocation = point;
     pickupController.text = point.address;
     _hasPickupFromGps = true;
-    _recalculateRouteIfPossible();
     notifyListeners();
+
+    if (_dropoffLocation != null) {
+      await autoFetchRoute();
+    }
   }
 
-  void setDropoff(LocationPoint point) {
+  Future<void> setDestination(LocationPoint point) async {
     _dropoffLocation = point;
     dropoffController.text = point.address;
-    _recalculateRouteIfPossible();
     notifyListeners();
+
+    if (_pickupLocation != null) {
+      await autoFetchRoute();
+    }
   }
 
-  void _recalculateRouteIfPossible() {
+  Future<void> setDropoff(LocationPoint point) async {
+    await setDestination(point);
+  }
+
+  Future<void> autoFetchRoute() async {
     final pickup = _pickupLocation;
     final dropoff = _dropoffLocation;
     if (pickup == null || dropoff == null) return;
 
     _routeDebounce?.cancel();
-    _routeDebounce = Timer(const Duration(milliseconds: 350), () {
-      _loadRoute(
+    _isLoadingRoute = true;
+    _routeError = null;
+    notifyListeners();
+
+    try {
+      await _loadRoute(
         LatLng(pickup.latitude, pickup.longitude),
         LatLng(dropoff.latitude, dropoff.longitude),
       );
-    });
+      await calculateAiSweetSpotBid();
+    } catch (e) {
+      debugPrint('[RiderViewModel] Auto route fetch error: $e');
+    } finally {
+      _isLoadingRoute = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> calculateAiSweetSpotBid() async {
+    final sel = selectedRoute;
+    if (sel == null || _estimatedDistanceKm <= 0) return;
+
+    try {
+      _aiSuggestedSweetSpot = await _pricingMLService.predictSuggestedBid(
+        distanceKm: _estimatedDistanceKm,
+        trafficMultiplier: _routeTraffic.isNotEmpty ? 1.25 : 1.15,
+      );
+      if (!_fareTouchedByUser) {
+        final fareToUse = _aiSuggestedSweetSpot ?? sel.economics.riderFare;
+        fareController.text = fareToUse.round().toString();
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[RiderViewModel] AI pricing prediction error: $e');
+    }
+  }
+
+  void _recalculateRouteIfPossible() {
+    autoFetchRoute();
   }
 
   void selectRoute(int index) {
@@ -279,6 +331,8 @@ class RiderViewModel extends ChangeNotifier {
 
   @visibleForTesting
   void setTestRoutes(List<RouteOption> routes, {int defaultIndex = 0}) {
+    _routeDebounce?.cancel();
+    _routeRequestId++;
     _routes = routes;
     _selectedRouteIndex = defaultIndex;
     if (_routes.isNotEmpty && _selectedRouteIndex < _routes.length) {

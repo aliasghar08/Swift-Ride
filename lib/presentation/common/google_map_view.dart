@@ -17,6 +17,7 @@ class GoogleMapView extends StatelessWidget {
   final ValueChanged<LatLng>? onPinChanged;
   final ValueChanged<LatLng>? onCameraIdle;
   final ValueChanged<LatLng>? onMapTap;
+  final bool showCenterPin;
   final bool showMyLocationButton;
   final bool showTraffic;
   final bool darkMode;
@@ -37,6 +38,7 @@ class GoogleMapView extends StatelessWidget {
     this.onPinChanged,
     this.onCameraIdle,
     this.onMapTap,
+    this.showCenterPin = true,
     this.showMyLocationButton = true,
     this.showTraffic = false,
     this.darkMode = false,
@@ -57,6 +59,7 @@ class GoogleMapView extends StatelessWidget {
       onPinChanged: onPinChanged,
       onCameraIdle: onCameraIdle,
       onMapTap: onMapTap,
+      showCenterPin: showCenterPin,
       showMyLocationButton: showMyLocationButton,
       showTraffic: showTraffic,
       darkMode: darkMode,

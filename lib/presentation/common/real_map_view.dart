@@ -31,6 +31,7 @@ class RealMapView extends StatefulWidget {
   /// Fires on map tap.
   final ValueChanged<LatLng>? onMapTap;
 
+  final bool showCenterPin;
   final bool showMyLocationButton;
   final bool showTraffic;
   final bool darkMode;
@@ -55,6 +56,7 @@ class RealMapView extends StatefulWidget {
     this.onPinChanged,
     this.onCameraIdle,
     this.onMapTap,
+    this.showCenterPin = true,
     this.showMyLocationButton = true,
     this.showTraffic = false,
     this.darkMode = false,
@@ -308,7 +310,7 @@ class _RealMapViewState extends State<RealMapView> {
         ),
 
         // 2. Center Pin in Pin-Picker Mode
-        if (widget.mode == MapMode.pinPicker)
+        if (widget.mode == MapMode.pinPicker && widget.showCenterPin)
           IgnorePointer(
             child: Center(
               child: Stack(

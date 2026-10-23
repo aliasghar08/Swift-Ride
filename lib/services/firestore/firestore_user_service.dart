@@ -211,4 +211,21 @@ class FirestoreUserService {
       debugPrint('[FirestoreUserService] Error updating location: $e');
     }
   }
+
+  /// Permanently deletes user profile document and removes from memory cache.
+  Future<bool> deleteUser(String userId) async {
+    _memoryCache.remove(userId);
+    final fs = _firestore;
+    if (fs == null) return true;
+
+    try {
+      await fs.collection(AppConstants.usersCollection).doc(userId).delete();
+      debugPrint('[FirestoreUserService] Successfully deleted Firestore user $userId');
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreUserService] Error deleting user $userId: $e');
+      return false;
+    }
+  }
 }
+

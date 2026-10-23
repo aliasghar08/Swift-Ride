@@ -12,6 +12,10 @@ const RequestRideSchema = z.object({
   offeredFare: z.number().positive(),
   distanceKm: z.number().nonnegative(),
   durationMin: z.number().nonnegative(),
+  vehicleType: z.string().optional().default('car'),
+  bookedSeats: z.number().int().min(1).max(6).optional().default(1),
+  isAutoNegotiateEnabled: z.boolean().optional().default(false),
+  maxAutoAcceptFare: z.number().nullable().optional(),
 });
 
 export const requestRide = onCall(
@@ -36,6 +40,10 @@ export const requestRide = onCall(
       acceptedFare: null,
       distanceKm: data.distanceKm,
       durationMin: data.durationMin,
+      vehicleType: data.vehicleType,
+      bookedSeats: data.bookedSeats,
+      isAutoNegotiateEnabled: data.isAutoNegotiateEnabled,
+      maxAutoAcceptFare: data.maxAutoAcceptFare ?? null,
       commissionAmount: 0.0, // 0 commission in year 1
       paymentIntentId: null,
       paymentStatus: 'pending',

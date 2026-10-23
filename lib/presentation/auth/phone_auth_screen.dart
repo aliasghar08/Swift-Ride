@@ -12,7 +12,7 @@ import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 
-enum AuthStep { phone, otp, profile }
+enum AuthStep { phone, autoVerifying, otp, profile }
 
 /// Interactive Firebase Phone Authentication screen with OTP verification,
 /// resend timer, profile onboarding, and quick test number autofill.
@@ -36,6 +36,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   UserRole _selectedRole = UserRole.rider;
 
   Timer? _countdownTimer;
+  Timer? _autoVerifyTimer;
   int _secondsRemaining = 45;
   bool _canResend = false;
 
@@ -63,6 +64,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _autoVerifyTimer?.cancel();
     _phoneController.dispose();
     _otpController.dispose();
     _otpFocusNode.dispose();
@@ -157,9 +159,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
 
+    setState(() {
+      _currentStep = AuthStep.autoVerifying;
+    });
+
+    _autoVerifyTimer?.cancel();
+    bool autoVerified = false;
+
     await auth.sendOtp(
       phoneNumber: fullPhone,
       onAutoVerified: (PhoneAuthCredential credential) async {
+        autoVerified = true;
+        _autoVerifyTimer?.cancel();
         if (!mounted) return;
 
         // 1. Show the instant auto-verification SnackBar
@@ -185,7 +196,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
         );
 
-        // 2. Sign in with the auto-verified credential
+        // 2. Sign in directly with the auto-verified credential (OTP screen is never shown)
         try {
           final userCred = await auth.signInWithCredential(
             credential,
@@ -198,6 +209,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           }
         } catch (e) {
           if (mounted) {
+            setState(() {
+              _currentStep = AuthStep.otp;
+            });
+            _startResendTimer();
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('Auto-sign in error: $e'),
@@ -210,21 +225,42 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       },
       onCodeSent: (vId, token) {
         if (!mounted) return;
-        setState(() {
-          _currentStep = AuthStep.otp;
+        // Do not immediately display OTP screen! Wait for auto-authentication to conclude.
+        _autoVerifyTimer?.cancel();
+        _autoVerifyTimer = Timer(const Duration(seconds: 3), () {
+          if (!mounted || autoVerified) return;
+          if (_currentStep == AuthStep.autoVerifying) {
+            setState(() {
+              _currentStep = AuthStep.otp;
+            });
+            _startResendTimer();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('6-digit code sent via SMS to $fullPhone'),
+                backgroundColor: Colors.blueGrey.shade800,
+                behavior: SnackBarBehavior.floating,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
         });
-        _startResendTimer();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('6-digit code sent via SMS to $fullPhone'),
-            backgroundColor: Colors.blueGrey.shade800,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+      },
+      onAutoRetrievalTimeout: (vId) {
+        if (!mounted || autoVerified) return;
+        _autoVerifyTimer?.cancel();
+        if (_currentStep == AuthStep.autoVerifying) {
+          setState(() {
+            _currentStep = AuthStep.otp;
+          });
+          _startResendTimer();
+        }
       },
       onError: (err) {
+        _autoVerifyTimer?.cancel();
         if (!mounted) return;
+        setState(() {
+          _currentStep = AuthStep.phone;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(err),
@@ -328,6 +364,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 tooltip: 'Back',
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () {
+                  _autoVerifyTimer?.cancel();
                   setState(() {
                     if (_currentStep == AuthStep.profile) {
                       _currentStep = AuthStep.otp;
@@ -379,6 +416,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               Text(
                 _currentStep == AuthStep.phone
                     ? 'Enter Your Mobile Number'
+                    : _currentStep == AuthStep.autoVerifying
+                    ? 'Verifying Number...'
                     : _currentStep == AuthStep.otp
                     ? 'Enter 6-Digit Code'
                     : 'Setup Your Profile',
@@ -394,6 +433,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               Text(
                 _currentStep == AuthStep.phone
                     ? 'We will send a 6-digit verification code.'
+                    : _currentStep == AuthStep.autoVerifying
+                    ? 'Checking automatic verification. Please wait a moment...'
                     : _currentStep == AuthStep.otp
                     ? 'Sent to ${_formatPhoneNumber(_phoneController.text)}'
                     : 'Choose your account role and display name for Jhang & Toba Tek Singh.',
@@ -428,11 +469,109 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     switch (_currentStep) {
       case AuthStep.phone:
         return _buildPhoneInputStep(layout, auth, isDark);
+      case AuthStep.autoVerifying:
+        return _buildAutoVerifyingStep(layout, auth, isDark);
       case AuthStep.otp:
         return _buildOtpInputStep(layout, auth, isDark);
       case AuthStep.profile:
         return _buildProfileSetupStep(layout, auth, isDark);
     }
+  }
+
+  Widget _buildAutoVerifyingStep(
+    ResponsiveLayoutHelper layout,
+    AuthProvider auth,
+    bool isDark,
+  ) {
+    final c = AppColors.of(layout.context);
+    final phone = _formatPhoneNumber(_phoneController.text);
+
+    return Column(
+      key: const ValueKey('auto_verifying_step'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: EdgeInsets.all(layout.scale(24)),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(layout.scale(16)),
+            border: Border.all(color: c.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: layout.scale(64),
+                height: layout.scale(64),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: SizedBox(
+                    width: layout.scale(32),
+                    height: layout.scale(32),
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 3,
+                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryBlue),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(height: layout.scale(20)),
+              Text(
+                'Detecting Automatic Verification',
+                style: TextStyle(
+                  fontSize: layout.fontSize(18),
+                  fontWeight: FontWeight.w800,
+                  color: c.textPrimary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: layout.scale(8)),
+              Text(
+                'Checking SMS detection for $phone.\nIf auto-verify succeeds, you will be signed in instantly without typing a code.',
+                style: TextStyle(
+                  fontSize: layout.fontSize(13),
+                  color: c.textMuted,
+                  height: 1.45,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: layout.scale(24)),
+              OutlinedButton.icon(
+                onPressed: () {
+                  _autoVerifyTimer?.cancel();
+                  setState(() {
+                    _currentStep = AuthStep.otp;
+                  });
+                  _startResendTimer();
+                },
+                icon: const Icon(Icons.dialpad_rounded, size: 18),
+                label: const Text('Enter Code Manually'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.primaryBlue,
+                  side: const BorderSide(color: AppTheme.primaryBlue),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(layout.scale(10)),
+                  ),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: layout.scale(16),
+                    vertical: layout.scale(10),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildPhoneInputStep(

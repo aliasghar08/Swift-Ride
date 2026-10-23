@@ -2334,6 +2334,24 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                 color: AppColors.of(context).textMuted,
                               ),
                             ),
+                            if (ride.bookedSeats > 1)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 3),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.primaryBlue),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      '${ride.bookedSeats} Passengers Along',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(10),
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -2751,61 +2769,143 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
         const SizedBox(height: 12),
 
-        // Seating Selection Row
+        // Passengers & Seating Selection Card
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: c.surfaceRaised,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: c.border.withValues(alpha: 0.6)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: c.border.withValues(alpha: 0.7)),
           ),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(
-                Icons.airline_seat_recline_normal_rounded,
-                size: 16,
-                color: AppTheme.primaryBlue,
+              Row(
+                children: [
+                  const Icon(
+                    Icons.people_alt_rounded,
+                    size: 18,
+                    color: AppTheme.primaryBlue,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Passengers Traveling:',
+                    style: TextStyle(
+                      fontSize: layout.fontSize(12.5),
+                      fontWeight: FontWeight.w700,
+                      color: c.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (_viewModel.bookedSeats > 1)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.group_add_rounded, size: 12, color: AppTheme.emeraldGreen),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${_viewModel.bookedSeats} Seats Reserved',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(10.5),
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.emeraldGreen,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
-              const SizedBox(width: 8),
+              const SizedBox(height: 4),
               Text(
-                'Seats:',
+                selectedType == VehicleType.bike
+                    ? 'Motorcycle accommodates 1 solo passenger only.'
+                    : 'Carrying family or friends along? Select seats so your driver arrives prepared.',
                 style: TextStyle(
-                  fontSize: layout.fontSize(12),
-                  fontWeight: FontWeight.w700,
-                  color: c.textPrimary,
+                  fontSize: layout.fontSize(11),
+                  color: c.textMuted,
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Row(
+              const SizedBox(height: 10),
+              if (selectedType == VehicleType.bike)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: c.border),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person, size: 15, color: AppTheme.primaryBlue),
+                      const SizedBox(width: 6),
+                      Text(
+                        '1 Passenger (Solo Rider)',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11.5),
+                          fontWeight: FontWeight.w600,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Row(
                   children: List.generate(selectedType.seats, (index) {
                     final seatCount = index + 1;
                     final isSelected = seatCount == _viewModel.bookedSeats;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: InkWell(
-                        onTap: () {
-                          setState(() {
-                            _viewModel.setBookedSeats(seatCount);
-                          });
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppTheme.primaryBlue : c.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: isSelected ? AppTheme.primaryBlue : c.border,
+                    return Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: index < selectedType.seats - 1 ? 6 : 0,
+                        ),
+                        child: InkWell(
+                          onTap: () {
+                            setState(() {
+                              _viewModel.setBookedSeats(seatCount);
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppTheme.primaryBlue : c.surface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: isSelected ? AppTheme.primaryBlue : c.border,
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
                             ),
-                          ),
-                          child: Text(
-                            '$seatCount',
-                            style: TextStyle(
-                              fontSize: layout.fontSize(11.5),
-                              fontWeight: FontWeight.w700,
-                              color: isSelected ? Colors.white : c.textPrimary,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  seatCount == 1
+                                      ? Icons.person
+                                      : (seatCount == 2
+                                          ? Icons.people
+                                          : Icons.groups_rounded),
+                                  size: 16,
+                                  color: isSelected ? Colors.white : AppTheme.slateMuted,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  seatCount == 1 ? '1 Seat' : '$seatCount Seats',
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(11),
+                                    fontWeight: FontWeight.w700,
+                                    color: isSelected ? Colors.white : c.textPrimary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
@@ -2813,15 +2913,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     );
                   }),
                 ),
-              ),
-              Text(
-                '${_viewModel.bookedSeats} of ${selectedType.seats} ${selectedType.seats == 1 ? 'seat' : 'seats'}',
-                style: TextStyle(
-                  fontSize: layout.fontSize(11),
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.slateMuted,
-                ),
-              ),
             ],
           ),
         ),

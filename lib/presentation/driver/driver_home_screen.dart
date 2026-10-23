@@ -862,7 +862,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       const Icon(Icons.people_alt_rounded, size: 10, color: AppTheme.emeraldGreen),
                                       const SizedBox(width: 3),
                                       Text(
-                                        '${request.bookedSeats} ${request.bookedSeats == 1 ? "seat" : "seats"}',
+                                        request.bookedSeats > 1
+                                            ? '${request.bookedSeats} Passengers Along'
+                                            : '1 Seat',
                                         style: TextStyle(
                                           fontSize: layout.fontSize(9.5),
                                           fontWeight: FontWeight.w800,
@@ -1422,7 +1424,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.emeraldGreen),
                       const SizedBox(width: 4),
                       Text(
-                        '${ride.bookedSeats} ${ride.bookedSeats == 1 ? "seat" : "seats"}',
+                        ride.bookedSeats > 1
+                            ? '${ride.bookedSeats} Passengers Along'
+                            : '1 Seat',
                         style: TextStyle(
                           color: AppTheme.emeraldGreen,
                           fontWeight: FontWeight.w700,

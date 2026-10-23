@@ -94,6 +94,7 @@ class AuthProvider extends ChangeNotifier {
     void Function(String verificationId, int? resendToken)? onCodeSent,
     void Function(String error)? onError,
     void Function(PhoneAuthCredential credential)? onAutoVerified,
+    void Function(String verificationId)? onAutoRetrievalTimeout,
   }) async {
     _isLoading = true;
     _authError = null;
@@ -119,6 +120,9 @@ class AuthProvider extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
         onAutoVerified?.call(credential);
+      },
+      onAutoRetrievalTimeout: (vId) {
+        onAutoRetrievalTimeout?.call(vId);
       },
     );
   }
@@ -255,6 +259,39 @@ class AuthProvider extends ChangeNotifier {
       await _storage.setString('active_user_role', 'rider');
     } catch (e) {
       _authError = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Permanently deletes the active user profile and credentials,
+  /// resetting the session cleanly to guest state.
+  /// Complies with Apple App Store Review Guideline 5.1.1(v).
+  Future<bool> deleteAccount() async {
+    _isLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    try {
+      await _authService.deleteAccount();
+      _currentUser = AppUser(
+        id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
+        fullName: 'Guest User',
+        phone: '',
+        role: UserRole.rider,
+        rating: 5.0,
+        totalRides: 0,
+        createdAt: DateTime.now(),
+      );
+      _activeRole = UserRole.rider;
+      await _storage.setString('active_user_role', 'rider');
+      await _storage.remove('driver_daily_khata');
+      return true;
+    } catch (e) {
+      final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
+      _authError = errMsg;
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();

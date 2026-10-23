@@ -113,3 +113,24 @@ export const setUserRole = onCall(
     return { success: true, targetUserId: data.targetUserId, role: data.role };
   }
 );
+
+export const deleteUserAccount = onCall(
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
+  async (request) => {
+    const caller = await assertAuthenticated(request);
+    const targetUid = caller.uid;
+
+    // 1. Delete Firestore user document
+    await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(targetUid).delete();
+
+    // 2. Delete Firebase Auth user record
+    try {
+      await auth.deleteUser(targetUid);
+    } catch (e) {
+      console.warn(`[deleteUserAccount] auth.deleteUser warning for ${targetUid}:`, e);
+    }
+
+    return { success: true, message: 'Account permanently deleted' };
+  }
+);
+

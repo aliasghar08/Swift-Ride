@@ -395,12 +395,103 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       await auth.signOut();
                     },
                   ),
+                if (auth.isAuthenticated) ...[
+                  const Divider(),
+                  ListTile(
+                    leading: const Icon(
+                      Icons.delete_forever_rounded,
+                      color: Colors.redAccent,
+                    ),
+                    title: const Text(
+                      'Delete Account',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'Permanently erase your SwiftRide account & data',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      _confirmDeleteAccount(context, auth);
+                    },
+                  ),
+                ],
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, AuthProvider auth) {
+    showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 26),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Delete Account?',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Are you sure you want to permanently delete your SwiftRide account?\n\n'
+            '• All your personal profile data, ride history, and active sessions will be permanently erased.\n'
+            '• This action cannot be undone.\n\n'
+            'In compliance with Apple Privacy Guidelines, all associated cloud records will be purged.',
+            style: TextStyle(fontSize: 13.5, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(dialogCtx, true),
+              child: const Text('Delete Permanently'),
+            ),
+          ],
+        );
+      },
+    ).then((confirmed) async {
+      if (confirmed == true && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Deleting your account and data...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        final success = await auth.deleteAccount();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                success
+                    ? 'Your SwiftRide account has been permanently deleted.'
+                    : (auth.authError ?? 'Failed to delete account. Please re-login and try again.'),
+              ),
+              backgroundColor: success ? AppTheme.emeraldGreen : Colors.redAccent,
+            ),
+          );
+        }
+      }
+    });
   }
 
   Widget _buildRoleButton({

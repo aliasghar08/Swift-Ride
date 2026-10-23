@@ -67,6 +67,7 @@ class AuthService {
     required void Function(String verificationId, int? resendToken) onCodeSent,
     required void Function(String errorMessage) onError,
     void Function(PhoneAuthCredential credential)? onAutoVerified,
+    void Function(String verificationId)? onAutoRetrievalTimeout,
     int? forceResendingToken,
     Duration timeout = const Duration(seconds: 60),
   }) async {
@@ -119,6 +120,7 @@ class AuthService {
         },
         codeAutoRetrievalTimeout: (String verificationId) {
           debugPrint('[AuthService] SMS code auto-retrieval timed out for: $verificationId');
+          onAutoRetrievalTimeout?.call(verificationId);
         },
       );
     } catch (e) {
@@ -305,5 +307,52 @@ class AuthService {
     } catch (e) {
       debugPrint('[AuthService] Error signing out: $e');
     }
+  }
+
+  /// Permanently deletes the active user's Firestore profile, cleans up tokens,
+  /// and deletes the Firebase Auth user record.
+  /// Complies with Apple App Store Review Guideline 5.1.1(v) for in-app account deletion.
+  Future<void> deleteAccount() async {
+    final user = currentFirebaseUser;
+    final uid = user?.uid;
+
+    if (uid != null && uid.isNotEmpty) {
+      // 1. Remove Firestore user document
+      try {
+        await _userService.deleteUser(uid);
+      } catch (e) {
+        debugPrint('[AuthService] Error deleting Firestore document for $uid: $e');
+      }
+
+      // 2. Invoke server-side deletion Cloud Function if registered
+      try {
+        if (Firebase.apps.isNotEmpty) {
+          await FirebaseFunctions.instance
+              .httpsCallable('deleteUserAccount')
+              .call(<String, dynamic>{'userId': uid});
+        }
+      } catch (e) {
+        debugPrint('[AuthService] deleteUserAccount function notice: $e');
+      }
+
+      // 3. Delete Firebase Auth user
+      if (user != null) {
+        try {
+          await user.delete();
+          debugPrint('[AuthService] Firebase Auth user $uid successfully deleted');
+        } on FirebaseAuthException catch (e) {
+          debugPrint('[AuthService] FirebaseAuthException on user.delete(): [${e.code}] ${e.message}');
+          if (e.code == 'requires-recent-login') {
+            await signOut();
+            rethrow;
+          }
+        } catch (e) {
+          debugPrint('[AuthService] Unexpected error deleting Auth user: $e');
+        }
+      }
+    }
+
+    // Always ensure session is signed out
+    await signOut();
   }
 }

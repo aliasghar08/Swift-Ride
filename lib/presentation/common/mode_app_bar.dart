@@ -139,30 +139,34 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     : Colors.black.withValues(alpha: 0.04),
               ),
             ),
-            child: Row(
-              children: [
-                _buildRoleButton(
-                  layout: layout,
-                  label: 'Rider',
-                  icon: Icons.person,
-                  isSelected: auth.activeRole == UserRole.rider,
-                  onTap: () => auth.switchRole(UserRole.rider),
-                ),
-                _buildRoleButton(
-                  layout: layout,
-                  label: 'Driver',
-                  icon: Icons.drive_eta,
-                  isSelected: auth.activeRole == UserRole.driver,
-                  onTap: () => auth.switchRole(UserRole.driver),
-                ),
-                _buildRoleButton(
-                  layout: layout,
-                  label: 'Admin',
-                  icon: Icons.dashboard,
-                  isSelected: auth.activeRole == UserRole.admin,
-                  onTap: () => auth.switchRole(UserRole.admin),
-                ),
-              ],
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildRoleButton(
+                    layout: layout,
+                    label: 'Rider',
+                    icon: Icons.person,
+                    isSelected: auth.activeRole == UserRole.rider,
+                    onTap: () => auth.switchRole(UserRole.rider),
+                  ),
+                  _buildRoleButton(
+                    layout: layout,
+                    label: 'Driver',
+                    icon: Icons.drive_eta,
+                    isSelected: auth.activeRole == UserRole.driver,
+                    onTap: () => auth.switchRole(UserRole.driver),
+                  ),
+                  _buildRoleButton(
+                    layout: layout,
+                    label: 'Admin',
+                    icon: Icons.dashboard,
+                    isSelected: auth.activeRole == UserRole.admin,
+                    onTap: () => auth.switchRole(UserRole.admin),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -178,16 +182,18 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 shape: BoxShape.circle,
                 color: c.surfaceRaised,
                 border: Border.all(
-                  color: auth.isAuthenticated
+                  color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
                       ? AppTheme.emeraldGreen
                       : c.border,
                   width: 1.5,
                 ),
               ),
               child: Icon(
-                auth.isAuthenticated ? Icons.account_circle : Icons.login,
+                (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
+                    ? Icons.account_circle
+                    : Icons.login,
                 size: layout.scale(18),
-                color: auth.isAuthenticated
+                color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
                     ? AppTheme.emeraldGreen
                     : (isDark ? Colors.white70 : AppTheme.darkNavy),
               ),
@@ -212,6 +218,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       builder: (ctx) {
         final user = auth.currentUser;
+        final isUserSignedIn = auth.isAuthenticated || user.phone.isNotEmpty;
         return SafeArea(
           child: Padding(
             padding: EdgeInsets.all(layout.scale(20)),
@@ -313,7 +320,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     color: AppTheme.primaryBlue,
                   ),
                   title: Text(
-                    auth.isAuthenticated
+                    isUserSignedIn
                         ? 'Switch / Re-login Phone'
                         : 'Sign In with Phone (OTP)',
                     style: const TextStyle(fontWeight: FontWeight.w600),
@@ -350,7 +357,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     Navigator.pushNamed(context, '/history');
                   },
                 ),
-                if (auth.isAuthenticated)
+                if (isUserSignedIn)
                   ListTile(
                     leading: const Icon(
                       Icons.health_and_safety_outlined,
@@ -377,7 +384,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       );
                     },
                   ),
-                if (auth.isAuthenticated)
+                if (isUserSignedIn)
                   ListTile(
                     leading: const Icon(
                       Icons.logout,
@@ -395,7 +402,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       await auth.signOut();
                     },
                   ),
-                if (auth.isAuthenticated) ...[
+                if (isUserSignedIn) ...[
                   const Divider(),
                   ListTile(
                     leading: const Icon(

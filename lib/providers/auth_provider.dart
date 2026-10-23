@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/models/user_model.dart';
@@ -10,6 +11,8 @@ import '../services/native/native_storage_service.dart';
 /// Production-ready Auth & Role Provider managing the active session with
 /// Firebase Phone Authentication, Firestore user profile persistence, and NativeStorageService.
 class AuthProvider extends ChangeNotifier {
+  static const String _cachedProfileKey = 'cached_user_profile';
+
   final NativeStorageService _storage = NativeStorageService();
   final AuthService _authService = AuthService();
   final FirestoreUserService _firestoreUserService = FirestoreUserService();
@@ -33,8 +36,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _initAnonymousSession() async {
-    if (!_authService.isAuthenticated) {
+    if (!_authService.isAuthenticated && _currentUser.phone.isEmpty) {
       await _authService.signInAnonymously();
+    }
+  }
+
+  Future<void> _persistCurrentUser() async {
+    try {
+      if (_currentUser.phone.isNotEmpty) {
+        await _storage.setString(_cachedProfileKey, jsonEncode(_currentUser.toMap()));
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] Failed to persist user profile: $e');
     }
   }
 
@@ -50,6 +63,23 @@ class AuthProvider extends ChangeNotifier {
   FirestoreUserService get firestoreUserService => _firestoreUserService;
 
   Future<void> _loadPersistedRole() async {
+    // 1. Restore cached user profile to instantly remember the signed-in session
+    try {
+      final profileJson = await _storage.getString(_cachedProfileKey);
+      if (profileJson != null && profileJson.isNotEmpty) {
+        final map = jsonDecode(profileJson) as Map<String, dynamic>;
+        final restored = AppUser.fromMap(map);
+        if (restored.phone.isNotEmpty) {
+          _currentUser = restored;
+          _activeRole = restored.role;
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthProvider] Error restoring cached user profile: $e');
+    }
+
+    // 2. Restore active role selection
     final roleStr = await _storage.getString('active_user_role');
     if (roleStr != null) {
       if (roleStr == 'driver' && _activeRole != UserRole.driver) {
@@ -79,6 +109,14 @@ class AuthProvider extends ChangeNotifier {
           if (profile != null) {
             _currentUser = profile;
             _activeRole = profile.role;
+            _persistCurrentUser();
+            notifyListeners();
+          } else if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
+            _currentUser = _currentUser.copyWith(
+              id: user.uid,
+              phone: user.phoneNumber,
+            );
+            _persistCurrentUser();
             notifyListeners();
           }
         } catch (e) {
@@ -160,6 +198,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = updatedUser;
       _activeRole = updatedUser.role;
       _storage.setString('active_user_role', _activeRole.name);
+      _persistCurrentUser();
       _isLoading = false;
       notifyListeners();
       return userCred;
@@ -226,6 +265,7 @@ class AuthProvider extends ChangeNotifier {
       _currentUser = updatedUser;
       _activeRole = updatedUser.role;
       _storage.setString('active_user_role', _activeRole.name);
+      _persistCurrentUser();
       _isLoading = false;
       notifyListeners();
       onSuccess?.call();
@@ -246,6 +286,7 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     try {
       await _authService.signOut();
+      await _storage.remove(_cachedProfileKey);
       _currentUser = AppUser(
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
@@ -275,6 +316,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       await _authService.deleteAccount();
+      await _storage.remove(_cachedProfileKey);
       _currentUser = AppUser(
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
@@ -318,6 +360,7 @@ class AuthProvider extends ChangeNotifier {
 
   void updateUser(AppUser user) {
     _currentUser = user;
+    _persistCurrentUser();
     notifyListeners();
   }
 

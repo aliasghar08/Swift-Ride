@@ -68,6 +68,8 @@ class FirestoreRideService {
         'suggestedFare': ride.suggestedFare,
         'distanceKm': ride.distanceKm,
         'durationMin': ride.durationMin,
+        'vehicleType': ride.vehicleType,
+        'bookedSeats': ride.bookedSeats,
         'commissionAmount': ride.commissionAmount,
         'paymentIntentId': ride.paymentIntentId,
         'paymentStatus': ride.paymentStatus,

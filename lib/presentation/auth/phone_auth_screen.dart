@@ -584,6 +584,49 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       key: const ValueKey('phone_step'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (auth.currentUser.phone.isNotEmpty) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.emeraldGreen.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppTheme.emeraldGreen, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Active Session: ${auth.currentUser.phone}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: layout.fontSize(13),
+                          color: isDark ? Colors.white : AppTheme.darkNavy,
+                        ),
+                      ),
+                      Text(
+                        'Logged in as ${auth.currentUser.fullName.isEmpty ? "SwiftRide User" : auth.currentUser.fullName}',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11.5),
+                          color: AppTheme.slateMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: _onSuccessNavigate,
+                  child: const Text('Continue', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+          ),
+        ],
         Container(
           decoration: BoxDecoration(
             color: c.surface,
@@ -749,56 +792,62 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(6, (index) {
-                  final digit = index < otpText.length ? otpText[index] : '';
-                  final isFocused = index == otpText.length ||
-                      (index == 5 && otpText.length == 6);
-                  final isFilled = digit.isNotEmpty;
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: List.generate(6, (index) {
+                    final digit = index < otpText.length ? otpText[index] : '';
+                    final isFocused = index == otpText.length ||
+                        (index == 5 && otpText.length == 6);
+                    final isFilled = digit.isNotEmpty;
 
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    width: layout.scale(46),
-                    height: layout.scale(54),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? (isFilled
-                              ? AppTheme.accentCyan.withValues(alpha: 0.12)
-                              : Colors.white.withValues(alpha: 0.05))
-                          : (isFilled
-                              ? AppTheme.primaryBlue.withValues(alpha: 0.08)
-                              : Colors.black.withValues(alpha: 0.03)),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isFocused
-                            ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
-                            : (isFilled
-                                ? (isDark
-                                    ? AppTheme.accentCyan.withValues(alpha: 0.55)
-                                    : AppTheme.primaryBlue.withValues(alpha: 0.55))
-                                : c.border),
-                        width: isFocused ? 2.0 : 1.2,
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: layout.scale(46),
+                        height: layout.scale(54),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? (isFilled
+                                  ? AppTheme.accentCyan.withValues(alpha: 0.12)
+                                  : Colors.white.withValues(alpha: 0.05))
+                              : (isFilled
+                                  ? AppTheme.primaryBlue.withValues(alpha: 0.08)
+                                  : Colors.black.withValues(alpha: 0.03)),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isFocused
+                                ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+                                : (isFilled
+                                    ? (isDark
+                                        ? AppTheme.accentCyan.withValues(alpha: 0.55)
+                                        : AppTheme.primaryBlue.withValues(alpha: 0.55))
+                                    : c.border),
+                            width: isFocused ? 2.0 : 1.2,
+                          ),
+                          boxShadow: isFocused
+                              ? AppTheme.glowShadow(
+                                  isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                                  blur: 8,
+                                  opacity: 0.25,
+                                )
+                              : null,
+                        ),
+                        child: Text(
+                          digit,
+                          style: TextStyle(
+                            fontSize: layout.fontSize(22),
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                          ),
+                        ),
                       ),
-                      boxShadow: isFocused
-                          ? AppTheme.glowShadow(
-                              isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                              blur: 8,
-                              opacity: 0.25,
-                            )
-                          : null,
-                    ),
-                    child: Text(
-                      digit,
-                      style: TextStyle(
-                        fontSize: layout.fontSize(22),
-                        fontWeight: FontWeight.w800,
-                        color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                      ),
-                    ),
-                  );
-                }),
+                    );
+                  }),
+                ),
               ),
               // Underlying transparent text field capturing autofill and keyboard events
               Opacity(
@@ -828,31 +877,37 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            TextButton.icon(
-              onPressed: () {
-                setState(() {
-                  _currentStep = AuthStep.phone;
-                });
-              },
-              icon: const Icon(Icons.edit, size: 14),
-              label: const Text('Edit Phone', style: TextStyle(fontSize: 13)),
+            Flexible(
+              child: TextButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _currentStep = AuthStep.phone;
+                  });
+                },
+                icon: const Icon(Icons.edit, size: 14),
+                label: const Text('Edit Phone', style: TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
+              ),
             ),
-            _canResend
-                ? TextButton(
-                    onPressed: _handleSendOtp,
-                    child: const Text(
-                      'Resend Code',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+            Flexible(
+              child: _canResend
+                  ? TextButton(
+                      onPressed: _handleSendOtp,
+                      child: const Text(
+                        'Resend Code',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  : Text(
+                      'Resend Code in 00:${_secondsRemaining.toString().padLeft(2, '0')}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.slateMuted,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  )
-                : Text(
-                    'Resend Code in 00:${_secondsRemaining.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.slateMuted,
-                    ),
-                  ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -918,7 +973,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           children: [
             Expanded(
               child: ChoiceChip(
-                label: const Text('Rider (Book Rides)'),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Rider (Book Rides)'),
+                ),
                 selected: _selectedRole == UserRole.rider,
                 onSelected: (val) {
                   if (val) setState(() => _selectedRole = UserRole.rider);
@@ -928,7 +986,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: ChoiceChip(
-                label: const Text('Driver (Earn 100%)'),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Driver (Earn 100%)'),
+                ),
                 selected: _selectedRole == UserRole.driver,
                 onSelected: (val) {
                   if (val) setState(() => _selectedRole = UserRole.driver);

@@ -2,138 +2,140 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CADisableMinimumFrameDurationOnPhone</key>
-    <true/>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>$(DEVELOPMENT_LANGUAGE)</string>
-    <key>CFBundleDisplayName</key>
-    <string>Swift Ride</string>
-    <key>CFBundleExecutable</key>
-    <string>$(EXECUTABLE_NAME)</string>
-    <key>CFBundleIdentifier</key>
-    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>Swift Ride</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$(FLUTTER_BUILD_NAME)</string>
-    <key>CFBundleSignature</key>
-    <string>????</string>
-    <key>CFBundleURLTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>app-1-113634488038-ios-3ada91b92c00566241d527</string>
-            </array>
-        </dict>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>com.googleusercontent.apps.113634488038-ios-3ada91b92c00566241d527</string>
-            </array>
-        </dict>
-        <dict>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>CFBundleURLName</key>
-            <string>com.dartnexuslab.swiftride</string>
-            <key>CFBundleURLSchemes</key>
-            <array>
-                <string>swiftride</string>
-                <string>com.dartnexuslab.swiftride</string>
-            </array>
-        </dict>
-    </array>
-    <key>CFBundleVersion</key>
-    <string>$(FLUTTER_BUILD_NUMBER)</string>
-    <key>GMSApiKey</key>
-    <string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
-    <key>ITSAppUsesNonExemptEncryption</key>
-    <false/>
-    <key>LSApplicationQueriesSchemes</key>
-    <array>
-        <string>tel</string>
-        <string>sms</string>
-        <string>https</string>
-        <string>http</string>
-    </array>
-    <key>LSRequiresIPhoneOS</key>
-    <true/>
-    <key>NSBluetoothAlwaysUsageDescription</key>
-    <string>Swift Ride uses Bluetooth to connect to in-car devices for enhanced navigation.</string>
-    <key>NSCameraUsageDescription</key>
-    <string>Swift Ride needs camera access to photograph your vehicle and upload required verification documents.</string>
-    <key>NSContactsUsageDescription</key>
-    <string>Swift Ride needs contacts access to let you quickly add trusted contacts for trip sharing and SOS alerts.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Swift Ride needs background location access to track your ride even when the app is in the background.</string>
-    <key>NSLocationAlwaysUsageDescription</key>
-    <string>Swift Ride needs background location access for ride tracking.</string>
-    <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Swift Ride needs your location to show nearby drivers and track your ride in real time.</string>
-    <key>NSMicrophoneUsageDescription</key>
-    <string>Swift Ride needs microphone access for in-app voice chat and the AI assistant.</string>
-    <key>NSMotionUsageDescription</key>
-    <string>Swift Ride uses motion data for crash detection and safety monitoring during rides.</string>
-    <key>NSPhotoLibraryAddUsageDescription</key>
-    <string>Swift Ride needs permission to save trip receipts and photos to your library.</string>
-    <key>NSPhotoLibraryUsageDescription</key>
-    <string>Swift Ride needs photo library access to upload your driver documents and vehicle photos.</string>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Swift Ride uses speech recognition to let you talk to the AI assistant hands-free.</string>
-    <key>UIApplicationSceneManifest</key>
-    <dict>
-        <key>UIApplicationSupportsMultipleScenes</key>
-        <false/>
-        <key>UISceneConfigurations</key>
-        <dict>
-            <key>UIWindowSceneSessionRoleApplication</key>
-            <array>
-                <dict>
-                    <key>UISceneClassName</key>
-                    <string>UIWindowScene</string>
-                    <key>UISceneConfigurationName</key>
-                    <string>flutter</string>
-                    <key>UISceneDelegateClassName</key>
-                    <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-                    <key>UISceneStoryboardFile</key>
-                    <string>Main</string>
-                </dict>
-            </array>
-        </dict>
-    </dict>
-    <key>UIApplicationSupportsIndirectInputEvents</key>
-    <true/>
-    <key>UIBackgroundModes</key>
-    <array>
-        <string>fetch</string>
-        <string>remote-notification</string>
-        <string>location</string>
-    </array>
-    <key>UILaunchStoryboardName</key>
-    <string>LaunchScreen</string>
-    <key>UIMainStoryboardFile</key>
-    <string>Main</string>
-    <key>UISupportedInterfaceOrientations</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
-    <key>UISupportedInterfaceOrientations~ipad</key>
-    <array>
-        <string>UIInterfaceOrientationPortrait</string>
-        <string>UIInterfaceOrientationPortraitUpsideDown</string>
-        <string>UIInterfaceOrientationLandscapeLeft</string>
-        <string>UIInterfaceOrientationLandscapeRight</string>
-    </array>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Swift Ride</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Swift Ride</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-113634488038-ios-3ada91b92c00566241d527</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.113634488038-ios-3ada91b92c00566241d527</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>com.dartnexuslab.swiftride</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>swiftride</string>
+				<string>com.dartnexuslab.swiftride</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GMSApiKey</key>
+	<string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+		<string>sms</string>
+		<string>https</string>
+		<string>http</string>
+	</array>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Swift Ride uses Bluetooth to connect to in-car devices for enhanced navigation.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Swift Ride needs camera access to photograph your vehicle and upload required verification documents.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Swift Ride needs contacts access to let you quickly add trusted contacts for trip sharing and SOS alerts.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Swift Ride needs background location access to track your ride even when the app is in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Swift Ride needs background location access for ride tracking.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Swift Ride needs your location to show nearby drivers and track your ride in real time.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Swift Ride needs microphone access for in-app voice chat and the AI assistant.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Swift Ride uses motion data for crash detection and safety monitoring during rides.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Swift Ride needs permission to save trip receipts and photos to your library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Swift Ride needs photo library access to upload your driver documents and vehicle photos.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Swift Ride uses speech recognition to let you talk to the AI assistant hands-free.</string>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>UIWindowScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>flutter</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<key>UISceneStoryboardFile</key>
+					<string>Main</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+		<string>location</string>
+		<string>processing</string>
+		<string>screen-capture</string>
+	</array>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 </dict>
 </plist>

@@ -18,6 +18,7 @@ import 'firebase_options.dart';
 import 'providers/safety_provider.dart';
 import 'services/fcm_service.dart';
 import 'services/fuel_price_service.dart';
+import 'services/native/native_storage_service.dart';
 import 'ai/ai.dart';
 
 Future<void> main() async {
@@ -73,6 +74,16 @@ Future<void> main() async {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }
 
+  String startRoute = '/login';
+  try {
+    final cachedProfile = await NativeStorageService().getString('cached_user_profile');
+    if (cachedProfile != null && cachedProfile.isNotEmpty) {
+      startRoute = '/';
+    }
+  } catch (storageErr) {
+    debugPrint('[Main] Error reading cached session: $storageErr');
+  }
+
   runApp(
     CustomMultiProvider(
       providers: [
@@ -113,7 +124,7 @@ Future<void> main() async {
               child: child,
             ),
       ],
-      child: const SwiftRideApp(initialRoute: '/login'),
+      child: SwiftRideApp(initialRoute: startRoute),
     ),
   );
 }
@@ -127,13 +138,15 @@ class SwiftRideApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomConsumer<AuthProvider>(
       builder: (context, auth, _) {
+        final effectiveRoute = initialRoute ?? AppRouter.initialRoute;
+
         return MaterialApp(
           title: 'SwiftRide - Zero Commission Platform',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
           themeMode: auth.activeRole == UserRole.driver ? ThemeMode.dark : ThemeMode.light,
-          initialRoute: initialRoute ?? AppRouter.initialRoute,
+          initialRoute: effectiveRoute,
           onGenerateRoute: AppRouter.onGenerateRoute,
         );
       },

@@ -32,6 +32,7 @@ import '../view_models/rider_view_model.dart';
 import 'address_search_screen.dart';
 import 'route_preview_screen.dart';
 import '../widgets/trip_economics_sheet.dart';
+import '../auth/phone_auth_screen.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -1821,7 +1822,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                 children: [
                                   Container(
                                     height: layout.touchTarget(48),
-                                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                                    padding: EdgeInsets.symmetric(horizontal: layout.scale(10)),
                                     alignment: Alignment.center,
                                     decoration: BoxDecoration(
                                       color: c.surfaceRaised,
@@ -1830,12 +1831,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                     child: Text(
                                       'PKR',
                                       style: TextStyle(
-                                        fontSize: layout.fontSize(14),
+                                        fontSize: layout.fontSize(13.5),
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 6),
                                   Expanded(
                                     child: SizedBox(
                                       height: layout.touchTarget(48),
@@ -1850,7 +1851,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                         decoration: const InputDecoration(
-                                          hintText: 'Enter fare in PKR',
+                                          hintText: 'Enter fare',
                                           contentPadding: EdgeInsets.symmetric(
                                             horizontal: 12,
                                             vertical: 10,
@@ -1864,7 +1865,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                     height: layout.touchTarget(48),
                                     child: OutlinedButton(
                                       style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                        padding: EdgeInsets.symmetric(horizontal: layout.scale(8)),
+                                        minimumSize: Size.zero,
                                       ),
                                       onPressed: () => _viewModel.quickIncrementFare(50.0),
                                       child: const Text('+50'),
@@ -1875,7 +1877,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                     height: layout.touchTarget(48),
                                     child: OutlinedButton(
                                       style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                                        padding: EdgeInsets.symmetric(horizontal: layout.scale(8)),
+                                        minimumSize: Size.zero,
                                       ),
                                       onPressed: () => _viewModel.quickIncrementFare(100.0),
                                       child: const Text('+100'),
@@ -2060,8 +2063,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                               onPressed: rideProv.isSubmitting
                                   ? null
                                   : () async {
+                                      final isPhoneUser = authProv.currentUser.phone.isNotEmpty;
+                                      final isAuthenticated = authProv.isAuthenticated;
+                                      if (!isPhoneUser && !isAuthenticated) {
+                                        _showSignInPromptDialog(context);
+                                        return;
+                                      }
+
+                                      final activeRiderId = authProv.currentUser.id.isNotEmpty
+                                          ? authProv.currentUser.id
+                                          : null;
+
                                       final ok = await _viewModel.submitRideRequest(
                                         rideProv: rideProv,
+                                        riderId: activeRiderId,
                                       );
                                       if (!mounted || !context.mounted || ok) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
@@ -2709,52 +2724,58 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 2),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.person,
-                              size: 10.5,
-                              color: isSelected
-                                  ? AppTheme.primaryBlue.withValues(alpha: 0.8)
-                                  : AppTheme.slateMuted,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${type.seats}',
-                              style: TextStyle(
-                                fontSize: layout.fontSize(10),
-                                color: AppTheme.slateMuted,
-                                fontWeight: FontWeight.w600,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 10.5,
+                                color: isSelected
+                                    ? AppTheme.primaryBlue.withValues(alpha: 0.8)
+                                    : AppTheme.slateMuted,
                               ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              '• ~${type.typicalEtaMinutes}m',
-                              style: TextStyle(
-                                fontSize: layout.fontSize(10),
-                                color: AppTheme.slateMuted,
+                              const SizedBox(width: 2),
+                              Text(
+                                '${type.seats}',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(10),
+                                  color: AppTheme.slateMuted,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 4),
+                              Text(
+                                '• ~${type.typicalEtaMinutes}m',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(10),
+                                  color: AppTheme.slateMuted,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? AppTheme.primaryBlue
-                                : c.surface,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'PKR ${fare.round()}',
-                            style: TextStyle(
-                              fontSize: layout.fontSize(11.5),
-                              fontWeight: FontWeight.w800,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
                               color: isSelected
-                                  ? Colors.white
-                                  : c.textPrimary,
+                                  ? AppTheme.primaryBlue
+                                  : c.surface,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'PKR ${fare.round()}',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(11.5),
+                                fontWeight: FontWeight.w800,
+                                color: isSelected
+                                    ? Colors.white
+                                    : c.textPrimary,
+                              ),
                             ),
                           ),
                         ),
@@ -2884,28 +2905,34 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                 width: isSelected ? 1.5 : 1.0,
                               ),
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  seatCount == 1
-                                      ? Icons.person
-                                      : (seatCount == 2
-                                          ? Icons.people
-                                          : Icons.groups_rounded),
-                                  size: 16,
-                                  color: isSelected ? Colors.white : AppTheme.slateMuted,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      seatCount == 1
+                                          ? Icons.person
+                                          : (seatCount == 2
+                                              ? Icons.people
+                                              : Icons.groups_rounded),
+                                      size: 16,
+                                      color: isSelected ? Colors.white : AppTheme.slateMuted,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      seatCount == 1 ? '1 Seat' : '$seatCount Seats',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(11),
+                                        fontWeight: FontWeight.w700,
+                                        color: isSelected ? Colors.white : c.textPrimary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  seatCount == 1 ? '1 Seat' : '$seatCount Seats',
-                                  style: TextStyle(
-                                    fontSize: layout.fontSize(11),
-                                    fontWeight: FontWeight.w700,
-                                    color: isSelected ? Colors.white : c.textPrimary,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
@@ -3690,6 +3717,47 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  void _showSignInPromptDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, color: AppTheme.primaryBlue, size: 24),
+            SizedBox(width: 8),
+            Text('Sign In Required', style: TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+        content: const Text(
+          'Please sign in with your phone number to request rides and connect with nearby 0% commission drivers.',
+          style: TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
+              );
+            },
+            child: const Text('Sign In Now'),
+          ),
+        ],
       ),
     );
   }

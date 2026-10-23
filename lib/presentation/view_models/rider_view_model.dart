@@ -517,6 +517,7 @@ class RiderViewModel extends ChangeNotifier {
 
   Future<bool> submitRideRequest({
     required RideProvider rideProv,
+    String? riderId,
   }) async {
     final fare = double.tryParse(fareController.text) ?? suggestedFare;
     _deviceService.triggerHaptic('medium');
@@ -538,6 +539,7 @@ class RiderViewModel extends ChangeNotifier {
       bookedSeats: _bookedSeats,
       isAutoNegotiateEnabled: _autoNegotiate,
       maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare ?? ((fare * 1.2) / 10).round() * 10.0) : null,
+      riderId: riderId,
     );
 
     if (rideId == null) {
@@ -554,8 +556,11 @@ class RiderViewModel extends ChangeNotifier {
   }
 
   /// Alias for submitRideRequest
-  Future<bool> requestRide({required RideProvider rideProv}) =>
-      submitRideRequest(rideProv: rideProv);
+  Future<bool> requestRide({
+    required RideProvider rideProv,
+    String? riderId,
+  }) =>
+      submitRideRequest(rideProv: rideProv, riderId: riderId);
 
   void acceptDriverOffer(RideProvider rideProv, String offerId) {
     _deviceService.triggerHaptic('heavy');

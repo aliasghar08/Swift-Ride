@@ -1,0 +1,42 @@
+{
+  "features": {
+    "distance_km": {
+      "min": 1.0,
+      "max": 34.99
+    },
+    "duration_min": {
+      "min": 2.2,
+      "max": 205.9
+    },
+    "congestion_ratio": {
+      "min": 1.0,
+      "max": 2.2
+    },
+    "vehicle_type": {
+      "min": 0.0,
+      "max": 2.0
+    },
+    "booked_seats": {
+      "min": 1.0,
+      "max": 4.0
+    },
+    "fuel_price": {
+      "min": 360.0,
+      "max": 395.0
+    }
+  },
+  "targets": {
+    "target_fuel_liters": {
+      "min": 0.05,
+      "max": 5.488
+    },
+    "target_maintenance_pkr": {
+      "min": 2.0,
+      "max": 220.5
+    },
+    "target_fare_pkr": {
+      "min": 85.0,
+      "max": 3460.0
+    }
+  }
+}

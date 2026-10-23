@@ -13,6 +13,8 @@ import '../../services/native/native_launcher_service.dart';
 import '../../services/native/native_notification_service.dart';
 import '../../services/native/native_safety_service.dart';
 import '../../domain/models/payment_rail.dart';
+import '../../domain/models/vehicle_type.dart';
+import '../../domain/models/trip_economics_model.dart';
 import '../../services/pricing_ml_service.dart';
 
 /// ViewModel managing Rider UI state, address search, pin-dropping,
@@ -32,6 +34,12 @@ class RiderViewModel extends ChangeNotifier {
   final TextEditingController fareController = TextEditingController();
 
   double? _aiSuggestedSweetSpot;
+  VehicleType _selectedVehicleType = VehicleType.car;
+  Map<VehicleType, double> _vehicleFares = const {};
+  int _bookedSeats = 1;
+
+  bool _autoNegotiate = false;
+  double? _maxAutoFare;
 
   double _estimatedDistanceKm = 0;
   double _estimatedDurationMin = 0;
@@ -104,20 +112,85 @@ class RiderViewModel extends ChangeNotifier {
   /// True once a genuine GPS (or explicit user-chosen) pickup exists.
   bool get hasPickupFromGps => _hasPickupFromGps;
 
-  double get suggestedFare =>
-      _aiSuggestedSweetSpot ??
-      selectedEconomics?.riderFare ??
-      DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+  VehicleType get selectedVehicleType => _selectedVehicleType;
+  Map<VehicleType, double> get vehicleFares => _vehicleFares;
+  int get bookedSeats => _bookedSeats;
 
-  double? get aiSuggestedSweetSpot => _aiSuggestedSweetSpot;
-
-  void applyAiSuggestedFare() {
-    if (_aiSuggestedSweetSpot != null) {
-      fareController.text = _aiSuggestedSweetSpot!.round().toString();
-      _fareTouchedByUser = true;
+  void setBookedSeats(int count) {
+    final clamped = count.clamp(1, _selectedVehicleType.seats);
+    if (_bookedSeats != clamped) {
+      _bookedSeats = clamped;
       _deviceService.triggerHaptic('selection');
       notifyListeners();
     }
+  }
+
+  bool get autoNegotiate => _autoNegotiate;
+  bool get isAutoNegotiateEnabled => _autoNegotiate;
+  double? get maxAutoFare => _maxAutoFare;
+  double? get maxAutoAcceptFare => _maxAutoFare;
+
+  void setAutoNegotiate(bool value, {double? maxFare}) {
+    _autoNegotiate = value;
+    if (maxFare != null) {
+      _maxAutoFare = maxFare;
+    } else if (value && _maxAutoFare == null) {
+      final baseFare = double.tryParse(fareController.text) ?? suggestedFare;
+      _maxAutoFare = ((baseFare * 1.2) / 10).round() * 10.0;
+    }
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
+  }
+
+  void setMaxAutoFare(double maxFare) {
+    _maxAutoFare = maxFare;
+    notifyListeners();
+  }
+
+  /// Calculates real-time trip economics including fuel, mileage, maintenance, and driver profit.
+  TripEconomics get currentTripEconomics {
+    final fare = double.tryParse(fareController.text) ?? suggestedFare;
+    final route = selectedRoute;
+    return TripEconomics.calculate(
+      distanceKm: route?.distanceKm ?? _estimatedDistanceKm,
+      durationMin: route?.durationMin ?? _estimatedDurationMin,
+      staticDurationMin: route?.staticDurationMin,
+      trafficLevel: route?.trafficLevel,
+      fare: fare,
+      vehicleType: _selectedVehicleType,
+      bookedSeats: _bookedSeats,
+      isAiPredicted: true,
+    );
+  }
+
+  double get suggestedFare {
+    if (_vehicleFares.containsKey(_selectedVehicleType)) {
+      return _vehicleFares[_selectedVehicleType]!;
+    }
+    final baseFare = _aiSuggestedSweetSpot ??
+        selectedEconomics?.riderFare ??
+        DistanceCalculator.calculateSuggestedFare(_estimatedDistanceKm, _estimatedDurationMin);
+    return _selectedVehicleType.calculateFare(baseFare);
+  }
+
+  double? get aiSuggestedSweetSpot => _aiSuggestedSweetSpot;
+
+  void selectVehicleType(VehicleType type) {
+    _selectedVehicleType = type;
+    _bookedSeats = _bookedSeats.clamp(1, type.seats);
+    final fare = _vehicleFares[type] ?? type.calculateFare(suggestedFare);
+    fareController.text = fare.round().toString();
+    _fareTouchedByUser = false;
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
+  }
+
+  void applyAiSuggestedFare() {
+    final fare = suggestedFare;
+    fareController.text = fare.round().toString();
+    _fareTouchedByUser = true;
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
   }
 
   /// Sets the pickup address from a real device fix.
@@ -286,10 +359,11 @@ class RiderViewModel extends ChangeNotifier {
     if (sel == null || _estimatedDistanceKm <= 0) return;
 
     try {
-      _aiSuggestedSweetSpot = await _pricingMLService.predictSuggestedBid(
+      _vehicleFares = await _pricingMLService.computeFaresForAllVehicles(
         distanceKm: _estimatedDistanceKm,
         trafficMultiplier: _routeTraffic.isNotEmpty ? 1.25 : 1.15,
       );
+      _aiSuggestedSweetSpot = _vehicleFares[_selectedVehicleType];
       if (!_fareTouchedByUser) {
         final fareToUse = _aiSuggestedSweetSpot ?? sel.economics.riderFare;
         fareController.text = fareToUse.round().toString();
@@ -315,13 +389,14 @@ class RiderViewModel extends ChangeNotifier {
     _estimatedDistanceKm = double.parse(sel.distanceKm.toStringAsFixed(1));
     _estimatedDurationMin = double.parse(sel.durationMin.toStringAsFixed(0));
 
-    _pricingMLService.predictSuggestedBid(
+    _pricingMLService.computeFaresForAllVehicles(
       distanceKm: _estimatedDistanceKm,
       trafficMultiplier: _routeTraffic.isNotEmpty ? 1.25 : 1.15,
-    ).then((bid) {
-      _aiSuggestedSweetSpot = bid;
-      if (!_fareTouchedByUser) {
-        fareController.text = bid.round().toString();
+    ).then((fares) {
+      _vehicleFares = fares;
+      _aiSuggestedSweetSpot = fares[_selectedVehicleType];
+      if (!_fareTouchedByUser && _aiSuggestedSweetSpot != null) {
+        fareController.text = _aiSuggestedSweetSpot!.round().toString();
       }
       notifyListeners();
     }).catchError((e) {
@@ -459,6 +534,10 @@ class RiderViewModel extends ChangeNotifier {
       offeredFare: fare,
       distanceKm: _estimatedDistanceKm,
       durationMin: _estimatedDurationMin,
+      vehicleType: _selectedVehicleType.id,
+      bookedSeats: _bookedSeats,
+      isAutoNegotiateEnabled: _autoNegotiate,
+      maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare ?? ((fare * 1.2) / 10).round() * 10.0) : null,
     );
 
     if (rideId == null) {
@@ -473,6 +552,10 @@ class RiderViewModel extends ChangeNotifier {
     );
     return true;
   }
+
+  /// Alias for submitRideRequest
+  Future<bool> requestRide({required RideProvider rideProv}) =>
+      submitRideRequest(rideProv: rideProv);
 
   void acceptDriverOffer(RideProvider rideProv, String offerId) {
     _deviceService.triggerHaptic('heavy');
@@ -533,6 +616,17 @@ class RiderViewModel extends ChangeNotifier {
   Future<bool> callDriver(String phone) async {
     if (phone.trim().isEmpty) return false;
     return await _launcherService.launchDialer(phone);
+  }
+
+  Future<bool> sendDriverSms({
+    required String phone,
+    String? message,
+  }) async {
+    if (phone.trim().isEmpty) return false;
+    return await _launcherService.launchSms(
+      phone,
+      message: message ?? 'Hello! I am your SwiftRide passenger at the pickup location.',
+    );
   }
 
   Future<bool> callPolice() async {

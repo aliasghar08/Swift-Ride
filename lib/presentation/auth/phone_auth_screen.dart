@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart' show PhoneAuthCredential;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -119,17 +121,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   void _useTestNumber() {
+    if (kReleaseMode) return;
     _phoneController.text = '3000000000';
     _otpController.text = '123456';
     _nameController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Loaded test credentials (+92 300 0000000 / OTP: 123456)',
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
   }
 
   Future<void> _handleSendOtp() async {
@@ -164,27 +159,86 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     await auth.sendOtp(
       phoneNumber: fullPhone,
+      onAutoVerified: (PhoneAuthCredential credential) async {
+        if (!mounted) return;
+
+        // 1. Show the instant auto-verification SnackBar
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Phone verified automatically! Signing in...',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981), // Emerald green
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+
+        // 2. Sign in with the auto-verified credential
+        try {
+          final userCred = await auth.signInWithCredential(
+            credential,
+            phoneNumber: fullPhone,
+            fullName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
+            role: _selectedRole,
+          );
+          if (userCred?.user != null && mounted) {
+            _onSuccessNavigate();
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Auto-sign in error: $e'),
+                backgroundColor: AppTheme.sunsetCoral,
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      },
       onCodeSent: (vId, token) {
+        if (!mounted) return;
         setState(() {
           _currentStep = AuthStep.otp;
         });
         _startResendTimer();
-        final isMock = vId.startsWith('mock_') || vId.startsWith('sim_');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              isMock
-                  ? 'Verification code generated for $fullPhone! Enter test code: 123456'
-                  : 'Verification code sent to $fullPhone',
-            ),
-            backgroundColor: AppTheme.emeraldGreen,
+            content: Text('6-digit code sent via SMS to $fullPhone'),
+            backgroundColor: Colors.blueGrey.shade800,
+            behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
         );
       },
       onError: (err) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err), backgroundColor: AppTheme.sunsetCoral),
+          SnackBar(
+            content: Text(err),
+            backgroundColor: AppTheme.sunsetCoral,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 7),
+            action: SnackBarAction(
+              label: 'DISMISS',
+              textColor: Colors.white,
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+            ),
+          ),
         );
       },
     );
@@ -298,11 +352,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header & Branding (Secret long-press to autofill test credentials for developers)
+              // Header & Branding
               Center(
                 child: GestureDetector(
-                  onTap: _useTestNumber,
-                  onLongPress: _useTestNumber,
+                  onLongPress: kReleaseMode ? null : _useTestNumber,
                   child: Container(
                     width: layout.scale(72),
                     height: layout.scale(72),
@@ -663,50 +716,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ),
           ],
         ),
-        const SizedBox(height: 12),
-        InkWell(
-          onTap: () {
-            _otpController.text = '123456';
-            setState(() {});
-            _handleVerifyOtp();
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isDark
-                  ? AppTheme.accentCyan.withValues(alpha: 0.1)
-                  : AppTheme.primaryBlue.withValues(alpha: 0.06),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark
-                    ? AppTheme.accentCyan.withValues(alpha: 0.2)
-                    : AppTheme.primaryBlue.withValues(alpha: 0.15),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.info_outline,
-                  size: 16,
-                  color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Demo / Test Account? Tap here or enter 123456 to verify.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white70 : AppTheme.darkNavy,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
         ElevatedButton(
           onPressed: auth.isLoading ? null : _handleVerifyOtp,
           style: ElevatedButton.styleFrom(

@@ -78,72 +78,38 @@ class AuthService {
       return;
     }
 
-    // Test phone numbers (e.g. +92 300 0000000, *0000000, *1234567, or 3000000000)
-    final digitsOnly = phoneNumber.replaceAll(RegExp(r'[^0-9]'), '');
-    final bool isTestPhone = digitsOnly.endsWith('0000000') ||
-        digitsOnly.endsWith('1234567') ||
-        phoneNumber.contains('3000000000') ||
-        digitsOnly == '923000000000' ||
-        digitsOnly == '03000000000';
-
-    // Allow instant simulated OTP for test numbers to bypass APNs/reCAPTCHA and quota limits
-    if (isTestPhone) {
-      debugPrint('[AuthService] Test phone number recognized: $phoneNumber. Providing instant test OTP.');
-      await Future.delayed(const Duration(milliseconds: 300));
-      onCodeSent('mock_verification_id_${DateTime.now().millisecondsSinceEpoch}', 123456);
-      return;
-    }
-
     try {
       await auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: timeout,
         forceResendingToken: forceResendingToken,
         verificationCompleted: (PhoneAuthCredential credential) async {
-          debugPrint('[AuthService] Auto-verification completed on device');
-          try {
-            await auth.signInWithCredential(credential);
-            onAutoVerified?.call(credential);
-          } catch (e) {
-            onError(e.toString());
+          debugPrint('[AuthService] Auto-verification completed via Google Play Services.');
+          if (onAutoVerified != null) {
+            onAutoVerified(credential);
+          } else {
+            try {
+              await auth.signInWithCredential(credential);
+            } catch (e) {
+              onError(e.toString());
+            }
           }
         },
         verificationFailed: (FirebaseAuthException e) {
-          debugPrint('[AuthService] Phone verification failed: ${e.code} - ${e.message}');
-          // Simulator & APNs & app-not-authorized & SMS region restriction resilience
-          final isApnsOrSimError = e.code == 'invalid-phone-number' ||
-              e.code == 'captcha-check-failed' ||
-              e.code == 'app-not-authorized' ||
-              e.code == 'missing-client-identifier' ||
-              e.code == 'invalid-app-credential' ||
-              e.code == 'quota-exceeded' ||
-              e.code == 'operation-not-allowed' ||
-              (e.message?.toLowerCase().contains('region') == true) ||
-              (e.message?.toLowerCase().contains('disabled') == true) ||
-              (e.message?.toLowerCase().contains('sms') == true) ||
-              (e.message?.toLowerCase().contains('allowed') == true) ||
-              (e.message?.contains('APNS') == true) ||
-              (e.message?.toLowerCase().contains('apns') == true) ||
-              (e.message?.toLowerCase().contains('simulator') == true) ||
-              (e.message?.toLowerCase().contains('emulator') == true);
-
-          if (isApnsOrSimError || kDebugMode) {
-            debugPrint('[AuthService] Verification restriction encountered (${e.code} / ${e.message}). Providing test OTP fallback.');
-            onCodeSent('mock_verification_id_${DateTime.now().millisecondsSinceEpoch}', 123456);
-            return;
-          }
-
-          String message = 'Phone verification failed. Please try again.';
+          debugPrint('[AuthService] Phone verification failed: [${e.code}] ${e.message}');
+          String message = '[${e.code}] ${e.message ?? 'Phone verification failed.'}';
           if (e.code == 'invalid-phone-number') {
-            message = 'The phone number format is invalid. Please use international format (e.g. +923001234567).';
+            message = '[${e.code}] The phone number format is invalid. Please use international format (e.g. +923001234567).';
           } else if (e.code == 'too-many-requests') {
-            message = 'Too many requests sent. Please wait a few moments before trying again.';
+            message = '[${e.code}] Too many requests sent. Please wait a few moments before trying again.';
           } else if (e.code == 'quota-exceeded') {
-            message = 'SMS quota exceeded for today. Please contact support or use a test phone number.';
+            message = '[${e.code}] SMS quota exceeded for today.';
           } else if (e.code == 'app-not-authorized') {
-            message = 'App verification error. Please ensure Google Cloud billing & reCAPTCHA are active.';
+            message = '[${e.code}] App not authorized. Ensure SHA-1/SHA-256 fingerprints are registered in Firebase Console.';
           } else if (e.code == 'captcha-check-failed') {
-            message = 'reCAPTCHA verification could not be completed. Please retry.';
+            message = '[${e.code}] reCAPTCHA verification failed. Please check network/Play Services and retry.';
+          } else if (e.code == 'invalid-app-credential') {
+            message = '[${e.code}] Invalid app credential. Please register SHA-1 and SHA-256 fingerprints in Firebase Console.';
           }
           onError(message);
         },
@@ -156,8 +122,13 @@ class AuthService {
         },
       );
     } catch (e) {
-      debugPrint('[AuthService] Caught verifyPhoneNumber exception: $e. Using fallback.');
-      onCodeSent('mock_verification_id_${DateTime.now().millisecondsSinceEpoch}', 123456);
+      debugPrint('[AuthService] Caught verifyPhoneNumber exception: $e');
+      if (!kReleaseMode) {
+        debugPrint('[AuthService] Non-release fallback activated: providing test verification ID for local testing');
+        onCodeSent('sim_fallback_${DateTime.now().millisecondsSinceEpoch}', 123456);
+        return;
+      }
+      onError('Verification error: $e');
     }
   }
 
@@ -173,10 +144,11 @@ class AuthService {
       return null;
     }
 
-    // Handle simulator/mock test verification IDs
-    if (verificationId == 'SIMULATOR_TEST_VERIFICATION_ID' ||
-        verificationId.startsWith('sim_') ||
-        verificationId.startsWith('mock_')) {
+    // Handle simulator/mock test verification IDs (strictly disallowed in release builds)
+    if (!kReleaseMode &&
+        (verificationId == 'SIMULATOR_TEST_VERIFICATION_ID' ||
+            verificationId.startsWith('sim_') ||
+            verificationId.startsWith('mock_'))) {
       debugPrint('[AuthService] Verifying test OTP in simulator mode: $smsCode');
       if (smsCode.trim() != '123456') {
         throw FirebaseAuthException(
@@ -217,18 +189,16 @@ class AuthService {
 
       return await auth.signInWithCredential(credential);
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AuthService] OTP verification failed: ${e.code} - ${e.message}');
-      if (kDebugMode && smsCode.trim() == '123456') {
-        debugPrint('[AuthService] Debug mode: accepted test code 123456 fallback');
-        if (auth.currentUser == null) {
-          try {
-            return await auth.signInAnonymously();
-          } catch (_) {}
-        }
-        return null;
-      }
+      debugPrint('[AuthService] OTP verification failed: [${e.code}] ${e.message}');
       rethrow;
     }
+  }
+
+  /// Signs in directly with a [PhoneAuthCredential] (e.g. from auto-retrieval).
+  Future<UserCredential?> signInWithCredential(PhoneAuthCredential credential) async {
+    final auth = _auth;
+    if (auth == null) return null;
+    return await auth.signInWithCredential(credential);
   }
 
   /// Signs in or registers user profile in Firestore after successful phone verification.

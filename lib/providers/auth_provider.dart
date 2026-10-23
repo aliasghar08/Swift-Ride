@@ -93,6 +93,7 @@ class AuthProvider extends ChangeNotifier {
     required String phoneNumber,
     void Function(String verificationId, int? resendToken)? onCodeSent,
     void Function(String error)? onError,
+    void Function(PhoneAuthCredential credential)? onAutoVerified,
   }) async {
     _isLoading = true;
     _authError = null;
@@ -117,8 +118,54 @@ class AuthProvider extends ChangeNotifier {
       onAutoVerified: (credential) async {
         _isLoading = false;
         notifyListeners();
+        onAutoVerified?.call(credential);
       },
     );
+  }
+
+  /// Signs in directly with a [PhoneAuthCredential] from auto-retrieval and updates the profile.
+  Future<UserCredential?> signInWithCredential(
+    PhoneAuthCredential credential, {
+    String? phoneNumber,
+    String? fullName,
+    UserRole? role,
+  }) async {
+    _isLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    try {
+      final userCred = await _authService.signInWithCredential(credential);
+      final phone = phoneNumber ?? userCred?.user?.phoneNumber ?? '';
+      final cleanDigits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+      final uid = userCred?.user?.uid ??
+          'user_${cleanDigits.isNotEmpty ? cleanDigits : DateTime.now().millisecondsSinceEpoch}';
+
+      final resolvedRole = role ?? _activeRole;
+      final updatedUser = await _authService.syncUserProfile(
+        uid: uid,
+        phone: phone,
+        fullName: (fullName != null && fullName.trim().isNotEmpty)
+            ? fullName.trim()
+            : (_currentUser.fullName.isNotEmpty && _currentUser.fullName != 'Guest User'
+                ? _currentUser.fullName
+                : 'SwiftRide User'),
+        defaultRole: resolvedRole,
+      );
+
+      _currentUser = updatedUser;
+      _activeRole = updatedUser.role;
+      _storage.setString('active_user_role', _activeRole.name);
+      _isLoading = false;
+      notifyListeners();
+      return userCred;
+    } catch (e) {
+      _isLoading = false;
+      final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
+      _authError = errMsg;
+      notifyListeners();
+      rethrow;
+    }
   }
 
   /// Verifies entered OTP [smsCode] against active verification ID and signs in.
@@ -145,7 +192,7 @@ class AuthProvider extends ChangeNotifier {
 
     try {
       final credential = await _authService.verifyOtpAndSignIn(
-        verificationId: vId ?? 'mock_verification_id',
+        verificationId: vId ?? '',
         smsCode: smsCode,
       );
 

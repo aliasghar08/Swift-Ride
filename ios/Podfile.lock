@@ -1324,18 +1324,6 @@ PODS:
     - GoogleUtilities/Environment (~> 8.1)
     - GTMSessionFetcher/Core (< 6.0, >= 3.4)
   - Flutter (1.0.0)
-  - geocoding_darwin (0.0.1):
-    - Flutter
-    - FlutterMacOS
-  - geolocator_apple (1.2.0):
-    - Flutter
-    - FlutterMacOS
-  - Google-Maps-iOS-Utils (6.1.0):
-    - GoogleMaps (~> 9.0)
-  - google_maps_flutter_ios (0.0.1):
-    - Flutter
-    - Google-Maps-iOS-Utils (< 7.0, >= 5.0)
-    - GoogleMaps (< 11.0, >= 8.4)
   - GoogleDataTransport (10.1.1):
     - nanopb (~> 3.30910.0)
     - PromisesObjC (~> 2.4)
@@ -1465,8 +1453,6 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
-  - package_info_plus (0.4.5):
-    - Flutter
   - PromisesObjC (2.4.1)
   - PromisesSwift (2.4.1):
     - PromisesObjC (= 2.4.1)
@@ -1504,10 +1490,7 @@ DEPENDENCIES:
   - firebase_messaging (from `.symlinks/plugins/firebase_messaging/ios`)
   - firebase_storage (from `.symlinks/plugins/firebase_storage/ios`)
   - Flutter (from `Flutter`)
-  - geocoding_darwin (from `.symlinks/plugins/geocoding_darwin/darwin`)
-  - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
-  - google_maps_flutter_ios (from `.symlinks/plugins/google_maps_flutter_ios/ios`)
-  - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
+  - GoogleMaps
   - tflite_flutter (from `.symlinks/plugins/tflite_flutter/ios`)
 
 SPEC REPOS:
@@ -1531,7 +1514,6 @@ SPEC REPOS:
     - FirebaseMessagingInterop
     - FirebaseSharedSwift
     - FirebaseStorage
-    - Google-Maps-iOS-Utils
     - GoogleDataTransport
     - GoogleMaps
     - GoogleUtilities
@@ -1565,14 +1547,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/firebase_storage/ios"
   Flutter:
     :path: Flutter
-  geocoding_darwin:
-    :path: ".symlinks/plugins/geocoding_darwin/darwin"
-  geolocator_apple:
-    :path: ".symlinks/plugins/geolocator_apple/darwin"
-  google_maps_flutter_ios:
-    :path: ".symlinks/plugins/google_maps_flutter_ios/ios"
-  package_info_plus:
-    :path: ".symlinks/plugins/package_info_plus/ios"
   tflite_flutter:
     :path: ".symlinks/plugins/tflite_flutter/ios"
 
@@ -1605,10 +1579,6 @@ SPEC CHECKSUMS:
   FirebaseSharedSwift: c91f36aeaa566e12b682caacc40d34c8303c3124
   FirebaseStorage: 357354fbde2ba62983c0fe5d9cf10155046b5404
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
-  geocoding_darwin: 968545604e6896deeef55517d53a81b3b9801971
-  geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
-  Google-Maps-iOS-Utils: 0a484b05ed21d88c9f9ebbacb007956edd508a96
-  google_maps_flutter_ios: 17552876e72723da1d41accc22f03b5f7afbde69
   GoogleDataTransport: a24e58982ab3ba2f64d79613e027fe7f57e88539
   GoogleMaps: 0608099d4870cac8754bdba9b6953db543432438
   GoogleUtilities: db34c1c11c6f2eccb6fab2340cb8ceb1451299dc
@@ -1617,7 +1587,6 @@ SPEC CHECKSUMS:
   GTMSessionFetcher: a6d2b2aa203485893d4511ff64642dc811f7c09f
   leveldb-library: cc8b8f8e013647a295ad3f8cd2ddf49a6f19be19
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   PromisesObjC: 752c3227f599e3467650e47ea36f433eeb10c273
   PromisesSwift: 217dea0fd5d2ad65222a109c48698add13cc1c5b
   RecaptchaInterop: 11e0b637842dfb48308d242afc3f448062325aba
@@ -1625,6 +1594,6 @@ SPEC CHECKSUMS:
   TensorFlowLiteSwift: 3a4928286e9e35bdd3e17970f48e53c80d25e793
   tflite_flutter: 64b192e11352fe36943ab6656e1d49207f1a5595
 
-PODFILE CHECKSUM: ce2a4dd764e1c7aeed6a7cdc5e61d092b6dc6d32
+PODFILE CHECKSUM: 0b5454aaa70bebfe31073393bda11073de24935c
 
 COCOAPODS: 1.17.0

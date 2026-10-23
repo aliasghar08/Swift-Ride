@@ -9,10 +9,12 @@ class NativeLauncherService {
 
   /// Launches the native phone dialer with prefilled [phoneNumber].
   Future<bool> launchDialer(String phoneNumber) async {
+    final clean = phoneNumber.trim().replaceAll(RegExp(r'[\s\-()]'), '');
+    if (clean.isEmpty) return false;
     try {
       final res = await _channel.invokeMethod<bool>(
         NativeChannelConstants.methodLaunchDialer,
-        {'phone': phoneNumber},
+        {'phone': clean},
       );
       return res ?? true;
     } catch (_) {
@@ -22,11 +24,13 @@ class NativeLauncherService {
 
   /// Launches the native SMS messaging app with prefilled [recipient] and optional [message].
   Future<bool> launchSms(String recipient, {String? message}) async {
+    final clean = recipient.trim().replaceAll(RegExp(r'[\s\-()]'), '');
+    if (clean.isEmpty) return false;
     try {
       final res = await _channel.invokeMethod<bool>(
         NativeChannelConstants.methodLaunchSms,
         {
-          'phone': recipient,
+          'phone': clean,
           'message': message ?? '',
         },
       );

@@ -8,6 +8,9 @@ import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
+import '../../domain/models/trip_economics_model.dart';
+import '../../domain/models/vehicle_type.dart';
+import '../widgets/trip_economics_sheet.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
@@ -23,6 +26,9 @@ import '../rider/route_preview_screen.dart';
 import '../../services/map_service.dart';
 import '../view_models/driver_view_model.dart';
 import '../view_models/responsive_layout_helper.dart';
+import '../../services/driver_khata_service.dart';
+import 'widgets/driver_khata_sheet.dart';
+import '../common/exact_change_dialog.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -304,6 +310,47 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ),
                                     ),
                                   ],
+                                ),
+                              ),
+                              // Floating Action Chip for Khata
+                              InkWell(
+                                onTap: () => DriverKhataSheet.show(context),
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  margin: const EdgeInsets.only(right: 8),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.account_balance_wallet_rounded,
+                                        color: AppTheme.emeraldGreen,
+                                        size: 15,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      ListenableBuilder(
+                                        listenable: DriverKhataService(),
+                                        builder: (ctx, _) {
+                                          final khata = DriverKhataService().todayKhata;
+                                          return Text(
+                                            'Khata: PKR ${khata.netCashProfit.toInt()}',
+                                            style: TextStyle(
+                                              color: AppTheme.emeraldGreen,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: layout.fontSize(11),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               Switch(
@@ -757,19 +804,24 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(
-                              Icons.local_taxi,
-                              color: analysis.isLow ? Colors.amber : AppTheme.accentCyan,
-                              size: 16,
+                            Builder(
+                              builder: (_) {
+                                final vType = VehicleTypeX.fromString(request.vehicleType);
+                                return Icon(
+                                  vType.icon,
+                                  color: analysis.isLow ? Colors.amber : AppTheme.accentCyan,
+                                  size: 16,
+                                );
+                              },
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Semantics(
                                 liveRegion: true,
                                 label:
-                                    'New ride request for ${CurrencyFormatter.format(request.offeredFare)}',
+                                    'New ${VehicleTypeX.fromString(request.vehicleType).title} request for ${CurrencyFormatter.format(request.offeredFare)}',
                                 child: Text(
-                                  'New request • ${CurrencyFormatter.format(request.offeredFare)}',
+                                  '${VehicleTypeX.fromString(request.vehicleType).title} • ${CurrencyFormatter.format(request.offeredFare)}',
                                   style: TextStyle(
                                     color: isDark ? Colors.white : c.textPrimary,
                                     fontWeight: FontWeight.w700,
@@ -778,6 +830,49 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryBlue.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    VehicleTypeX.fromString(request.vehicleType).name.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(9.5),
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.primaryBlue,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.people_alt_rounded, size: 10, color: AppTheme.emeraldGreen),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        '${request.bookedSeats} ${request.bookedSeats == 1 ? "seat" : "seats"}',
+                                        style: TextStyle(
+                                          fontSize: layout.fontSize(9.5),
+                                          fontWeight: FontWeight.w800,
+                                          color: AppTheme.emeraldGreen,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -831,6 +926,75 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               ),
                             ],
                           ),
+                        ),
+                        // Live Trip Economics Preview (Fuel expense & Driver Take-Home Profit)
+                        Builder(
+                          builder: (ctx) {
+                            final vType = VehicleTypeX.fromString(request.vehicleType);
+                            final econ = TripEconomics.calculate(
+                              vehicleType: vType,
+                              distanceKm: request.distanceKm,
+                              durationMin: request.durationMin,
+                              fare: request.offeredFare,
+                              bookedSeats: request.bookedSeats,
+                              isAiPredicted: true,
+                            );
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => TripEconomicsSheet.show(
+                                context,
+                                economics: econ,
+                                isDriverView: true,
+                              ),
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF161F30) : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.25),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.local_gas_station_rounded, size: 13, color: Colors.orange),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Fuel: ${CurrencyFormatter.format(econ.fuelCost)}',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(10),
+                                        color: c.textMuted,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.account_balance_wallet_rounded, size: 13, color: AppTheme.emeraldGreen),
+                                    const SizedBox(width: 4),
+                                    Expanded(
+                                      child: Text(
+                                        'Net Profit: ${CurrencyFormatter.format(econ.driverNetProfit)}',
+                                        style: TextStyle(
+                                          fontSize: layout.fontSize(10),
+                                          color: AppTheme.emeraldGreen,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Details >',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(9.5),
+                                        color: AppTheme.accentCyan,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -1223,24 +1387,52 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.accentCyan.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Semantics(
-                liveRegion: true,
-                label: 'Trip status: ${ride.status.displayName}',
-                child: Text(
-                  ride.status.displayName,
-                  style: TextStyle(
-                    color: AppTheme.accentCyan,
-                    fontWeight: FontWeight.w700,
-                    fontSize: layout.fontSize(12),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Semantics(
+                    liveRegion: true,
+                    label: 'Trip status: ${ride.status.displayName}',
+                    child: Text(
+                      ride.status.displayName,
+                      style: TextStyle(
+                        color: AppTheme.accentCyan,
+                        fontWeight: FontWeight.w700,
+                        fontSize: layout.fontSize(12),
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.emeraldGreen),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${ride.bookedSeats} ${ride.bookedSeats == 1 ? "seat" : "seats"}',
+                        style: TextStyle(
+                          color: AppTheme.emeraldGreen,
+                          fontWeight: FontWeight.w700,
+                          fontSize: layout.fontSize(11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
             Text(
               'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (0% Fee)',
@@ -1272,6 +1464,82 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
+        ),
+        // Active Trip Economics (Fuel, Maintenance, Profit)
+        Builder(
+          builder: (ctx) {
+            final vType = VehicleTypeX.fromString(ride.vehicleType);
+            final econ = TripEconomics.calculate(
+              vehicleType: vType,
+              distanceKm: ride.distanceKm,
+              durationMin: ride.durationMin,
+              fare: ride.acceptedFare ?? ride.offeredFare,
+              bookedSeats: ride.bookedSeats,
+              isAiPredicted: true,
+            );
+            return InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => TripEconomicsSheet.show(
+                context,
+                economics: econ,
+                isDriverView: true,
+              ),
+              child: Container(
+                margin: EdgeInsets.only(top: layout.scale(8)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF161F30) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.local_gas_station_rounded, size: 15, color: Colors.orange),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Fuel: ${CurrencyFormatter.format(econ.fuelCost)}',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11),
+                        color: c.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.account_balance_wallet_rounded, size: 15, color: AppTheme.emeraldGreen),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Take-Home: ${CurrencyFormatter.format(econ.driverNetProfit)}',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11),
+                          color: AppTheme.emeraldGreen,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        'Economics >',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(10),
+                          color: AppTheme.accentCyan,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
         SizedBox(height: layout.scale(8)),
         Align(
@@ -1645,16 +1913,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 backgroundColor: AppTheme.emeraldGreen,
               ),
               onPressed: () async {
-                await _viewModel.completeActiveTrip(
-                  rideProv: rideProv,
-                  driverProv: driverProv,
-                  authProv: authProv,
+                final fare = ride.acceptedFare ?? ride.offeredFare;
+                final tripEconomics = TripEconomics.calculate(
+                  distanceKm: ride.distanceKm,
+                  durationMin: ride.durationMin,
+                  fare: fare,
+                  vehicleType: VehicleType.car,
                 );
-                if (!mounted) return;
+
+                final changeResult = await ExactChangeDialog.show(
+                  context,
+                  fare: fare,
+                  tripEconomics: tripEconomics,
+                  onConfirm: (res) async {
+                    await _viewModel.completeActiveTrip(
+                      rideProv: rideProv,
+                      driverProv: driverProv,
+                      authProv: authProv,
+                    );
+                    await _viewModel.confirmCashPayment(
+                      rideProv: rideProv,
+                      rideId: ride.id,
+                    );
+                  },
+                );
+
+                if (!mounted || changeResult == null) return;
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text(
-                      'Trip completed. Collect payment from the rider.',
+                      changeResult.isTipped
+                          ? 'Trip completed! PKR ${changeResult.cashReceived.toInt()} committed to Khata (includes tip).'
+                          : 'Trip completed! PKR ${fare.toInt()} committed to Khata.',
                     ),
                     backgroundColor: AppTheme.emeraldGreen,
                   ),
@@ -1707,28 +1997,42 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     onPressed: _viewModel.isConfirmingCash
                         ? null
                         : () async {
-                            final error = await _viewModel.confirmCashPayment(
-                              rideProv: rideProv,
-                              rideId: ride.id,
+                            final fare = ride.acceptedFare ?? ride.offeredFare;
+                            final tripEconomics = TripEconomics.calculate(
+                              distanceKm: ride.distanceKm,
+                              durationMin: ride.durationMin,
+                              fare: fare,
+                              vehicleType: VehicleType.car,
                             );
-                            if (!mounted) return;
 
+                            final changeResult = await ExactChangeDialog.show(
+                              context,
+                              fare: fare,
+                              tripEconomics: tripEconomics,
+                              onConfirm: (res) async {
+                                final error = await _viewModel.confirmCashPayment(
+                                  rideProv: rideProv,
+                                  rideId: ride.id,
+                                );
+                                if (error == null) {
+                                  await driverProv.loadForUser(
+                                    authProv.currentUser.id,
+                                  );
+                                }
+                              },
+                            );
+
+                            if (!mounted || changeResult == null) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  error ?? 'Cash payment recorded. Your balance is updated.',
+                                  changeResult.isTipped
+                                      ? 'Cash payment & tip recorded: PKR ${changeResult.cashReceived.toInt()} committed to Khata.'
+                                      : 'Cash payment recorded. PKR ${fare.toInt()} committed to Khata.',
                                 ),
-                                backgroundColor: error == null
-                                    ? AppTheme.emeraldGreen
-                                    : AppTheme.sunsetCoral,
+                                backgroundColor: AppTheme.emeraldGreen,
                               ),
                             );
-
-                            if (error == null) {
-                              await driverProv.loadForUser(
-                                authProv.currentUser.id,
-                              );
-                            }
                           },
                     child: _viewModel.isConfirmingCash
                         ? const SizedBox(
@@ -1739,7 +2043,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Text('Confirm cash received'),
+                        : const Text('Confirm cash received (Calculate Change)'),
                   ),
                 ),
               ],

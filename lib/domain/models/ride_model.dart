@@ -80,6 +80,12 @@ class RideModel {
   final DateTime createdAt;
   final DateTime? completedAt;
   final DriverTelemetry? driverLocation;
+  final String vehicleType;
+  final int bookedSeats;
+  final double? maxAutoAcceptFare;
+  final bool isAutoNegotiateEnabled;
+  final double? cashReceived;
+  final double? changeDue;
 
   const RideModel({
     required this.id,
@@ -103,6 +109,12 @@ class RideModel {
     required this.createdAt,
     this.completedAt,
     this.driverLocation,
+    this.vehicleType = 'car',
+    this.bookedSeats = 1,
+    this.maxAutoAcceptFare,
+    this.isAutoNegotiateEnabled = false,
+    this.cashReceived,
+    this.changeDue,
   });
 
   RideModel copyWith({
@@ -127,6 +139,12 @@ class RideModel {
     DateTime? createdAt,
     DateTime? completedAt,
     DriverTelemetry? driverLocation,
+    String? vehicleType,
+    int? bookedSeats,
+    double? maxAutoAcceptFare,
+    bool? isAutoNegotiateEnabled,
+    double? cashReceived,
+    double? changeDue,
   }) {
     return RideModel(
       id: id ?? this.id,
@@ -150,6 +168,12 @@ class RideModel {
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
       driverLocation: driverLocation ?? this.driverLocation,
+      vehicleType: vehicleType ?? this.vehicleType,
+      bookedSeats: bookedSeats ?? this.bookedSeats,
+      maxAutoAcceptFare: maxAutoAcceptFare ?? this.maxAutoAcceptFare,
+      isAutoNegotiateEnabled: isAutoNegotiateEnabled ?? this.isAutoNegotiateEnabled,
+      cashReceived: cashReceived ?? this.cashReceived,
+      changeDue: changeDue ?? this.changeDue,
     );
   }
 
@@ -174,6 +198,12 @@ class RideModel {
         'pin': pin,
         'createdAt': createdAt.toIso8601String(),
         'completedAt': completedAt?.toIso8601String(),
+        'vehicleType': vehicleType,
+        'bookedSeats': bookedSeats,
+        if (maxAutoAcceptFare != null) 'maxAutoAcceptFare': maxAutoAcceptFare,
+        'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
+        if (cashReceived != null) 'cashReceived': cashReceived,
+        if (changeDue != null) 'changeDue': changeDue,
         if (driverLocation != null) 'driverLocation': driverLocation!.toMap(),
       };
 
@@ -225,6 +255,12 @@ class RideModel {
             ? Map<String, dynamic>.from(map['driverLocation'] as Map)
             : null,
       ),
+      vehicleType: map['vehicleType'] ?? 'car',
+      bookedSeats: (map['bookedSeats'] as num?)?.toInt() ?? 1,
+      maxAutoAcceptFare: (map['maxAutoAcceptFare'] as num?)?.toDouble(),
+      isAutoNegotiateEnabled: map['isAutoNegotiateEnabled'] == true,
+      cashReceived: (map['cashReceived'] as num?)?.toDouble(),
+      changeDue: (map['changeDue'] as num?)?.toDouble(),
     );
   }
 }

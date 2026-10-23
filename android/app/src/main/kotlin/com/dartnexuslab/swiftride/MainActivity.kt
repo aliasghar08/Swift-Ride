@@ -290,20 +290,38 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         MethodChannel(messenger, launcherChannel).setMethodCallHandler { call, result ->
             when (call.method) {
                 "launchDialer" -> {
-                    val phone = call.argument<String>("phone") ?: ""
+                    val rawPhone = call.argument<String>("phone") ?: ""
+                    val cleanPhone = rawPhone.trim().replace(Regex("[^0-9+]"), "")
+                    if (cleanPhone.isEmpty()) {
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
                     try {
-                        startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+                        val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$cleanPhone")).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(dialIntent)
                         result.success(true)
                     } catch (_: Exception) {
-                        result.success(false)
+                        try {
+                            val viewIntent = Intent(Intent.ACTION_VIEW, Uri.parse("tel:$cleanPhone")).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(viewIntent)
+                            result.success(true)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
                     }
                 }
                 "launchSms" -> {
-                    val phone = call.argument<String>("phone") ?: ""
+                    val rawPhone = call.argument<String>("phone") ?: ""
+                    val cleanPhone = rawPhone.trim().replace(Regex("[^0-9+]"), "")
                     val msg = call.argument<String>("message") ?: ""
                     try {
-                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phone")).apply {
+                        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$cleanPhone")).apply {
                             putExtra("sms_body", msg)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         startActivity(intent)
                         result.success(true)
@@ -314,7 +332,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                 "launchUrl" -> {
                     val url = call.argument<String>("url") ?: ""
                     try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(intent)
                         result.success(true)
                     } catch (_: Exception) {
                         result.success(false)

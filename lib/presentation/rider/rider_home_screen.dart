@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -10,6 +11,8 @@ import '../../domain/models/payment_rail.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_offer_model.dart';
 import '../../domain/models/ride_status.dart';
+import '../../domain/models/trip_economics_model.dart';
+import '../../domain/models/vehicle_type.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
@@ -28,6 +31,7 @@ import '../view_models/responsive_layout_helper.dart';
 import '../view_models/rider_view_model.dart';
 import 'address_search_screen.dart';
 import 'route_preview_screen.dart';
+import '../widgets/trip_economics_sheet.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -360,6 +364,27 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         final currentRide = rideProv.currentRide;
         _ensureDriverPhone(currentRide?.driverId);
         final driverTelemetry = currentRide?.driverLocation;
+
+        if (rideProv.autoNegotiateBanner != null) {
+          final bannerText = rideProv.autoNegotiateBanner!;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(bannerText)),
+                  ],
+                ),
+                backgroundColor: AppTheme.emeraldGreen,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+            rideProv.clearAutoNegotiateBanner();
+          });
+        }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final ctrl = _mapController;
@@ -1535,6 +1560,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     }
 
     final c = AppColors.of(layout.context);
+    final isDark = Theme.of(layout.context).brightness == Brightness.dark;
     final displayedFare =
         _viewModel.selectedEconomics?.riderFare ?? _viewModel.suggestedFare;
 
@@ -1772,9 +1798,14 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             ),
                           ),
                         ],
-                        SizedBox(height: layout.scale(10)),
+                        SizedBox(height: layout.scale(12)),
                         StaggeredEntryWidget(
                           index: 1,
+                          child: _buildVehicleTypeSelector(layout),
+                        ),
+                        SizedBox(height: layout.scale(14)),
+                        StaggeredEntryWidget(
+                          index: 2,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1852,6 +1883,117 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                        ),
+                        SizedBox(height: layout.scale(8)),
+                        // Auto-Negotiate Bot Switch & Ceiling Selector
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _viewModel.isAutoNegotiateEnabled
+                                ? AppTheme.accentCyan.withValues(alpha: 0.12)
+                                : c.surfaceRaised,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _viewModel.isAutoNegotiateEnabled
+                                  ? AppTheme.accentCyan.withValues(alpha: 0.4)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.smart_toy_rounded,
+                                    color: _viewModel.isAutoNegotiateEnabled
+                                        ? AppTheme.accentCyan
+                                        : c.textSecondary,
+                                    size: 22,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Auto-Accept Offers',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(13),
+                                            fontWeight: FontWeight.bold,
+                                            color: isDark ? Colors.white : c.textPrimary,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Automatically accept any driver offer up to PKR ${(_viewModel.maxAutoFare ?? ((double.tryParse(_viewModel.fareController.text) ?? _viewModel.suggestedFare) * 1.2 / 10).round() * 10).toInt()}',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(11),
+                                            color: c.textSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Switch(
+                                    value: _viewModel.isAutoNegotiateEnabled,
+                                    activeThumbColor: AppTheme.accentCyan,
+                                    onChanged: (val) {
+                                      _viewModel.setAutoNegotiate(val);
+                                    },
+                                  ),
+                                ],
+                              ),
+                              if (_viewModel.isAutoNegotiateEnabled) ...[
+                                const SizedBox(height: 8),
+                                const Divider(height: 1),
+                                const SizedBox(height: 8),
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        'Budget Ceiling:',
+                                        style: TextStyle(
+                                          fontSize: layout.fontSize(11),
+                                          fontWeight: FontWeight.w600,
+                                          color: c.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ...[10, 20, 30].map((percent) {
+                                        final base = double.tryParse(_viewModel.fareController.text) ??
+                                            _viewModel.suggestedFare;
+                                        final targetCeiling =
+                                            (((base * (1 + percent / 100)) / 10).round() * 10).toDouble();
+                                        final isSelected =
+                                            (_viewModel.maxAutoFare ?? 0).toInt() == targetCeiling.toInt();
+                                        return Padding(
+                                          padding: const EdgeInsets.only(right: 6),
+                                          child: ChoiceChip(
+                                            label: Text(
+                                              '+$percent% (PKR ${targetCeiling.toInt()})',
+                                              style: TextStyle(
+                                                fontSize: layout.fontSize(10),
+                                                fontWeight: FontWeight.w600,
+                                                color: isSelected ? Colors.white : c.textPrimary,
+                                              ),
+                                            ),
+                                            selected: isSelected,
+                                            selectedColor: AppTheme.accentCyan,
+                                            onSelected: (selected) {
+                                              if (selected) {
+                                                _viewModel.setMaxAutoFare(targetCeiling);
+                                              }
+                                            },
+                                          ),
+                                        );
+                                      }),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -2209,6 +2351,63 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
               ),
+              // Live Trip Economics & Fuel Calculation Card for Rider
+              Builder(
+                builder: (ctx) {
+                  final vType = VehicleTypeX.fromString(ride.vehicleType);
+                  final econ = TripEconomics.calculate(
+                    vehicleType: vType,
+                    distanceKm: ride.distanceKm,
+                    durationMin: ride.durationMin,
+                    fare: ride.acceptedFare ?? ride.offeredFare,
+                    bookedSeats: ride.bookedSeats,
+                    isAiPredicted: true,
+                  );
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => TripEconomicsSheet.show(
+                      context,
+                      economics: econ,
+                      isDriverView: false,
+                    ),
+                    child: Container(
+                      margin: EdgeInsets.only(top: layout.scale(8)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.emeraldGreen.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppTheme.emeraldGreen.withValues(alpha: 0.25),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.analytics_rounded, size: 15, color: AppTheme.emeraldGreen),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '⛽ Fuel: Rs ${econ.fuelCost.toInt()} • 🔧 Maint: Rs ${econ.maintenanceCost.toInt()} • 💰 Driver: Rs ${econ.driverNetProfit.toInt()}',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(11),
+                                color: AppTheme.emeraldGreen,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.chevron_right_rounded,
+                            size: 16,
+                            color: AppTheme.emeraldGreen,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
             ],
             SizedBox(height: layout.scale(14)),
             if (rideProv.activeSos != null) ...[
@@ -2264,12 +2463,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         foregroundColor: AppTheme.emeraldGreen,
                       ),
                       icon: const Icon(Icons.phone),
-                      tooltip: _driverPhone == null
-                          ? 'Driver phone unavailable'
-                          : 'Call Driver',
-                      onPressed: _driverPhone == null
-                          ? null
-                          : () => _viewModel.callDriver(_driverPhone!),
+                      tooltip: 'Call Driver',
+                      onPressed: () => _showCallDriverSheet(context, layout),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2367,6 +2562,557 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 },
 );
 }
+
+  Widget _buildVehicleTypeSelector(ResponsiveLayoutHelper layout) {
+    final c = AppColors.of(layout.context);
+    final selectedType = _viewModel.selectedVehicleType;
+    final fares = _viewModel.vehicleFares;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Select Vehicle Category:',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: layout.fontSize(13.5),
+                color: c.textPrimary,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '0% Commission',
+                style: TextStyle(
+                  fontSize: layout.fontSize(10.5),
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.emeraldGreen,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: VehicleType.values.map((type) {
+            final isSelected = type == selectedType;
+            final fare = fares[type] ?? type.calculateFare(_viewModel.suggestedFare);
+
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: type == VehicleType.values.last ? 0 : 8,
+                ),
+                child: InkWell(
+                  onTap: () => _viewModel.selectVehicleType(type),
+                  borderRadius: BorderRadius.circular(16),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primaryBlue.withValues(alpha: 0.12)
+                          : c.surfaceRaised,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primaryBlue
+                            : Colors.grey.withValues(alpha: 0.25),
+                        width: isSelected ? 2.0 : 1.0,
+                      ),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: AppTheme.primaryBlue.withValues(alpha: 0.22),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.primaryBlue
+                                    : c.surface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                type.icon,
+                                size: layout.scale(22),
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppTheme.slateMuted,
+                              ),
+                            ),
+                            if (isSelected)
+                              Positioned(
+                                top: -2,
+                                right: -2,
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: AppTheme.emeraldGreen,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check,
+                                    size: 10,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          type.title.split(' ').first,
+                          style: TextStyle(
+                            fontSize: layout.fontSize(12.5),
+                            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                            color: isSelected ? AppTheme.primaryBlue : c.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.person,
+                              size: 10.5,
+                              color: isSelected
+                                  ? AppTheme.primaryBlue.withValues(alpha: 0.8)
+                                  : AppTheme.slateMuted,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${type.seats}',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10),
+                                color: AppTheme.slateMuted,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '• ~${type.typicalEtaMinutes}m',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10),
+                                color: AppTheme.slateMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.primaryBlue
+                                : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'PKR ${fare.round()}',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(11.5),
+                              fontWeight: FontWeight.w800,
+                              color: isSelected
+                                  ? Colors.white
+                                  : c.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Seating Selection Row
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: c.surfaceRaised,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: c.border.withValues(alpha: 0.6)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.airline_seat_recline_normal_rounded,
+                size: 16,
+                color: AppTheme.primaryBlue,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Seats:',
+                style: TextStyle(
+                  fontSize: layout.fontSize(12),
+                  fontWeight: FontWeight.w700,
+                  color: c.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Row(
+                  children: List.generate(selectedType.seats, (index) {
+                    final seatCount = index + 1;
+                    final isSelected = seatCount == _viewModel.bookedSeats;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: InkWell(
+                        onTap: () {
+                          setState(() {
+                            _viewModel.setBookedSeats(seatCount);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppTheme.primaryBlue : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected ? AppTheme.primaryBlue : c.border,
+                            ),
+                          ),
+                          child: Text(
+                            '$seatCount',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(11.5),
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? Colors.white : c.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+              Text(
+                '${_viewModel.bookedSeats} of ${selectedType.seats} ${selectedType.seats == 1 ? 'seat' : 'seats'}',
+                style: TextStyle(
+                  fontSize: layout.fontSize(11),
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.slateMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Live Trip Economics Preview Card
+        InkWell(
+          onTap: () {
+            TripEconomicsSheet.show(
+              context,
+              economics: _viewModel.currentTripEconomics,
+              onSeatCountChanged: (seats) {
+                setState(() {
+                  _viewModel.setBookedSeats(seats);
+                });
+              },
+            );
+          },
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.emeraldGreen.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.analytics_rounded,
+                  size: 16,
+                  color: AppTheme.emeraldGreen,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '⛽ Fuel: Rs ${_viewModel.currentTripEconomics.fuelCost.toInt()} • 🔧 Maint: Rs ${_viewModel.currentTripEconomics.maintenanceCost.toInt()} • 💰 Driver: Rs ${_viewModel.currentTripEconomics.driverNetProfit.toInt()}',
+                    style: TextStyle(
+                      fontSize: layout.fontSize(11),
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.emeraldGreen,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  size: 16,
+                  color: AppTheme.emeraldGreen,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showCallDriverSheet(BuildContext context, ResponsiveLayoutHelper layout) {
+    final phone = _driverPhone?.trim().replaceAll(RegExp(r'[\s\-()]'), '');
+    final name = _driverName ?? 'SwiftRide Driver';
+    final vehicle = _driverVehicle ?? 'Verified SwiftRide Vehicle';
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final c = AppColors.of(ctx);
+        return SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              layout.horizontalPadding,
+              0,
+              layout.horizontalPadding,
+              layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 16,
+            ),
+            child: GlassContainer(
+              borderRadius: 28,
+              blur: 24,
+              backgroundColor: c.surface,
+              padding: const EdgeInsets.all(22),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade400,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+                            width: 2,
+                          ),
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          size: 30,
+                          color: AppTheme.emeraldGreen,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: layout.fontSize(17),
+                                fontWeight: FontWeight.bold,
+                                color: c.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              vehicle,
+                              style: TextStyle(
+                                fontSize: layout.fontSize(12),
+                                color: AppTheme.slateMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  if (phone != null && phone.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: c.surfaceRaised,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.phone_iphone, color: AppTheme.accentCyan, size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _driverPhone ?? phone,
+                              style: TextStyle(
+                                fontSize: layout.fontSize(15.5),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.1,
+                                color: c.textPrimary,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.copy_rounded, size: 18),
+                            tooltip: 'Copy Number',
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: phone));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Phone number copied: $phone'),
+                                  backgroundColor: AppTheme.emeraldGreen,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.emeraldGreen,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 2,
+                      ),
+                      icon: const Icon(Icons.call, size: 20),
+                      label: Text(
+                        'Call Driver Now',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(15.5),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onPressed: () async {
+                        final messenger = ScaffoldMessenger.of(context);
+                        Navigator.of(ctx).pop();
+                        final success = await _viewModel.callDriver(phone);
+                        if (!success && mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Could not open phone dialer for $phone.'),
+                              backgroundColor: AppTheme.sunsetCoral,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.primaryBlue,
+                        side: BorderSide(color: AppTheme.primaryBlue.withValues(alpha: 0.6)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 19),
+                      label: Text(
+                        'Send SMS / Text Message',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(14),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await _viewModel.sendDriverSms(
+                          phone: phone,
+                          message: 'Assalam-o-Alaikum! I am your SwiftRide passenger waiting at the pickup location.',
+                        );
+                      },
+                    ),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.sunsetCoral.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.sunsetCoral.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, color: AppTheme.sunsetCoral, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Driver phone number is being retrieved from the server...',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(12.5),
+                                color: c.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextButton.icon(
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry Fetching Driver Contact'),
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        _driverPhoneForDriverId = null;
+                        final active = CustomChangeNotifierProvider.of<RideProvider>(context).activeRide;
+                        _ensureDriverPhone(active?.driverId);
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   Widget _buildOfferCard(
     ResponsiveLayoutHelper layout,

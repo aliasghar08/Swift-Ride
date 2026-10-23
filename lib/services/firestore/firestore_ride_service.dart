@@ -75,6 +75,10 @@ class FirestoreRideService {
         'safetyFlags': ride.safetyFlags,
         'shareToken': ride.shareToken,
         'pin': ride.pin,
+        'isAutoNegotiateEnabled': ride.isAutoNegotiateEnabled,
+        'maxAutoAcceptFare': ride.maxAutoAcceptFare,
+        'cashReceived': ride.cashReceived,
+        'changeDue': ride.changeDue,
         'createdAt': FieldValue.serverTimestamp(),
         'completedAt': null,
       });

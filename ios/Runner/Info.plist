@@ -15,7 +15,7 @@
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Swft Ride</string>
+    <string>Swift Ride</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -27,14 +27,28 @@
         <dict>
             <key>CFBundleTypeRole</key>
             <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>app-1-113634488038-ios-3ada91b92c00566241d527</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>com.googleusercontent.apps.113634488038-ios-3ada91b92c00566241d527</string>
+            </array>
+        </dict>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Editor</string>
             <key>CFBundleURLName</key>
             <string>com.dartnexuslab.swiftride</string>
             <key>CFBundleURLSchemes</key>
             <array>
                 <string>swiftride</string>
                 <string>com.dartnexuslab.swiftride</string>
-                <string>app-1-113634488038-ios-3ada91b92c00566241d527</string>
-                <string>com.googleusercontent.apps.113634488038-ios-3ada91b92c00566241d527</string>
             </array>
         </dict>
     </array>
@@ -44,6 +58,13 @@
     <string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+        <string>tel</string>
+        <string>sms</string>
+        <string>https</string>
+        <string>http</string>
+    </array>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     <key>NSBluetoothAlwaysUsageDescription</key>

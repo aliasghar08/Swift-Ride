@@ -41,6 +41,14 @@ class RideProvider extends ChangeNotifier {
   bool _isSubmitting = false;
   bool _isAcceptingOffer = false;
   String? _lastError;
+  String? _autoNegotiateBanner;
+  void Function(String message)? onAutoNegotiateAccepted;
+
+  String? get autoNegotiateBanner => _autoNegotiateBanner;
+  void clearAutoNegotiateBanner() {
+    _autoNegotiateBanner = null;
+    notifyListeners();
+  }
 
   bool _isLoadingHistory = false;
   bool _hasMoreHistory = false;
@@ -120,6 +128,10 @@ class RideProvider extends ChangeNotifier {
     required double offeredFare,
     required double distanceKm,
     required double durationMin,
+    String vehicleType = 'car',
+    int bookedSeats = 1,
+    bool isAutoNegotiateEnabled = false,
+    double? maxAutoAcceptFare,
   }) async {
     if (Firebase.apps.isEmpty) {
       _setError('Ride requests need an internet connection.');
@@ -139,6 +151,10 @@ class RideProvider extends ChangeNotifier {
         'offeredFare': offeredFare,
         'distanceKm': distanceKm,
         'durationMin': durationMin,
+        'vehicleType': vehicleType,
+        'bookedSeats': bookedSeats,
+        'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
+        'maxAutoAcceptFare': maxAutoAcceptFare,
       });
 
       final rideId = res.data['rideId'] as String?;
@@ -286,10 +302,51 @@ class RideProvider extends ChangeNotifier {
     _offersSub = _firestore.streamOffersForRide(rideId).listen(
       (offers) {
         _activeOffers = offers;
+        _checkAutoNegotiate(rideId, offers);
         notifyListeners();
       },
       onError: (Object e) => debugPrint('[RideProvider] offers stream error: $e'),
     );
+  }
+
+  /// Listens to incoming driver offers for [rideId] and triggers auto-negotiation if enabled.
+  void listenToRideOffers(String rideId) {
+    _subscribeToRide(rideId);
+  }
+
+  void _checkAutoNegotiate(String rideId, List<RideOffer> offers) {
+    final ride = _currentRide;
+    if (ride == null || !ride.isAutoNegotiateEnabled || ride.maxAutoAcceptFare == null) {
+      return;
+    }
+    if (_isAcceptingOffer) return;
+
+    for (final offer in offers) {
+      if (offer.counterFare <= ride.maxAutoAcceptFare!) {
+        final message =
+            "Auto-Negotiate: Accepted Captain ${offer.driverName}'s offer of PKR ${offer.counterFare.toInt()}!";
+        _autoNegotiateBanner = message;
+        debugPrint('[RideProvider] $message');
+        onAutoNegotiateAccepted?.call(message);
+        acceptCounterOffer(rideId, offer);
+        break;
+      }
+    }
+  }
+
+  /// Automatically or manually accepts a driver's counter offer.
+  Future<void> acceptCounterOffer(String rideId, RideOffer offer) async {
+    if (_isAcceptingOffer) return;
+    _isAcceptingOffer = true;
+    notifyListeners();
+    await _acceptOffer(rideId, offer);
+  }
+
+  @visibleForTesting
+  void handleIncomingOffers(List<RideOffer> offers) {
+    _activeOffers = offers;
+    _checkAutoNegotiate(_currentRide?.id ?? '', offers);
+    notifyListeners();
   }
 
   /// Driver submits an inDrive-style counter offer. Persisted server-side.
@@ -346,6 +403,13 @@ class RideProvider extends ChangeNotifier {
   Future<void> _acceptOffer(String rideId, RideOffer offer) async {
     try {
       await _firestore.acceptOffer(rideId, offer);
+      if (_currentRide != null && (_currentRide!.id == rideId || rideId.isEmpty)) {
+        _currentRide = _currentRide!.copyWith(
+          driverId: offer.driverId,
+          acceptedFare: offer.counterFare,
+          status: RideStatus.accepted,
+        );
+      }
     } catch (e) {
       debugPrint('[RideProvider.acceptOffer] failed: $e');
       _setError('We could not accept that offer. Please try again.');

@@ -17,6 +17,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'providers/safety_provider.dart';
 import 'services/fcm_service.dart';
+import 'services/fuel_price_service.dart';
 import 'ai/ai.dart';
 
 Future<void> main() async {
@@ -46,17 +47,28 @@ Future<void> main() async {
       );
     }
 
-    if (kDebugMode) {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: const AndroidDebugProvider(),
-        providerApple: const AppleDebugProvider(),
-      );
-    } else {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid: const AndroidPlayIntegrityProvider(),
-        providerApple: const AppleDeviceCheckProvider(),
-      );
+    // App Check is isolated in a guarded block so Play Integrity token generation
+    // never blocks or impedes FirebaseAuth requests or core application startup.
+    try {
+      if (kDebugMode) {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: const AndroidDebugProvider(),
+          providerApple: const AppleDebugProvider(),
+        );
+        debugPrint('[AppCheck] Activated with AndroidDebugProvider');
+      } else {
+        await FirebaseAppCheck.instance.activate(
+          providerAndroid: const AndroidPlayIntegrityProvider(),
+          providerApple: const AppleDeviceCheckProvider(),
+        );
+        debugPrint('[AppCheck] Activated with AndroidPlayIntegrityProvider');
+      }
+    } catch (appCheckError) {
+      debugPrint('[AppCheck] Non-fatal App Check initialization notice: $appCheckError');
     }
+
+    // Fetch live fuel rates from internet on app launch (OGRA Pakistan feed)
+    FuelPriceService().fetchLivePrices();
   } catch (e) {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }

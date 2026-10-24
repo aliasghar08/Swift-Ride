@@ -1,7 +1,7 @@
 name: swiftride
 description: "SwiftRide - Zero Commission Ride-Hailing Platform"
 publish_to: 'none'
-version: 1.0.7+10
+version: 1.0.5+10
 
 environment:
   sdk: ^3.13.4

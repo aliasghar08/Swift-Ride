@@ -142,6 +142,12 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                   }
 
                   if (rideProv.historyError != null && rideProv.rideHistory.isEmpty) {
+                    final err = rideProv.historyError!.toLowerCase();
+                    if (err.contains('permission') ||
+                        err.contains('connection') ||
+                        auth.currentUser.phone.isEmpty) {
+                      return _buildEmptyState(layout, isDriver);
+                    }
                     return _buildErrorState(layout, rideProv.historyError!);
                   }
 

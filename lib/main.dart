@@ -129,18 +129,26 @@ Future<void> main() async {
   );
 }
 
-class SwiftRideApp extends StatelessWidget {
+class SwiftRideApp extends StatefulWidget {
   final String? initialRoute;
 
   const SwiftRideApp({super.key, this.initialRoute});
 
   @override
+  State<SwiftRideApp> createState() => _SwiftRideAppState();
+}
+
+class _SwiftRideAppState extends State<SwiftRideApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
   Widget build(BuildContext context) {
     return CustomConsumer<AuthProvider>(
       builder: (context, auth, _) {
-        final effectiveRoute = initialRoute ?? AppRouter.initialRoute;
+        final effectiveRoute = widget.initialRoute ?? AppRouter.initialRoute;
 
         return MaterialApp(
+          navigatorKey: _navigatorKey,
           title: 'SwiftRide - Zero Commission Platform',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,

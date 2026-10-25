@@ -2072,7 +2072,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
                                       final activeRiderId = authProv.currentUser.id.isNotEmpty
                                           ? authProv.currentUser.id
-                                          : null;
+                                          : (authProv.authService.currentUser?.uid ??
+                                              'rider_${DateTime.now().millisecondsSinceEpoch}');
 
                                       final ok = await _viewModel.submitRideRequest(
                                         rideProv: rideProv,

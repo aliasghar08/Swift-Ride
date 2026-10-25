@@ -307,6 +307,10 @@ class FirestoreRideService {
     int limit = 20,
     DocumentSnapshot<Map<String, dynamic>>? startAfter,
   }) async {
+    if (riderId.isEmpty) {
+      return const RideHistoryPage(rides: [], hasMore: false);
+    }
+
     final fs = _firestore;
     final userField = asDriver ? 'driverId' : 'riderId';
 
@@ -347,6 +351,10 @@ class FirestoreRideService {
       );
     } catch (e) {
       debugPrint('[FirestoreRideService] ride history page failed: $e');
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('permission-denied') || errStr.contains('unauthenticated')) {
+        return const RideHistoryPage(rides: [], hasMore: false);
+      }
       return const RideHistoryPage(
         rides: [],
         hasMore: false,

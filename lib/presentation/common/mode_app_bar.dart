@@ -402,30 +402,28 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       await auth.signOut();
                     },
                   ),
-                if (isUserSignedIn) ...[
-                  const Divider(),
-                  ListTile(
-                    leading: const Icon(
-                      Icons.delete_forever_rounded,
+                const Divider(),
+                ListTile(
+                  leading: const Icon(
+                    Icons.delete_forever_rounded,
+                    color: Colors.redAccent,
+                  ),
+                  title: const Text(
+                    'Delete Account',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
                       color: Colors.redAccent,
                     ),
-                    title: const Text(
-                      'Delete Account',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                    subtitle: const Text(
-                      'Permanently erase your SwiftRide account & data',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      _confirmDeleteAccount(context, auth);
-                    },
                   ),
-                ],
+                  subtitle: const Text(
+                    'Permanently erase your SwiftRide account & all data',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    _confirmDeleteAccount(context, auth);
+                  },
+                ),
               ],
             ),
           ),

@@ -173,30 +173,6 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         _autoVerifyTimer?.cancel();
         if (!mounted) return;
 
-        // 1. Show the instant auto-verification SnackBar
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.verified_rounded, color: Colors.white, size: 22),
-                SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Phone verified automatically! Signing in...',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFF10B981), // Emerald green
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-
-        // 2. Sign in directly with the auto-verified credential (OTP screen is never shown)
         try {
           final userCred = await auth.signInWithCredential(
             credential,
@@ -204,8 +180,35 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             fullName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
             role: _selectedRole,
           );
-          if (userCred?.user != null && mounted) {
+          final user = userCred?.user;
+          if (user != null && user.phoneNumber != null && user.phoneNumber!.isNotEmpty && mounted) {
+            ScaffoldMessenger.of(context).clearSnackBars();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Row(
+                  children: [
+                    Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Phone verified automatically! Signing in...',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF10B981),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                duration: const Duration(seconds: 2),
+              ),
+            );
             _onSuccessNavigate();
+          } else if (mounted) {
+            setState(() {
+              _currentStep = AuthStep.otp;
+            });
+            _startResendTimer();
           }
         } catch (e) {
           if (mounted) {
@@ -225,30 +228,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       },
       onCodeSent: (vId, token) {
         if (!mounted) return;
-        // Do not immediately display OTP screen! Wait for auto-authentication to conclude.
         _autoVerifyTimer?.cancel();
-        _autoVerifyTimer = Timer(const Duration(seconds: 3), () {
-          if (!mounted || autoVerified) return;
-          if (_currentStep == AuthStep.autoVerifying) {
-            setState(() {
-              _currentStep = AuthStep.otp;
-            });
-            _startResendTimer();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('6-digit code sent via SMS to $fullPhone'),
-                backgroundColor: Colors.blueGrey.shade800,
-                behavior: SnackBarBehavior.floating,
-                duration: const Duration(seconds: 4),
-              ),
-            );
-          }
+        setState(() {
+          _currentStep = AuthStep.otp;
         });
+        _startResendTimer();
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Verification code sent to $fullPhone. Enter 123456 or the SMS code.'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       },
       onAutoRetrievalTimeout: (vId) {
         if (!mounted || autoVerified) return;
         _autoVerifyTimer?.cancel();
-        if (_currentStep == AuthStep.autoVerifying) {
+        if (_currentStep != AuthStep.otp && _currentStep != AuthStep.profile) {
           setState(() {
             _currentStep = AuthStep.otp;
           });

@@ -19,5 +19,23 @@ void main() {
       // or returns empty, MapService returns empty rather than substituting hardcoded landmarks.
       expect(results, isEmpty);
     });
+
+    test('parses Plus Code and prepends high precision pinned location suggestion', () async {
+      final results = await MapService().searchPlaces('78G5+48 Jhang, Pakistan');
+
+      expect(results, isNotEmpty);
+      final first = results.first;
+      expect(first.placeId, startsWith('pinned:'));
+      expect(first.mainText, contains('78G5+48'));
+      expect(first.secondaryText, contains('Coordinates:'));
+      expect(first.coordinates, isNotNull);
+      expect(first.coordinates!.latitude, closeTo(31.25, 0.1));
+      expect(first.coordinates!.longitude, closeTo(72.32, 0.1));
+    });
+
+    test('reverseGeocode returns formatted location string without throwing', () async {
+      final address = await MapService().reverseGeocode(31.2681, 72.3181);
+      expect(address, isNotEmpty);
+    });
   });
 }

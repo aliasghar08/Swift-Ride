@@ -404,8 +404,208 @@ class MapService {
     return null;
   }
 
+  String _buildPrecisePropertyAddress(List<dynamic> results) {
+    if (results.isEmpty) return '';
+
+    // Prioritize ROOFTOP and granular premises over broad locality/city entries
+    Map<dynamic, dynamic>? best;
+    for (final r in results) {
+      if (r is Map) {
+        final geom = r['geometry'] is Map ? r['geometry'] as Map : null;
+        final locType = geom?['location_type'] as String?;
+        final types = (r['types'] as List?)?.map((t) => t.toString()).toList() ?? [];
+        if (locType == 'ROOFTOP' && types.any((t) => ['street_address', 'premise', 'subpremise'].contains(t))) {
+          best = r;
+          break;
+        }
+      }
+    }
+
+    best ??= results.firstWhere(
+      (r) => r is Map && ((r['types'] as List?)?.any((t) => ['premise', 'subpremise', 'street_address'].contains(t.toString())) ?? false),
+      orElse: () => null,
+    ) as Map<dynamic, dynamic>?;
+
+    best ??= results.firstWhere(
+      (r) => r is Map && ((r['types'] as List?)?.any((t) => ['establishment', 'point_of_interest'].contains(t.toString())) ?? false),
+      orElse: () => null,
+    ) as Map<dynamic, dynamic>?;
+
+    best ??= results.first is Map ? results.first as Map : null;
+    if (best == null) return '';
+
+    final comps = (best['address_components'] as List?)?.whereType<Map>().toList() ?? [];
+    String getComp(String type) {
+      for (final c in comps) {
+        final types = (c['types'] as List?)?.map((t) => t.toString()).toList() ?? [];
+        if (types.contains(type)) {
+          return (c['long_name'] as String?) ?? '';
+        }
+      }
+      return '';
+    }
+
+    final streetNumber = getComp('street_number');
+    final premise = getComp('premise').isNotEmpty ? getComp('premise') : getComp('subpremise');
+    final poi = getComp('point_of_interest').isNotEmpty ? getComp('point_of_interest') : getComp('establishment');
+    final route = getComp('route');
+    final sublocality = getComp('sublocality_level_1').isNotEmpty
+        ? getComp('sublocality_level_1')
+        : (getComp('sublocality').isNotEmpty ? getComp('sublocality') : getComp('neighborhood'));
+    final locality = getComp('locality').isNotEmpty
+        ? getComp('locality')
+        : getComp('administrative_area_level_2');
+
+    final rawFormatted = ((best['formatted_address'] as String?) ?? '')
+        .replaceAll(RegExp(r',\s*Pakistan$', caseSensitive: false), '')
+        .trim();
+
+    // Synthesize exact property identifier (House/Plot Number)
+    if (streetNumber.isNotEmpty || premise.isNotEmpty || poi.isNotEmpty) {
+      String propertyPrefix = poi.isNotEmpty ? poi : premise;
+      if (propertyPrefix.isEmpty && streetNumber.isNotEmpty) {
+        final isNumeric = RegExp(r'^\d+[A-Za-z]?$').hasMatch(streetNumber.trim());
+        propertyPrefix = isNumeric ? 'House ${streetNumber.trim()}' : streetNumber.trim();
+      }
+
+      if (propertyPrefix.isNotEmpty && !rawFormatted.toLowerCase().contains(propertyPrefix.toLowerCase())) {
+        final parts = <String>[propertyPrefix];
+        if (route.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(route.toLowerCase()))) {
+          parts.add(route);
+        }
+        if (sublocality.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(sublocality.toLowerCase()))) {
+          parts.add(sublocality);
+        }
+        if (locality.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(locality.toLowerCase()))) {
+          parts.add(locality);
+        }
+        return parts.join(', ');
+      }
+    }
+
+    return rawFormatted.isNotEmpty ? rawFormatted : (best['formatted_address'] as String? ?? '');
+  }
+
+  Future<String?> _fetchGoogleReverseGeocode(double lat, double lng) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$apiKey',
+      );
+      final req = await client.getUrl(url);
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+      final resp = await req.close();
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        if (data['status'] == 'OK' && data['results'] is List) {
+          final results = data['results'] as List;
+          final precise = _buildPrecisePropertyAddress(results);
+          if (precise.isNotEmpty) return precise;
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Direct Google reverse geocode error: $e');
+    }
+    return null;
+  }
+
+  /// Resolves an exact property address and coordinates from either lat/lng or
+  /// a Google Maps Plus Code / query string (e.g. "78G5+48 Jhang, Pakistan" or "House 145").
+  Future<({String address, LatLng coordinates})?> resolveExactLocation({
+    double? lat,
+    double? lng,
+    String? query,
+  }) async {
+    final cleanQuery = query?.trim() ?? '';
+
+    // If query is a Plus Code or address string, query Google Geocoding directly
+    if (cleanQuery.isNotEmpty) {
+      try {
+        final client = HttpClient();
+        client.connectionTimeout = const Duration(seconds: 4);
+        const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+        final url = Uri.parse(
+          'https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(cleanQuery)}&key=$apiKey',
+        );
+        final req = await client.getUrl(url);
+        if (Platform.isIOS) {
+          req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+        } else if (Platform.isAndroid) {
+          req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+        }
+        final resp = await req.close();
+        if (resp.statusCode == 200) {
+          final body = await resp.transform(utf8.decoder).join();
+          final data = jsonDecode(body) as Map<String, dynamic>;
+          if (data['status'] == 'OK' && data['results'] is List && (data['results'] as List).isNotEmpty) {
+            final results = data['results'] as List;
+            final precise = _buildPrecisePropertyAddress(results);
+            final first = results.first as Map;
+            final geom = first['geometry'] as Map?;
+            final loc = geom?['location'] as Map?;
+            final resLat = (loc?['lat'] as num?)?.toDouble() ?? lat;
+            final resLng = (loc?['lng'] as num?)?.toDouble() ?? lng;
+            if (resLat != null && resLng != null) {
+              return (
+                address: precise.isNotEmpty ? precise : (first['formatted_address'] as String? ?? cleanQuery),
+                coordinates: LatLng(resLat, resLng),
+              );
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[MapService] Direct address/PlusCode geocode error: $e');
+      }
+
+      // Fallback: Cloud Function with plusCode/address
+      if (Firebase.apps.isNotEmpty) {
+        try {
+          if (FirebaseAuth.instance.currentUser == null) {
+            try { await FirebaseAuth.instance.signInAnonymously(); } catch (_) {}
+          }
+          final res = await FirebaseFunctions.instance
+              .httpsCallable('reverseGeocode')
+              .call(<String, dynamic>{
+                'plusCode': cleanQuery,
+                'address': cleanQuery,
+                'lat': ?lat,
+                'lng': ?lng,
+              });
+          final addr = (res.data['address'] as String?) ?? (res.data['formattedAddress'] as String?);
+          final resLat = (res.data['latitude'] as num?)?.toDouble() ?? lat;
+          final resLng = (res.data['longitude'] as num?)?.toDouble() ?? lng;
+          if (addr != null && addr.isNotEmpty && resLat != null && resLng != null && !addr.startsWith('Pinned Spot') && !addr.startsWith('Location (')) {
+            return (address: addr, coordinates: LatLng(resLat, resLng));
+          }
+        } catch (e) {
+          debugPrint('[MapService] Cloud Function resolveExactLocation error: $e');
+        }
+      }
+    }
+
+    if (lat != null && lng != null) {
+      final addr = await reverseGeocode(lat, lng);
+      return (address: addr, coordinates: LatLng(lat, lng));
+    }
+
+    return null;
+  }
+
   Future<String> reverseGeocode(double lat, double lng) async {
-    // 1. Firebase Functions (only if returning genuine place name, not generic placeholder)
+    // 1. Direct Google Geocoding API with rooftop & property/house precision
+    final directGoogle = await _fetchGoogleReverseGeocode(lat, lng);
+    if (directGoogle != null && directGoogle.trim().isNotEmpty && !directGoogle.startsWith('Location (')) {
+      return directGoogle;
+    }
+
+    // 2. Firebase Functions (with server-side buildPrecisePropertyAddress)
     if (Firebase.apps.isNotEmpty) {
       if (FirebaseAuth.instance.currentUser == null) {
         try {
@@ -434,7 +634,7 @@ class MapService {
       }
     }
 
-    // 2. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
+    // 3. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
     try {
       final nativeAddr = await NativeMapService.instance.reverseGeocode(lat, lng);
       if (nativeAddr != null &&
@@ -444,7 +644,7 @@ class MapService {
       }
     } catch (_) {}
 
-    // 3. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
+    // 4. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
@@ -466,7 +666,8 @@ class MapService {
 
           final parts = <String>[];
           if (houseNumber.isNotEmpty) {
-            parts.add(houseNumber.toLowerCase().startsWith('plot') ? houseNumber : 'Plot $houseNumber');
+            final isPureNum = RegExp(r'^\d+[A-Za-z]?$').hasMatch(houseNumber.trim());
+            parts.add(isPureNum ? 'House ${houseNumber.trim()}' : houseNumber.trim());
           }
           if (road.isNotEmpty) parts.add(road);
           if (neighbourhood.isNotEmpty) parts.add(neighbourhood);

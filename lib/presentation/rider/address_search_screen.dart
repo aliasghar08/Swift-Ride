@@ -103,13 +103,28 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
       if (!mounted) return;
       setState(() => _isLoading = true);
       String finalAddress = parsed.label ?? trimmed;
+      double finalLat = parsed.latitude;
+      double finalLng = parsed.longitude;
       try {
-        final resolved = await _mapService.reverseGeocode(
-          parsed.latitude,
-          parsed.longitude,
+        final exact = await _mapService.resolveExactLocation(
+          lat: parsed.latitude,
+          lng: parsed.longitude,
+          query: parsed.originalCode ?? trimmed,
         );
-        if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
-          finalAddress = resolved;
+        if (exact != null &&
+            exact.address.isNotEmpty &&
+            !exact.address.startsWith('Location (')) {
+          finalAddress = exact.address;
+          finalLat = exact.coordinates.latitude;
+          finalLng = exact.coordinates.longitude;
+        } else {
+          final resolved = await _mapService.reverseGeocode(
+            parsed.latitude,
+            parsed.longitude,
+          );
+          if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
+            finalAddress = resolved;
+          }
         }
       } catch (_) {}
 
@@ -118,8 +133,8 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
       Navigator.of(context).pop(
         LocationPoint(
-          latitude: parsed.latitude,
-          longitude: parsed.longitude,
+          latitude: finalLat,
+          longitude: finalLng,
           address: finalAddress,
         ),
       );
@@ -203,26 +218,52 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
             place.secondaryText,
           ].where((s) => s.trim().isNotEmpty).join(', ');
 
-    if (address == 'Pinned Location' || address.startsWith('Coordinates:')) {
+    final isPinnedOrPlus = place.placeId.startsWith('pinned:') ||
+        place.placeId.startsWith('plus:') ||
+        address == 'Pinned Location' ||
+        address.startsWith('Coordinates:') ||
+        RegExp(r'[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,4}').hasMatch(address);
+
+    if (isPinnedOrPlus) {
       setState(() => _isLoading = true);
       try {
-        final resolved = await _mapService.reverseGeocode(
-          coords.latitude,
-          coords.longitude,
+        final queryHint = place.mainText.contains('+')
+            ? place.mainText
+            : (_searchController.text.trim().contains('+')
+                ? _searchController.text.trim()
+                : null);
+
+        final exact = await _mapService.resolveExactLocation(
+          lat: coords.latitude,
+          lng: coords.longitude,
+          query: queryHint,
         );
-        if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
-          address = resolved;
+        if (exact != null &&
+            exact.address.isNotEmpty &&
+            !exact.address.startsWith('Location (')) {
+          address = exact.address;
+          coords = exact.coordinates;
+        } else {
+          final resolved = await _mapService.reverseGeocode(
+            coords.latitude,
+            coords.longitude,
+          );
+          if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
+            address = resolved;
+          }
         }
       } catch (_) {}
       if (mounted) setState(() => _isLoading = false);
     }
 
     if (!mounted) return;
+    final finalCoords = coords;
+    if (finalCoords == null) return;
 
     Navigator.of(context).pop(
       LocationPoint(
-        latitude: coords.latitude,
-        longitude: coords.longitude,
+        latitude: finalCoords.latitude,
+        longitude: finalCoords.longitude,
         address: address,
       ),
     );

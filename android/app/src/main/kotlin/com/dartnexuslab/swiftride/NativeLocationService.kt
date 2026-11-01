@@ -245,17 +245,43 @@ class NativeLocationService(
     private fun reverseGeocode(lat: Double, lng: Double, result: MethodChannel.Result) {
         try {
             val geocoder = Geocoder(activity, Locale.getDefault())
+            val formatAddress: (Address) -> String = { addr ->
+                val parts = mutableListOf<String>()
+                val streetNumber = addr.subThoroughfare?.trim() ?: ""
+                val streetName = addr.thoroughfare?.trim() ?: ""
+                val feature = addr.featureName?.trim() ?: ""
+
+                val plotOrHouse = when {
+                    streetNumber.isNotEmpty() && streetName.isNotEmpty() -> {
+                        val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "House $streetNumber" else streetNumber
+                        "$prefix, $streetName"
+                    }
+                    streetNumber.isNotEmpty() -> {
+                        if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "House $streetNumber" else streetNumber
+                    }
+                    streetName.isNotEmpty() -> streetName
+                    else -> ""
+                }
+
+                if (plotOrHouse.isNotEmpty()) {
+                    parts.add(plotOrHouse)
+                    if (feature.isNotEmpty() && feature != streetNumber && feature != streetName && !parts.contains(feature)) {
+                        parts.add(0, feature)
+                    }
+                } else if (feature.isNotEmpty()) {
+                    parts.add(feature)
+                }
+
+                addr.subLocality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
+                addr.locality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
+
+                if (parts.isNotEmpty()) parts.joinToString(", ") else (addr.getAddressLine(0) ?: String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 geocoder.getFromLocation(lat, lng, 1) { addresses ->
                     if (!addresses.isNullOrEmpty()) {
-                        val addr = addresses[0]
-                        val parts = mutableListOf<String>()
-                        addr.featureName?.let { if (it.isNotBlank()) parts.add(it) }
-                        addr.subLocality?.let { if (it.isNotBlank()) parts.add(it) }
-                        addr.locality?.let { if (it.isNotBlank()) parts.add(it) }
-                        result.success(
-                            if (parts.isNotEmpty()) parts.joinToString(", ") else addr.getAddressLine(0)
-                        )
+                        result.success(formatAddress(addresses[0]))
                     } else {
                         result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
                     }
@@ -264,14 +290,7 @@ class NativeLocationService(
                 @Suppress("DEPRECATION")
                 val addresses = geocoder.getFromLocation(lat, lng, 1)
                 if (!addresses.isNullOrEmpty()) {
-                    val addr = addresses[0]
-                    val parts = mutableListOf<String>()
-                    addr.featureName?.let { if (it.isNotBlank()) parts.add(it) }
-                    addr.subLocality?.let { if (it.isNotBlank()) parts.add(it) }
-                    addr.locality?.let { if (it.isNotBlank()) parts.add(it) }
-                    result.success(
-                        if (parts.isNotEmpty()) parts.joinToString(", ") else addr.getAddressLine(0)
-                    )
+                    result.success(formatAddress(addresses[0]))
                 } else {
                     result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
                 }

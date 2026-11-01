@@ -328,11 +328,22 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     final isPickup = _isPinningOnMap ? !_isPinningDestination : _viewModel.isPinningPickup;
     final lat = _mapCenterLocation.latitude;
     final lng = _mapCenterLocation.longitude;
-    final addr = _pinnedAddress.trim().isNotEmpty
-        ? _pinnedAddress
-        : (_viewModel.tempPinLocation?.address.trim().isNotEmpty ?? false
-            ? _viewModel.tempPinLocation!.address
-            : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}');
+
+    var addr = _pinnedAddress.trim();
+    if (addr.isEmpty || addr == 'Positioning pin...' || addr.startsWith('Location (')) {
+      try {
+        final resolved = await MapService.instance.reverseGeocode(lat, lng);
+        if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
+          addr = resolved;
+        }
+      } catch (_) {}
+    }
+
+    if (addr.isEmpty) {
+      addr = (_viewModel.tempPinLocation?.address.trim().isNotEmpty ?? false)
+          ? _viewModel.tempPinLocation!.address
+          : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+    }
 
     final point = LocationPoint(
       latitude: lat,
@@ -340,6 +351,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       address: addr,
     );
 
+    if (!mounted) return;
     setState(() {
       _isPinningOnMap = false;
     });

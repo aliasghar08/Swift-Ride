@@ -8,8 +8,9 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
     private var lastKnownLocation: CLLocation?
     private var pendingLocationRequests: [(id: UUID, result: FlutterResult)] = []
 
-    private weak var channel1: FlutterMethodChannel?
-    private weak var channel2: FlutterMethodChannel?
+    // Retained strongly so method channel invocations reach Flutter
+    private var channel1: FlutterMethodChannel?
+    private var channel2: FlutterMethodChannel?
     private var pendingPermissionRequests: [FlutterResult] = []
 
     public override init() {
@@ -18,7 +19,11 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 5.0
         locationManager.pausesLocationUpdatesAutomatically = false
-        locationManager.allowsBackgroundLocationUpdates = false
+
+        // Pre-warm location from OS cache immediately so UI doesn't wait
+        if let cached = locationManager.location, cached.horizontalAccuracy >= 0 {
+            self.lastKnownLocation = cached
+        }
     }
 
     public static func register(with messenger: FlutterBinaryMessenger) -> NativeLocationService {
@@ -27,7 +32,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
         let channel2 = FlutterMethodChannel(name: "com.dartnexuslab.swiftride/location", binaryMessenger: messenger)
         service.channel1 = channel1
         service.channel2 = channel2
-        
+
         let handler: FlutterMethodCallHandler = { [weak service] call, result in
             service?.handle(call, result: result)
         }
@@ -48,7 +53,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             if status == .notDetermined {
                 pendingPermissionRequests.append(result)
                 locationManager.requestWhenInUseAuthorization()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
                     guard let self = self else { return }
                     if !self.pendingPermissionRequests.isEmpty {
                         let pending = self.pendingPermissionRequests
@@ -69,17 +74,21 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 return
             }
 
-            if let loc = lastKnownLocation, loc.horizontalAccuracy >= 0, loc.horizontalAccuracy < 200 {
-                result(Self.serialize(loc))
-                return
+            // 1. FAST-PATH: Return immediate valid cached location (< 10 minutes old) instantly
+            if let loc = lastKnownLocation ?? locationManager.location, loc.horizontalAccuracy >= 0 {
+                let age = abs(loc.timestamp.timeIntervalSinceNow)
+                if age < 600.0 {
+                    lastKnownLocation = loc
+                    result(Self.serialize(loc))
+                    // Trigger a background single-shot location request to refine accuracy silently
+                    if status == .authorizedWhenInUse || status == .authorizedAlways {
+                        locationManager.requestLocation()
+                    }
+                    return
+                }
             }
 
-            if let loc = locationManager.location, loc.horizontalAccuracy >= 0, loc.horizontalAccuracy < 200 {
-                lastKnownLocation = loc
-                result(Self.serialize(loc))
-                return
-            }
-
+            // 2. COLD START: Wait for GPS acquisition with a generous 12-second deadline
             let id = UUID()
             pendingLocationRequests.append((id: id, result: result))
 
@@ -91,11 +100,11 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 locationManager.requestLocation()
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
                 guard let self = self else { return }
                 if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
                     let req = self.pendingLocationRequests.remove(at: idx)
-                    if let fallback = self.lastKnownLocation ?? self.locationManager.location {
+                    if let fallback = self.lastKnownLocation ?? self.locationManager.location, fallback.horizontalAccuracy >= 0 {
                         req.result(Self.serialize(fallback))
                     } else {
                         req.result(FlutterError(code: "LOCATION_TIMEOUT", message: "No GPS fix within timeout.", details: nil))
@@ -105,8 +114,24 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
 
         case "startLocationUpdates":
             let status = locationManager.authorizationStatus
+            if status == .authorizedAlways {
+                if let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String],
+                   modes.contains("location") {
+                    locationManager.allowsBackgroundLocationUpdates = true
+                    if #available(iOS 11.0, *) {
+                        locationManager.showsBackgroundLocationIndicator = true
+                    }
+                }
+            }
+
             if status == .authorizedWhenInUse || status == .authorizedAlways {
                 locationManager.startUpdatingLocation()
+                // Emit cached location immediately so UI doesn't spin waiting for first satellite tick
+                if let initial = lastKnownLocation ?? locationManager.location, initial.horizontalAccuracy >= 0 {
+                    let payload = Self.serialize(initial)
+                    channel1?.invokeMethod("onLocationUpdate", arguments: payload)
+                    channel2?.invokeMethod("onLocationUpdate", arguments: payload)
+                }
             } else if status == .notDetermined {
                 locationManager.requestWhenInUseAuthorization()
                 locationManager.startUpdatingLocation()
@@ -114,6 +139,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             result(true)
 
         case "stopLocationUpdates":
+            locationManager.allowsBackgroundLocationUpdates = false
             locationManager.stopUpdatingLocation()
             result(true)
 
@@ -172,7 +198,8 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
     // MARK: - CLLocationManagerDelegate
     public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let loc = locations.last else { return }
-        guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy < 200 else { return }
+        // Accept all valid locations (including cellular/approximate fixes with accuracy >= 0)
+        guard loc.horizontalAccuracy >= 0 else { return }
         lastKnownLocation = loc
         resolvePendingLocationRequests(with: loc)
 
@@ -185,7 +212,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
         let nsError = error as NSError
         if nsError.domain == kCLErrorDomain {
             switch nsError.code {
-            case 0, 3: return
+            case 0, 3: return // kCLErrorLocationUnknown or kCLErrorHeadingFailure: transient, ignore
             default: break
             }
         }
@@ -197,6 +224,13 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
         let authorized = (status == .authorizedWhenInUse || status == .authorizedAlways)
         if authorized {
             manager.startUpdatingLocation()
+            if let loc = manager.location, loc.horizontalAccuracy >= 0 {
+                lastKnownLocation = loc
+                resolvePendingLocationRequests(with: loc)
+                let payload = Self.serialize(loc)
+                channel1?.invokeMethod("onLocationUpdate", arguments: payload)
+                channel2?.invokeMethod("onLocationUpdate", arguments: payload)
+            }
         }
         if !pendingPermissionRequests.isEmpty {
             let pending = pendingPermissionRequests
@@ -228,6 +262,13 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
     }
 
     public static func serialize(_ loc: CLLocation) -> [String: Any] {
+        var isMock = false
+        if #available(iOS 15.0, *) {
+            if let source = loc.sourceInformation {
+                isMock = source.isSimulatedBySoftware || source.isProducedByAccessory
+            }
+        }
+
         return [
             "latitude": loc.coordinate.latitude,
             "longitude": loc.coordinate.longitude,
@@ -236,7 +277,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             "altitude": loc.altitude,
             "accuracy": loc.horizontalAccuracy,
             "timestamp": loc.timestamp.timeIntervalSince1970 * 1000.0,
-            "isMock": false,
+            "isMock": isMock,
         ]
     }
 }

@@ -11,6 +11,8 @@ import Network
   private let speechSynthesizer = AVSpeechSynthesizer()
   private let networkMonitor = NWPathMonitor()
   private var currentNetworkStatus: String = "wifi"
+  private var locationService: NativeLocationService?
+  private var mapService: NativeMapService?
 
   override func application(
     _ application: UIApplication,
@@ -29,8 +31,9 @@ import Network
       let messenger = registrar.messenger()
       setupMethodChannels(binaryMessenger: messenger)
 
-      let locationService = NativeLocationService.register(with: messenger)
-      _ = NativeMapService.register(with: messenger, locationService: locationService)
+      let locService = NativeLocationService.register(with: messenger)
+      self.locationService = locService
+      self.mapService = NativeMapService.register(with: messenger, locationService: locService)
 
       registrar.register(
         NativeMapViewFactory(messenger: messenger),

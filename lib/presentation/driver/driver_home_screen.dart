@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -30,6 +31,7 @@ import '../view_models/responsive_layout_helper.dart';
 import '../../services/driver_khata_service.dart';
 import 'widgets/driver_khata_sheet.dart';
 import '../common/exact_change_dialog.dart';
+import '../../services/route_corridor_service.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -152,7 +154,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     required String rideId,
     required double initialFare,
   }) {
-    final controller = TextEditingController(text: initialFare.round().toString());
+    // Check race condition upfront
+    final isStillAvailable = rideProv.incomingRequests.any((r) => r.id == rideId) ||
+        rideProv.activeRide?.id == rideId;
+    if (!isStillAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This ride request is no longer available.'),
+          backgroundColor: AppTheme.sunsetCoral,
+        ),
+      );
+      return;
+    }
+
+    final initialClamped = initialFare.clamp(50.0, 50000.0).round();
+    final controller = TextEditingController(text: initialClamped.toString());
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -162,200 +179,232 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            final parsedFare = double.tryParse(controller.text) ?? initialFare;
+            final rawText = controller.text.trim();
+            final parsedFare = (double.tryParse(rawText) ?? initialFare).clamp(50.0, 50000.0);
             final commission = (parsedFare * 0.02).round();
             final netEarnings = (parsedFare * 0.98).round();
 
             void adjust(double delta) {
               final cur = double.tryParse(controller.text) ?? initialFare;
-              final next = math.max(50.0, cur + delta).round();
+              final next = (cur + delta).round().clamp(50, 50000);
               controller.text = next.toString();
               setModalState(() {});
             }
 
             return Container(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-                top: 20,
-                left: 20,
-                right: 20,
-              ),
               decoration: BoxDecoration(
                 color: c.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                 border: Border.all(color: c.border),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+                    top: 20,
+                    left: 20,
+                    right: 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Your Custom Counter-Offer',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : AppTheme.primaryNavy,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(ctx).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Text(
-                        'Your Custom Counter-Offer',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDark ? Colors.white : AppTheme.primaryNavy,
-                        ),
+                        'You have full control over your fare. Type any amount (PKR 50 - 50,000) or use quick steppers.',
+                        style: TextStyle(fontSize: 13, color: c.textSecondary),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.of(ctx).pop(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'You have full control over your fare. Type any amount or decrease/increase using quick buttons.',
-                    style: TextStyle(fontSize: 13, color: c.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        height: 52,
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: c.surfaceRaised,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'PKR',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : AppTheme.primaryNavy,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: controller,
-                          autofocus: true,
-                          keyboardType: TextInputType.number,
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: isDark ? Colors.white : AppTheme.primaryNavy,
-                          ),
-                          onChanged: (_) => setModalState(() {}),
-                          decoration: InputDecoration(
-                            hintText: 'Enter fare',
-                            filled: true,
-                            fillColor: c.surfaceRaised,
-                            border: OutlineInputBorder(
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Container(
+                            height: 52,
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: c.surfaceRaised,
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
                             ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () => adjust(-100),
-                        child: const Text('-100'),
-                      ),
-                      const SizedBox(width: 6),
-                      OutlinedButton(
-                        onPressed: () => adjust(-50),
-                        child: const Text('-50'),
-                      ),
-                      const SizedBox(width: 6),
-                      OutlinedButton(
-                        onPressed: () => adjust(50),
-                        child: const Text('+50'),
-                      ),
-                      const SizedBox(width: 6),
-                      OutlinedButton(
-                        onPressed: () => adjust(100),
-                        child: const Text('+100'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: c.surfaceRaised,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '2% Platform Fee',
-                              style: TextStyle(fontSize: 12, color: c.textSecondary),
-                            ),
-                            Text(
-                              'PKR $commission',
-                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              'Your Net Take-Home (98%)',
-                              style: TextStyle(fontSize: 12, color: AppTheme.emeraldGreen),
-                            ),
-                            Text(
-                              'PKR $netEarnings',
-                              style: const TextStyle(
-                                fontSize: 15,
+                            child: Text(
+                              'PKR',
+                              style: TextStyle(
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: AppTheme.emeraldGreen,
+                                color: isDark ? Colors.white : AppTheme.primaryNavy,
                               ),
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextField(
+                              controller: controller,
+                              autofocus: true,
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(5),
+                              ],
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : AppTheme.primaryNavy,
+                              ),
+                              onChanged: (val) {
+                                if (val.length > 1 && val.startsWith('0')) {
+                                  final stripped = val.replaceFirst(RegExp(r'^0+'), '');
+                                  controller.value = TextEditingValue(
+                                    text: stripped,
+                                    selection: TextSelection.collapsed(offset: stripped.length),
+                                  );
+                                }
+                                setModalState(() {});
+                              },
+                              decoration: InputDecoration(
+                                hintText: 'Enter fare (50 - 50,000)',
+                                filled: true,
+                                fillColor: c.surfaceRaised,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                            onPressed: () => adjust(-100),
+                            child: const Text('-100'),
+                          ),
+                          const SizedBox(width: 6),
+                          OutlinedButton(
+                            onPressed: () => adjust(-50),
+                            child: const Text('-50'),
+                          ),
+                          const SizedBox(width: 6),
+                          OutlinedButton(
+                            onPressed: () => adjust(50),
+                            child: const Text('+50'),
+                          ),
+                          const SizedBox(width: 6),
+                          OutlinedButton(
+                            onPressed: () => adjust(100),
+                            child: const Text('+100'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: c.surfaceRaised,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '2% Platform Fee',
+                                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                                ),
+                                Text(
+                                  'PKR $commission',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Your Net Take-Home (98%)',
+                                  style: TextStyle(fontSize: 12, color: AppTheme.emeraldGreen),
+                                ),
+                                Text(
+                                  'PKR $netEarnings',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.emeraldGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accentCyan,
-                        foregroundColor: AppTheme.primaryNavy,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accentCyan,
+                            foregroundColor: AppTheme.primaryNavy,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () {
+                            final stillPending = rideProv.incomingRequests.any((r) => r.id == rideId) ||
+                                rideProv.activeRide?.id == rideId;
+                            if (!stillPending) {
+                              Navigator.of(ctx).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Ride request was cancelled or accepted by another driver.'),
+                                  backgroundColor: AppTheme.sunsetCoral,
+                                ),
+                              );
+                              return;
+                            }
+
+                            final val = double.tryParse(controller.text) ?? initialFare;
+                            final sanitizedFare = val.clamp(50.0, 50000.0);
+
+                            Navigator.of(ctx).pop();
+                            _viewModel.submitCounterOffer(
+                              rideProv: rideProv,
+                              driver: driver,
+                              driverName: driverName,
+                              rideId: rideId,
+                              fare: sanitizedFare,
+                            );
+                          },
+                          child: Text(
+                            'Send Counter-Offer (PKR ${(double.tryParse(controller.text) ?? initialFare).clamp(50.0, 50000.0).round()})',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
                         ),
                       ),
-                      onPressed: () {
-                        final val = double.tryParse(controller.text);
-                        if (val != null && val >= 50) {
-                          Navigator.of(ctx).pop();
-                          _viewModel.submitCounterOffer(
-                            rideProv: rideProv,
-                            driver: driver,
-                            driverName: driverName,
-                            rideId: rideId,
-                            fare: val,
-                          );
-                        }
-                      },
-                      child: Text(
-                        'Send Counter-Offer (PKR ${(double.tryParse(controller.text) ?? initialFare).round()})',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             );
           },
@@ -1054,61 +1103,215 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         SizedBox(height: layout.scale(12)),
 
         if (driverProv.isOnline) ...[
-          // AI Market Value Auto-Acceptance Setting Toggle
+          // Auto-Acceptance Settings Card
           Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: EdgeInsets.symmetric(
               horizontal: layout.scale(12),
-              vertical: layout.scale(8),
+              vertical: layout.scale(10),
             ),
             decoration: BoxDecoration(
               color: c.surfaceRaised,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: _viewModel.autoAcceptAiValuedRides
+                color: _viewModel.autoAcceptMode != AutoAcceptMode.off
                     ? AppTheme.accentCyan.withValues(alpha: 0.5)
                     : c.border,
               ),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.auto_awesome,
-                  size: layout.scale(18),
-                  color: _viewModel.autoAcceptAiValuedRides
-                      ? AppTheme.accentCyan
-                      : c.textMuted,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Auto-accept bids within ±5% of AI Value',
+                Row(
+                  children: [
+                    Icon(
+                      _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                          ? Icons.flash_on_rounded
+                          : (_viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                              ? Icons.auto_awesome
+                              : Icons.touch_app_rounded),
+                      size: layout.scale(18),
+                      color: _viewModel.autoAcceptMode != AutoAcceptMode.off
+                          ? AppTheme.accentCyan
+                          : c.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Auto-Accept Incoming Rides',
                         style: TextStyle(
                           color: isDark ? Colors.white : c.textPrimary,
-                          fontSize: layout.fontSize(11.5),
+                          fontSize: layout.fontSize(12),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      Text(
-                        'Instant auto-acceptance for fair rides',
-                        style: TextStyle(
-                          color: c.textMuted,
-                          fontSize: layout.fontSize(10),
+                    ),
+                    if (_viewModel.autoAcceptMode != AutoAcceptMode.off)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                              ? 'CURRENT RATE'
+                              : 'AI VALUE (±5%)',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(9.5),
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.accentCyan,
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
-                Switch.adaptive(
-                  value: _viewModel.autoAcceptAiValuedRides,
-                  onChanged: (val) => _viewModel.toggleAutoAcceptAiValuedRides(val),
-                  activeThumbColor: AppTheme.accentCyan,
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _viewModel.setAutoAcceptMode(AutoAcceptMode.off),
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _viewModel.autoAcceptMode == AutoAcceptMode.off
+                                ? AppTheme.slateMuted.withValues(alpha: 0.2)
+                                : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _viewModel.autoAcceptMode == AutoAcceptMode.off
+                                  ? AppTheme.slateMuted
+                                  : c.border,
+                              width: _viewModel.autoAcceptMode == AutoAcceptMode.off ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Manual',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10.5),
+                                fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.off
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _viewModel.autoAcceptMode == AutoAcceptMode.off
+                                    ? (isDark ? Colors.white : AppTheme.primaryNavy)
+                                    : c.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _viewModel.setAutoAcceptMode(AutoAcceptMode.currentRate),
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                                ? AppTheme.emeraldGreen.withValues(alpha: 0.2)
+                                : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                                  ? AppTheme.emeraldGreen
+                                  : c.border,
+                              width: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Current Rate',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10.5),
+                                fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                                    ? AppTheme.emeraldGreen
+                                    : c.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _viewModel.setAutoAcceptMode(AutoAcceptMode.aiValuation),
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          decoration: BoxDecoration(
+                            color: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                                ? AppTheme.accentCyan.withValues(alpha: 0.2)
+                                : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                                  ? AppTheme.accentCyan
+                                  : c.border,
+                              width: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'AI Value (±5%)',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10.5),
+                                fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                                    ? AppTheme.accentCyan
+                                    : c.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
+                      ? 'Instant auto-acceptance at rider\'s offered fare (>= PKR 50).'
+                      : (_viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
+                          ? 'Auto-accepts bids within ±5% or above AI fair sweet spot.'
+                          : 'Manual review: you decide on each incoming bid.'),
+                  style: TextStyle(
+                    color: c.textMuted,
+                    fontSize: layout.fontSize(10),
+                  ),
                 ),
               ],
             ),
+          ),
+
+          // Trigger automated acceptance if requests arrive while active
+          Builder(
+            builder: (ctx) {
+              if (requests.isNotEmpty && _viewModel.autoAcceptMode != AutoAcceptMode.off) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _viewModel.evaluateIncomingRidesForAutoAccept(
+                    requests: requests,
+                    rideProv: rideProv,
+                    driver: driverProv.driverProfile,
+                    driverName: authProv.currentUser.fullName,
+                  );
+                });
+              }
+              return const SizedBox.shrink();
+            },
           ),
 
           if (requests.isEmpty)
@@ -1858,6 +2061,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ],
                   ),
                 ),
+                if (ride.emptySeats > 0) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.airline_seat_recline_extra_rounded, size: 12, color: AppTheme.accentCyan),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${ride.emptySeats} Empty',
+                          style: TextStyle(
+                            color: AppTheme.accentCyan,
+                            fontWeight: FontWeight.w700,
+                            fontSize: layout.fontSize(11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
             Text(
@@ -1967,6 +2195,203 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             );
           },
         ),
+        // En-Route Co-Riders (Carpool Corridor with Empty Seats)
+        if (ride.emptySeats > 0)
+          Builder(
+            builder: (ctx) {
+              final cachedPlan = _viewModel.getCachedRoutePlan(ride.id);
+              final points = cachedPlan?.routes.firstOrNull?.polylinePoints ?? const <LatLng>[];
+              final enRouteMatches = RouteCorridorService.findEnRouteMatches(
+                activeRide: ride,
+                activeRoutePoints: points,
+                candidateRides: rideProv.availableRides,
+              );
+
+              return Container(
+                margin: EdgeInsets.only(top: layout.scale(8)),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF132035) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppTheme.accentCyan.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.alt_route_rounded,
+                          size: 16,
+                          color: AppTheme.accentCyan,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Co-Riders Along Your Route',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(11.5),
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.accentCyan,
+                          ),
+                        ),
+                        const Spacer(),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${ride.emptySeats} Seats Available',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(10),
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.emeraldGreen,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      enRouteMatches.isNotEmpty
+                          ? '${enRouteMatches.length} passenger${enRouteMatches.length > 1 ? 's' : ''} along your route! Pick them up with virtually zero extra petrol.'
+                          : 'Carrying empty seats? The cockpit will instantly notify you when passengers request a ride along your active path.',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(10),
+                        color: c.textMuted,
+                      ),
+                    ),
+                    if (enRouteMatches.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      ...enRouteMatches.map((match) {
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: c.border.withValues(alpha: 0.6),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      'Pickup: ${match.ride.pickup.address}',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(11),
+                                        fontWeight: FontWeight.w600,
+                                        color: isDark ? Colors.white : c.textPrimary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    CurrencyFormatter.format(match.ride.offeredFare),
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      fontWeight: FontWeight.w800,
+                                      color: AppTheme.emeraldGreen,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Dropoff: ${match.ride.dropoff.address}',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(10),
+                                  color: c.textMuted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '+${match.detourKm.toStringAsFixed(1)} km detour (~PKR ${match.extraPetrolCost.toInt()} fuel)',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(9.5),
+                                        color: Colors.orange.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '+PKR ${match.netProfitBoost.toInt()} Net',
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(9.5),
+                                        color: AppTheme.emeraldGreen,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  SizedBox(
+                                    height: 28,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.emeraldGreen,
+                                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                                      ),
+                                      onPressed: () {
+                                        _viewModel.submitCounterOffer(
+                                          rideProv: rideProv,
+                                          driver: driverProv.driverProfile,
+                                          driverName: authProv.currentUser.fullName,
+                                          rideId: match.ride.id,
+                                          fare: match.ride.offeredFare,
+                                        );
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Sent offer to co-rider at PKR ${match.ride.offeredFare.toInt()}.'),
+                                            backgroundColor: AppTheme.emeraldGreen,
+                                          ),
+                                        );
+                                      },
+                                      child: Text(
+                                        'Pick Up Along Way',
+                                        style: TextStyle(
+                                          fontSize: layout.fontSize(10),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ],
+                ),
+              );
+            },
+          ),
         SizedBox(height: layout.scale(8)),
         Align(
           alignment: Alignment.centerLeft,

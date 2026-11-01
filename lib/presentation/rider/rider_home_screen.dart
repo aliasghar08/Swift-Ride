@@ -3183,76 +3183,147 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
               if (selectedType != VehicleType.bike) ...[
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.airline_seat_recline_normal_rounded,
-                      size: 16,
-                      color: AppTheme.primaryBlue,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Preferred Seat Position:',
-                      style: TextStyle(
-                        fontSize: layout.fontSize(11.5),
-                        fontWeight: FontWeight.w700,
-                        color: c.textPrimary,
+                if (_viewModel.bookedSeats == 4)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    'Any Seat',
-                    'Front Passenger',
-                    'Window Seat',
-                    'Back Row',
-                  ].map((pref) {
-                    final isPrefSelected = _viewModel.seatPreference == pref;
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          _viewModel.setSeatPreference(pref);
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.verified_user_rounded,
+                          size: 18,
+                          color: AppTheme.emeraldGreen,
                         ),
-                        decoration: BoxDecoration(
-                          color: isPrefSelected
-                              ? AppTheme.accentCyan.withValues(alpha: 0.18)
-                              : c.surface,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isPrefSelected
-                                ? AppTheme.accentCyan
-                                : c.border,
-                            width: isPrefSelected ? 1.5 : 1.0,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Entire Car Reserved (All 4 Seats)',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(11.5),
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.emeraldGreen,
+                                ),
+                              ),
+                              Text(
+                                'All 4 seats are booked exclusively for your party. Enjoy a completely private ride.',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(10.5),
+                                  color: c.textMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        child: Text(
-                          pref,
+                      ],
+                    ),
+                  )
+                else ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.airline_seat_recline_normal_rounded,
+                        size: 16,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _viewModel.bookedSeats > 1
+                            ? 'Select ${_viewModel.bookedSeats} Seat Positions:'
+                            : 'Preferred Seat Position:',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11.5),
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_viewModel.bookedSeats > 1)
+                        Text(
+                          '${_viewModel.selectedSeatPositions.where((p) => p != 'Any Seat').length}/${_viewModel.bookedSeats} chosen',
                           style: TextStyle(
-                            fontSize: layout.fontSize(11),
-                            fontWeight: isPrefSelected
-                                ? FontWeight.w700
-                                : FontWeight.w500,
-                            color: isPrefSelected
-                                ? AppTheme.accentCyan
-                                : c.textSecondary,
+                            fontSize: layout.fontSize(10.5),
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.accentCyan,
                           ),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      'Any Seat',
+                      'Window Seat (Left)',
+                      'Window Seat (Right)',
+                      'Middle Seat',
+                      'Front Passenger',
+                    ].map((pos) {
+                      final isSelected = _viewModel.selectedSeatPositions.contains(pos);
+                      return InkWell(
+                        onTap: () {
+                          setState(() {
+                            _viewModel.toggleSeatPosition(pos);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(8),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.accentCyan.withValues(alpha: 0.18)
+                                : c.surface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isSelected
+                                  ? AppTheme.accentCyan
+                                  : c.border,
+                              width: isSelected ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isSelected && pos != 'Any Seat') ...[
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 12,
+                                  color: AppTheme.accentCyan,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                pos,
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(11),
+                                  fontWeight: isSelected
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? AppTheme.accentCyan
+                                      : c.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
               ],
             ],
           ),

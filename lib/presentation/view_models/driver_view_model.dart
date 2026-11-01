@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
+import '../../domain/models/ride_status.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
@@ -15,6 +16,12 @@ import '../../services/native_map_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../services/firestore/firestore_driver_service.dart';
 import '../../services/map_service.dart';
+
+enum AutoAcceptMode {
+  off,
+  currentRate, // Auto-accept at rider's offered rate immediately
+  aiValuation, // Auto-accept bids within ±5% of AI value
+}
 
 /// Valuation assessment for an incoming rider bid compared to the on-device AI sweet spot.
 class AiValuationAnalysis {
@@ -56,7 +63,8 @@ class DriverViewModel extends ChangeNotifier {
   bool _isDisposed = false;
 
   final Map<String, double> _aiMarketValuations = {};
-  bool _autoAcceptAiValuedRides = false;
+  AutoAcceptMode _autoAcceptMode = AutoAcceptMode.off;
+  final Set<String> _autoAcceptedRideIds = {};
 
   DriverViewModel({
     NativeDeviceService? deviceService,
@@ -74,10 +82,29 @@ class DriverViewModel extends ChangeNotifier {
 
   String? get pinErrorMessage => _pinErrorMessage;
   bool get isProcessingPayout => _isProcessingPayout;
-  bool get autoAcceptAiValuedRides => _autoAcceptAiValuedRides;
+  AutoAcceptMode get autoAcceptMode => _autoAcceptMode;
+
+  /// Backward-compatible getter for AI valuation auto-accept.
+  bool get autoAcceptAiValuedRides => _autoAcceptMode == AutoAcceptMode.aiValuation;
+
+  /// Whether auto-acceptance at current offered rate is active.
+  bool get autoAcceptCurrentRate => _autoAcceptMode == AutoAcceptMode.currentRate;
+
+  void setAutoAcceptMode(AutoAcceptMode mode) {
+    if (_autoAcceptMode != mode) {
+      _autoAcceptMode = mode;
+      _deviceService.triggerHaptic('selection');
+      notifyListeners();
+    }
+  }
 
   void toggleAutoAcceptAiValuedRides(bool value) {
-    _autoAcceptAiValuedRides = value;
+    _autoAcceptMode = value ? AutoAcceptMode.aiValuation : AutoAcceptMode.off;
+    notifyListeners();
+  }
+
+  void toggleAutoAcceptCurrentRate(bool value) {
+    _autoAcceptMode = value ? AutoAcceptMode.currentRate : AutoAcceptMode.off;
     notifyListeners();
   }
 
@@ -172,15 +199,67 @@ class DriverViewModel extends ChangeNotifier {
     );
   }
 
-  /// Checks if an incoming ride qualifies for auto-acceptance within ±5% of the AI valuation.
+  /// Checks if an incoming ride qualifies for auto-acceptance based on the active mode:
+  /// - [AutoAcceptMode.currentRate]: auto-accepts any valid bid (>= PKR 50) at the rider's offered rate.
+  /// - [AutoAcceptMode.aiValuation]: auto-accepts if offered fare is within ±5% or above the AI fair market value.
+  /// - [AutoAcceptMode.off]: manual acceptance only.
   bool shouldAutoAccept({
     required double offeredFare,
     required double aiValuation,
   }) {
-    if (!_autoAcceptAiValuedRides || aiValuation <= 0) return false;
-    final diffRatio = (offeredFare - aiValuation) / aiValuation;
-    // Auto-accept if offer is within -5% or above market value
-    return diffRatio >= -0.05;
+    if (_autoAcceptMode == AutoAcceptMode.off) return false;
+
+    if (_autoAcceptMode == AutoAcceptMode.currentRate) {
+      return offeredFare >= 50.0;
+    }
+
+    if (_autoAcceptMode == AutoAcceptMode.aiValuation) {
+      if (aiValuation <= 0) return false;
+      final diffRatio = (offeredFare - aiValuation) / aiValuation;
+      // Auto-accept if offer is within -5% or above market value
+      return diffRatio >= -0.05;
+    }
+
+    return false;
+  }
+
+  /// Automatically evaluates open requests and submits driver bids for any qualifying ride.
+  Future<void> evaluateIncomingRidesForAutoAccept({
+    required List<RideModel> requests,
+    required RideProvider rideProv,
+    required DriverProfile? driver,
+    required String driverName,
+  }) async {
+    if (_autoAcceptMode == AutoAcceptMode.off || driver == null) return;
+
+    for (final req in requests) {
+      if (_autoAcceptedRideIds.contains(req.id)) continue;
+      if (req.status != RideStatus.requested) continue;
+
+      final aiFare = await getOrCalculateAiValuation(req);
+      if (shouldAutoAccept(offeredFare: req.offeredFare, aiValuation: aiFare)) {
+        _autoAcceptedRideIds.add(req.id);
+        final fareToOffer = _autoAcceptMode == AutoAcceptMode.currentRate
+            ? req.offeredFare
+            : (_autoAcceptMode == AutoAcceptMode.aiValuation && aiFare > req.offeredFare
+                ? aiFare
+                : req.offeredFare);
+
+        submitCounterOffer(
+          rideProv: rideProv,
+          driver: driver,
+          driverName: driverName,
+          rideId: req.id,
+          fare: fareToOffer,
+        );
+        _audioService.playAlertTone('success');
+        _notificationService.showNotification(
+          id: 305,
+          title: 'Ride Auto-Accepted',
+          body: 'Auto-accepted ride to ${req.dropoff.address} at PKR ${fareToOffer.toInt()}.',
+        );
+      }
+    }
   }
 
   bool _isConfirmingCash = false;

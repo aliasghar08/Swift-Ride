@@ -86,6 +86,7 @@ class RideProvider extends ChangeNotifier {
   /// request was written to Firestore and never shown to any driver — the
   /// dispatch loop never closed.
   List<RideModel> get availableRides => List.unmodifiable(_availableRides);
+  List<RideModel> get incomingRequests => availableRides;
   bool get isSubmitting => _isSubmitting;
 
   /// True while a driver offer is being accepted, so the UI can disable repeats.

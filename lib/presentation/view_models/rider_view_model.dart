@@ -119,18 +119,87 @@ class RiderViewModel extends ChangeNotifier {
   String _seatPreference = 'Any';
   String get seatPreference => _seatPreference;
 
+  List<String> _selectedSeatPositions = const ['Any Seat'];
+  List<String> get selectedSeatPositions => List.unmodifiable(_selectedSeatPositions);
+
+  /// Available seat positions in a standard 4-passenger vehicle.
+  static const List<String> availableSeatPositions = [
+    'Front Passenger',
+    'Window Seat (Left)',
+    'Window Seat (Right)',
+    'Middle Seat',
+    'Any Seat',
+  ];
+
   void setSeatPreference(String pref) {
     if (_seatPreference != pref) {
       _seatPreference = pref;
+      _selectedSeatPositions = [pref];
       _deviceService.triggerHaptic('selection');
       notifyListeners();
     }
+  }
+
+  /// Toggles selection of a specific seat position, allowing multi-seat selection
+  /// up to [_bookedSeats] when multiple seats are booked.
+  void toggleSeatPosition(String position) {
+    if (_bookedSeats == 4) return;
+
+    final updated = List<String>.from(_selectedSeatPositions);
+
+    if (position == 'Any Seat') {
+      _selectedSeatPositions = const ['Any Seat'];
+      _seatPreference = 'Any Seat';
+    } else {
+      updated.remove('Any Seat');
+      updated.remove('Entire Car (All 4 Seats)');
+
+      if (updated.contains(position)) {
+        if (updated.length > 1) {
+          updated.remove(position);
+        } else {
+          updated.clear();
+          updated.add('Any Seat');
+        }
+      } else {
+        // Enforce maximum selection bounded by bookedSeats
+        if (updated.length >= _bookedSeats) {
+          updated.removeAt(0); // Rotate oldest selection
+        }
+        updated.add(position);
+      }
+
+      _selectedSeatPositions = updated;
+      _seatPreference = updated.join(', ');
+    }
+
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
   }
 
   void setBookedSeats(int count) {
     final clamped = count.clamp(1, _selectedVehicleType.seats);
     if (_bookedSeats != clamped) {
       _bookedSeats = clamped;
+
+      if (_bookedSeats == 4) {
+        _selectedSeatPositions = const ['Entire Car (All 4 Seats)'];
+        _seatPreference = 'Entire Car (All 4 Seats)';
+      } else {
+        final current = List<String>.from(_selectedSeatPositions)
+          ..remove('Entire Car (All 4 Seats)');
+        if (current.isEmpty) {
+          _selectedSeatPositions = const ['Any Seat'];
+          _seatPreference = 'Any Seat';
+        } else if (current.length > _bookedSeats) {
+          _selectedSeatPositions = current.take(_bookedSeats).toList();
+          _seatPreference = _selectedSeatPositions.join(', ');
+        } else {
+          _selectedSeatPositions = current;
+          _seatPreference = current.join(', ');
+        }
+      }
+
       _recalculateRouteIfPossible();
       _deviceService.triggerHaptic('selection');
       notifyListeners();

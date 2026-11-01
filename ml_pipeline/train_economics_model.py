@@ -10,9 +10,22 @@ project_root = os.path.abspath(os.path.join(current_dir, '..'))
 assets_ml_dir = os.path.join(project_root, 'assets', 'ml')
 os.makedirs(assets_ml_dir, exist_ok=True)
 
-df = pd.read_csv(csv_path)
+if not os.path.exists(csv_path):
+    raise FileNotFoundError(f"Could not find {csv_path}. Run generate_economics_data.py first.")
 
-features = ['distance_km', 'duration_min', 'congestion_ratio', 'vehicle_type', 'booked_seats', 'fuel_price']
+df = pd.read_csv(csv_path)
+print(f"Loaded {len(df)} samples from {csv_path}")
+
+features = [
+    'distance_km',
+    'duration_min',
+    'congestion_ratio',
+    'vehicle_type',
+    'car_tier',
+    'fuel_average_km_l',
+    'booked_seats',
+    'fuel_price'
+]
 targets = ['target_fuel_liters', 'target_maintenance_pkr', 'target_fare_pkr']
 
 X = df[features].values.astype(np.float32)
@@ -39,9 +52,10 @@ for i, t in enumerate(targets):
     t_min, t_max = norm_params['targets'][t]['min'], norm_params['targets'][t]['max']
     y_norm[:, i] = (y[:, i] - t_min) / (t_max - t_min + 1e-7)
 
-# Multi-Output Dense Architecture
+# Multi-Output Dense Architecture for on-device inference
 inputs = tf.keras.Input(shape=(len(features),), name='features_input')
 x = tf.keras.layers.Dense(64, activation='relu')(inputs)
+x = tf.keras.layers.Dense(64, activation='relu')(x)
 x = tf.keras.layers.Dense(32, activation='relu')(x)
 x = tf.keras.layers.Dense(16, activation='relu')(x)
 outputs = tf.keras.layers.Dense(len(targets), activation='linear', name='economics_output')(x)
@@ -53,7 +67,7 @@ model.summary()
 model.fit(
     X_norm,
     y_norm,
-    epochs=40,
+    epochs=45,
     batch_size=32,
     validation_split=0.15,
     verbose=1

@@ -68,6 +68,8 @@ class TripEconomics {
     String? fuelPriceSource,
     bool? isFuelPriceLive,
     bool isAiPredicted = false,
+    String? carModel,
+    double? fuelAverageKmPerL,
   }) {
     final effectiveDuration = durationMin > 0
         ? durationMin
@@ -80,24 +82,30 @@ class TripEconomics {
     final effectiveIsLive = isFuelPriceLive ?? livePrice.isLive;
 
     // Predict car mileage dynamically from Google Maps route data (distance, speed, traffic)
+    // taking into account the vehicle's model, engine tier, and fuel economy.
     final mileage = vehicleType == VehicleType.car
         ? vehicleType.predictMileage(
             distanceKm: distanceKm,
             durationMin: effectiveDuration,
             staticDurationMin: staticDurationMin,
             trafficLevel: trafficLevel,
+            carModel: carModel,
+            customMileage: fuelAverageKmPerL,
           )
-        : vehicleType.averageMileageKmPerL;
+        : (fuelAverageKmPerL != null && fuelAverageKmPerL > 0
+            ? fuelAverageKmPerL
+            : vehicleType.averageMileageKmPerL);
 
     final isPredicted = vehicleType == VehicleType.car;
     String? trafficNote;
     if (isPredicted) {
+      final modelPrefix = carModel != null && carModel.isNotEmpty ? '$carModel: ' : '';
       if (mileage < 9.0) {
-        trafficNote = 'Heavy traffic (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
+        trafficNote = '${modelPrefix}Heavy traffic congestion (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
       } else if (mileage > 11.0) {
-        trafficNote = 'Highway/free flow (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
+        trafficNote = '${modelPrefix}Highway/free flow (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
       } else {
-        trafficNote = 'Normal traffic (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
+        trafficNote = '${modelPrefix}Normal urban flow (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
       }
     }
 

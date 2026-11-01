@@ -804,17 +804,20 @@ class MapService {
           }
         }
 
-        // Economics
-        const fuelRate = 14.5;
+        // Economics calibrated to realistic inDrive Pakistan rates & 2% platform commission
+        const baseFare = 210.0;
+        const kmRate = 62.0;
+        const minRate = 6.0;
+        const fuelRate = 22.0;
         const maintRate = 4.0;
         final fuel = (distKm * fuelRate * 10).round() / 10.0;
         final maint = (distKm * maintRate * 10).round() / 10.0;
-        final driverCost = (fuel + maint + tollCost * 10).round() / 10.0;
-        final riderFare =
-            (150 + distKm * 45 + durMin * 5 * 10).round() / 10.0;
-        final commission = (riderFare * 0.10 * 10).round() / 10.0;
+        final driverCost = (fuel + maint + tollCost).round() / 1.0;
+        final rawFare = baseFare + distKm * kmRate + durMin * minRate;
+        final riderFare = ((rawFare / 5.0).round() * 5.0).toDouble();
+        final commission = ((riderFare * 0.02) * 10).round() / 10.0;
         final driverProfit =
-            (riderFare - driverCost - commission * 10).round() / 10.0;
+            (riderFare - driverCost - commission).clamp(0.0, 999999.0);
         final profitPerMin =
             (driverProfit / durMin.clamp(1.0, 99999.0) * 10).round() / 10.0;
 

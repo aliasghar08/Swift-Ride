@@ -59,14 +59,36 @@ extension VehicleTypeX on VehicleType {
     }
   }
 
-  /// Predicts real-world fuel mileage (km/L) using Google Maps route data (distance, traffic duration, congestion).
+  /// Predicts real-world fuel mileage (km/L) using Google Maps route data (distance, traffic duration, congestion),
+  /// the vehicle's car model, and fuel efficiency characteristics.
   double predictMileage({
     required double distanceKm,
     double? durationMin,
     double? staticDurationMin,
     String? trafficLevel,
+    String? carModel,
+    double? customMileage,
   }) {
-    final base = averageMileageKmPerL;
+    if (customMileage != null && customMileage > 0) {
+      return customMileage;
+    }
+    double base = averageMileageKmPerL;
+    if (this == VehicleType.car && carModel != null && carModel.isNotEmpty) {
+      final m = carModel.toLowerCase();
+      if (m.contains('corolla') ||
+          m.contains('civic') ||
+          m.contains('city') ||
+          m.contains('yaris') ||
+          m.contains('camry') ||
+          m.contains('sedan')) {
+        base = 10.0; // Sedan / Comfort AC
+      } else if (m.contains('alto') || m.contains('mira') || m.contains('mehran') || m.contains('660')) {
+        base = 15.5; // Economy Kei / Hatchback
+      } else {
+        base = 13.0; // Cultus / WagonR / 1000cc
+      }
+    }
+
     if (this != VehicleType.car || distanceKm <= 0) {
       return base;
     }

@@ -8,14 +8,19 @@ from tensorflow.keras import layers
 
 def train_and_export():
     print(f"TensorFlow version: {tf.__version__}")
-    data_path = "ml_pipeline/ride_data.csv"
+    current_dir = os.path.dirname(__file__)
+    data_path = os.path.join(current_dir, "ride_data.csv")
+    project_root = os.path.abspath(os.path.join(current_dir, ".."))
+    assets_ml_dir = os.path.join(project_root, "assets", "ml")
+    os.makedirs(assets_ml_dir, exist_ok=True)
+
     if not os.path.exists(data_path):
         raise FileNotFoundError(f"Could not find {data_path}. Run generate_synthetic_data.py first.")
 
     df = pd.read_csv(data_path)
     print(f"Loaded {len(df)} samples from {data_path}")
 
-    features = ["distance_km", "time_of_day_hours", "is_raining", "traffic_multiplier"]
+    features = ["distance_km", "time_of_day_hours", "is_raining", "traffic_multiplier", "car_tier", "fuel_average_km_l"]
     target = "final_accepted_bid"
 
     # Train/Validation/Test split (80% train, 10% val, 10% test)
@@ -49,12 +54,12 @@ def train_and_export():
     print("\nFeature Normalization Parameters (fitted on Train):")
     print(json.dumps(norm_params, indent=2))
 
-    # Min-Max Normalization to [0, 1] range for clean neural network inputs and portable mobile inference
+    # Min-Max Normalization to [0, 1] range
     def normalize_features(data):
         norm_data = np.zeros((len(data), len(features)), dtype=np.float32)
         for i, col in enumerate(features):
             p = norm_params[col]
-            norm_data[:, i] = (data[col].values - p["min"]) / (p["max"] - p["min"])
+            norm_data[:, i] = (data[col].values - p["min"]) / (p["max"] - p["min"] + 1e-7)
         return norm_data
 
     x_train = normalize_features(train_df)
@@ -66,20 +71,21 @@ def train_and_export():
     x_test = normalize_features(test_df)
     y_test = test_df[target].values.astype(np.float32)
 
-    # Lightweight Sequential Neural Network for mobile regression
+    # Neural Network for mobile regression
     model = keras.Sequential([
         layers.Input(shape=(len(features),), dtype=tf.float32, name="input_features"),
-        layers.Dense(32, activation="relu", name="dense_1"),
-        layers.Dense(16, activation="relu", name="dense_2"),
+        layers.Dense(64, activation="relu", name="dense_1"),
+        layers.Dense(32, activation="relu", name="dense_2"),
+        layers.Dense(16, activation="relu", name="dense_3"),
         layers.Dense(1, activation="linear", name="predicted_bid")
     ])
 
-    optimizer = keras.optimizers.Adam(learning_rate=0.01)
+    optimizer = keras.optimizers.Adam(learning_rate=0.005)
     model.compile(optimizer=optimizer, loss="mean_squared_error", metrics=["mae", "mse"])
     model.summary()
 
-    # Train for 50 epochs
-    epochs = 50
+    # Train
+    epochs = 45
     history = model.fit(
         x_train, y_train,
         validation_data=(x_val, y_val),
@@ -92,22 +98,18 @@ def train_and_export():
     test_loss, test_mae, test_mse = model.evaluate(x_test, y_test, verbose=0)
     print(f"\nHeld-out Test Evaluation: MAE = PKR {test_mae:.2f}, RMSE = PKR {np.sqrt(test_mse):.2f}")
 
-    # Ensure output directories exist
-    os.makedirs("assets/ml", exist_ok=True)
-
     # Save normalization parameters for Flutter service
-    norm_file = "assets/ml/pricing_normalization.json"
+    norm_file = os.path.join(assets_ml_dir, "pricing_normalization.json")
     with open(norm_file, "w") as f:
         json.dump(norm_params, f, indent=2)
     print(f"Saved normalization parameters to {norm_file}")
 
     # Convert and save as TensorFlow Lite (.tflite)
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
-    # Optimize for size/latency
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     tflite_model = converter.convert()
 
-    tflite_path = "assets/ml/pricing_model.tflite"
+    tflite_path = os.path.join(assets_ml_dir, "pricing_model.tflite")
     with open(tflite_path, "wb") as f:
         f.write(tflite_model)
     print(f"Successfully converted and saved TFLite model to {tflite_path} ({len(tflite_model)} bytes)")

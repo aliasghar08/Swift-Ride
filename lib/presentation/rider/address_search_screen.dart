@@ -101,11 +101,26 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
     if (parsed != null) {
       if (!mounted) return;
+      setState(() => _isLoading = true);
+      String finalAddress = parsed.label ?? trimmed;
+      try {
+        final resolved = await _mapService.reverseGeocode(
+          parsed.latitude,
+          parsed.longitude,
+        );
+        if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
+          finalAddress = resolved;
+        }
+      } catch (_) {}
+
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
       Navigator.of(context).pop(
         LocationPoint(
           latitude: parsed.latitude,
           longitude: parsed.longitude,
-          address: parsed.label ?? trimmed,
+          address: finalAddress,
         ),
       );
       return;
@@ -180,13 +195,29 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
       return;
     }
 
-    final address = place.placeId.startsWith('pinned:') ||
+    String address = place.placeId.startsWith('pinned:') ||
             place.placeId.startsWith('plus:')
         ? place.mainText
         : [
             place.mainText,
             place.secondaryText,
           ].where((s) => s.trim().isNotEmpty).join(', ');
+
+    if (address == 'Pinned Location' || address.startsWith('Coordinates:')) {
+      setState(() => _isLoading = true);
+      try {
+        final resolved = await _mapService.reverseGeocode(
+          coords.latitude,
+          coords.longitude,
+        );
+        if (resolved.isNotEmpty && !resolved.startsWith('Location (')) {
+          address = resolved;
+        }
+      } catch (_) {}
+      if (mounted) setState(() => _isLoading = false);
+    }
+
+    if (!mounted) return;
 
     Navigator.of(context).pop(
       LocationPoint(
@@ -551,19 +582,43 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
               final loc = CustomChangeNotifierProvider.read<LocationProvider>(
                 context,
               );
+              double lat = loc.latitude;
+              double lng = loc.longitude;
+              if (!loc.hasRealFix) {
+                final fix = await loc.waitForFirstFix(
+                  timeout: const Duration(seconds: 4),
+                );
+                if (fix != null) {
+                  lat = fix.latitude;
+                  lng = fix.longitude;
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Acquiring GPS location... Please ensure location permissions are enabled.',
+                        ),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                  return;
+                }
+              }
+
               String address = 'Current Location';
               try {
                 final resolved = await _mapService.reverseGeocode(
-                  loc.latitude,
-                  loc.longitude,
+                  lat,
+                  lng,
                 );
                 if (resolved.isNotEmpty) address = resolved;
               } catch (_) {}
               if (!mounted) return;
               Navigator.of(context).pop(
                 LocationPoint(
-                  latitude: loc.latitude,
-                  longitude: loc.longitude,
+                  latitude: lat,
+                  longitude: lng,
                   address: address,
                 ),
               );

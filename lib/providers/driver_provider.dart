@@ -4,7 +4,7 @@ import '../services/driver_service.dart';
 import '../services/firestore/firestore_driver_service.dart';
 
 /// Zero-dependency Driver Provider managing driver state, online availability,
-/// and earnings from rides (with 100% zero-commission pass-through).
+/// and earnings from rides (with 98% driver pass-through after 2% platform commission).
 class DriverProvider extends ChangeNotifier {
   final DriverService _driverService;
   final FirestoreDriverService _firestoreService;

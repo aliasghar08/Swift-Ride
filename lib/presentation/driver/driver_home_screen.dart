@@ -44,6 +44,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   LocationProvider? _locProv;
   RideProvider? _rideProv;
   DateTime _lastTelemetryPublish = DateTime.fromMillisecondsSinceEpoch(0);
+  GoogleMapController? _mapController;
+  bool _isMapPanned = false;
+  bool _is3DNavigationMode = true;
+  bool _showTraffic = true;
 
   /// Phone number for the rider on the active trip, resolved from their profile.
   String? _riderPhone;
@@ -74,21 +78,45 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     ride.watchAvailableRides();
   }
 
-  /// Sends the driver's real position to the backend while a trip is active.
+  /// Sends the driver's real position to the backend while a trip is active
+  /// and smoothly follows the vehicle in 3D perspective mode.
   void _publishTelemetry(double latitude, double longitude, double heading) {
     final activeRide = _rideProv?.activeRide;
-    if (activeRide == null) return;
+    if (activeRide != null) {
+      final now = DateTime.now();
+      if (now.difference(_lastTelemetryPublish) >= _telemetryInterval) {
+        _lastTelemetryPublish = now;
+        _rideService.publishDriverLocation(
+          latitude: latitude,
+          longitude: longitude,
+          heading: heading,
+          activeRideId: activeRide.id,
+        );
+      }
+    }
 
-    final now = DateTime.now();
-    if (now.difference(_lastTelemetryPublish) < _telemetryInterval) return;
-    _lastTelemetryPublish = now;
-
-    _rideService.publishDriverLocation(
-      latitude: latitude,
-      longitude: longitude,
-      heading: heading,
-      activeRideId: activeRide.id,
-    );
+    // Dynamic 3D camera navigation follow
+    if (!_isMapPanned && _mapController != null) {
+      if (activeRide != null && _is3DNavigationMode) {
+        _mapController?.followNavigation(
+          target: LatLng(latitude, longitude),
+          bearing: heading,
+          zoom: 17.5,
+          tilt: 50.0,
+        );
+      } else {
+        _mapController?.animateCamera(
+          CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target: LatLng(latitude, longitude),
+              zoom: activeRide != null ? 16.5 : 15.0,
+              bearing: _is3DNavigationMode ? heading : 0.0,
+              tilt: (_is3DNavigationMode && activeRide != null) ? 45.0 : 0.0,
+            ),
+          ),
+        );
+      }
+    }
   }
 
   /// Loads (once per rider) the phone number to dial for the active trip.
@@ -136,81 +164,131 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           backgroundColor: c.canvas,
           body: Stack(
             children: [
-              // 1. Dark Mode Real Google Maps View
-              GoogleMapView(
-                initialCenter: LatLng(locProv.latitude, locProv.longitude),
-                initialZoom: 15,
-                semanticsLabel: currentRide == null
-                    ? 'Map of your area. You are online and awaiting requests.'
-                    : 'Navigation map. Trip status: ${currentRide.status.displayName}.',
-                mode: MapMode.navigation,
-                darkMode: true,
-                showTraffic: true,
-                markers: {
-                  MapMarkers.driver(
-                    driverId: driver.id,
-                    pos: LatLng(locProv.latitude, locProv.longitude),
-                    heading: locProv.heading,
-                  ),
-                  if (currentRide != null) ...[
-                    MapMarkers.pickup(
-                      LatLng(
-                        currentRide.pickup.latitude,
-                        currentRide.pickup.longitude,
-                      ),
-                      id: 'driver_ride_pickup',
-                    ),
-                    MapMarkers.dropoff(
-                      LatLng(
-                        currentRide.dropoff.latitude,
-                        currentRide.dropoff.longitude,
-                      ),
-                      id: 'driver_ride_dropoff',
-                    ),
-                  ],
+              // 1. Dark Mode Real Google Maps View with Live Navigation
+              Listener(
+                onPointerDown: (_) {
+                  if (!_isMapPanned) {
+                    setState(() => _isMapPanned = true);
+                  }
                 },
-                polylines: {
-                  if (currentRide != null) ...[
-                    ...() {
-                      final cachedPlan =
-                          _viewModel.getCachedRoutePlan(currentRide.id);
-                      if (cachedPlan == null) {
-                        _viewModel.getOrFetchRoute(currentRide);
-                      }
-                      final routePoints =
-                          cachedPlan?.routes.firstOrNull?.polylinePoints;
-                      final points = (routePoints != null &&
-                              routePoints.isNotEmpty)
-                          ? routePoints
-                          : [
-                              LatLng(locProv.latitude, locProv.longitude),
-                              LatLng(
-                                currentRide.pickup.latitude,
-                                currentRide.pickup.longitude,
-                              ),
-                              LatLng(
-                                currentRide.dropoff.latitude,
-                                currentRide.dropoff.longitude,
-                              ),
-                            ];
+                child: GoogleMapView(
+                  initialCenter: LatLng(locProv.latitude, locProv.longitude),
+                  initialZoom: 15,
+                  semanticsLabel: currentRide == null
+                      ? 'Map of your area. You are online and awaiting requests.'
+                      : 'Navigation map. Trip status: ${currentRide.status.displayName}.',
+                  mode: MapMode.navigation,
+                  darkMode: true,
+                  showTraffic: _showTraffic,
+                  onControllerCreated: (controller) {
+                    _mapController = controller;
+                  },
+                  markers: {
+                    MapMarkers.driver(
+                      driverId: driver.id,
+                      pos: LatLng(locProv.latitude, locProv.longitude),
+                      heading: locProv.heading,
+                    ),
+                    if (currentRide != null) ...[
+                      MapMarkers.pickup(
+                        LatLng(
+                          currentRide.pickup.latitude,
+                          currentRide.pickup.longitude,
+                        ),
+                        id: 'driver_ride_pickup',
+                      ),
+                      MapMarkers.dropoff(
+                        LatLng(
+                          currentRide.dropoff.latitude,
+                          currentRide.dropoff.longitude,
+                        ),
+                        id: 'driver_ride_dropoff',
+                      ),
+                    ],
+                  },
+                  polylines: {
+                    if (currentRide != null) ...[
+                      ...() {
+                        final cachedPlan =
+                            _viewModel.getCachedRoutePlan(currentRide.id);
+                        if (cachedPlan == null) {
+                          _viewModel.getOrFetchRoute(currentRide);
+                        }
+                        final route = cachedPlan?.routes.firstOrNull;
+                        final routePoints = route?.polylinePoints;
+                        final points = (routePoints != null &&
+                                routePoints.isNotEmpty)
+                            ? routePoints
+                            : [
+                                LatLng(locProv.latitude, locProv.longitude),
+                                LatLng(
+                                  currentRide.pickup.latitude,
+                                  currentRide.pickup.longitude,
+                                ),
+                                LatLng(
+                                  currentRide.dropoff.latitude,
+                                  currentRide.dropoff.longitude,
+                                ),
+                              ];
 
-                      return [
-                        Polyline(
-                          polylineId: const PolylineId('driver_route_casing'),
-                          points: points,
-                          color: AppTheme.primaryNavy,
-                          width: 9,
-                        ),
-                        Polyline(
-                          polylineId: const PolylineId('driver_route'),
-                          points: points,
-                          color: AppTheme.amberWarning,
-                          width: 5,
-                        ),
-                      ];
-                    }(),
-                  ],
-                },
+                        final intervals =
+                            route?.trafficIntervals ?? const <TrafficInterval>[];
+
+                        return [
+                          Polyline(
+                            polylineId: const PolylineId('driver_route_casing'),
+                            points: points,
+                            color: AppTheme.primaryNavy,
+                            width: 14,
+                            jointType: JointType.round,
+                            startCap: Cap.roundCap,
+                            endCap: Cap.roundCap,
+                            geodesic: true,
+                            zIndex: 0,
+                          ),
+                          Polyline(
+                            polylineId: const PolylineId('driver_route_fill'),
+                            points: points,
+                            color: AppTheme.accentCyan,
+                            width: 9,
+                            jointType: JointType.round,
+                            startCap: Cap.roundCap,
+                            endCap: Cap.roundCap,
+                            geodesic: true,
+                            zIndex: 1,
+                          ),
+                          if (_showTraffic && intervals.isNotEmpty)
+                            ...TrafficInterval.segment(points, intervals)
+                                .asMap()
+                                .entries
+                                .map((entry) {
+                              final interval = entry.value.interval;
+                              final isJam = interval?.isJam == true;
+                              final isSlow = interval?.isSlow == true;
+                              final color = isJam
+                                  ? AppTheme.sunsetCoral
+                                  : (isSlow
+                                      ? AppTheme.amberWarning
+                                      : AppTheme.emeraldGreen);
+                              return Polyline(
+                                polylineId: PolylineId(
+                                  'driver_route_traffic_${entry.key}',
+                                ),
+                                points: entry.value.points,
+                                color: color,
+                                width: 9,
+                                jointType: JointType.round,
+                                startCap: Cap.roundCap,
+                                endCap: Cap.roundCap,
+                                geodesic: true,
+                                zIndex: 2,
+                              );
+                            }),
+                        ];
+                      }(),
+                    ],
+                  },
+                ),
               ),
 
               // 1b. Active emergency alert banner
@@ -235,10 +313,87 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   ),
                 ),
 
-              // 2. Top Header Bar: Online Switch & Live RTDB Broadcaster
-              SafeArea(
-                child: Align(
-                  alignment: Alignment.topCenter,
+              // 2. Live Navigation HUD when active trip, or Top Header Bar
+              if (currentRide != null) ...[
+                () {
+                  final cachedPlan =
+                      _viewModel.getCachedRoutePlan(currentRide.id);
+                  final route = cachedPlan?.routes.firstOrNull;
+                  final isEnRouteToDropoff =
+                      currentRide.status == RideStatus.inProgress ||
+                          currentRide.status == RideStatus.driverArrived;
+                  final targetName = isEnRouteToDropoff
+                      ? currentRide.dropoff.address
+                      : currentRide.pickup.address;
+
+                  return LiveNavigationHud(
+                    isDriver: true,
+                    activeRoute: route,
+                    currentVehicleLocation:
+                        LatLng(locProv.latitude, locProv.longitude),
+                    currentSpeedKmh: (locProv.speed * 3.6).clamp(0.0, 160.0),
+                    heading: locProv.heading,
+                    destinationAddress: targetName,
+                    remainingDistanceKm: route?.distanceKm ?? 2.5,
+                    remainingDurationMin: route?.durationMin ?? 6.0,
+                    isMapPanned: _isMapPanned,
+                    is3DMode: _is3DNavigationMode,
+                    isTrafficLayerActive: _showTraffic,
+                    onRecenter: () {
+                      setState(() => _isMapPanned = false);
+                      if (_is3DNavigationMode) {
+                        _mapController?.followNavigation(
+                          target: LatLng(locProv.latitude, locProv.longitude),
+                          bearing: locProv.heading,
+                          zoom: 17.5,
+                          tilt: 50.0,
+                        );
+                      } else {
+                        _mapController?.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target:
+                                  LatLng(locProv.latitude, locProv.longitude),
+                              zoom: 16.5,
+                              bearing: 0.0,
+                              tilt: 0.0,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    onToggle3D: (is3D) {
+                      setState(() => _is3DNavigationMode = is3D);
+                      if (_is3DNavigationMode) {
+                        _mapController?.followNavigation(
+                          target: LatLng(locProv.latitude, locProv.longitude),
+                          bearing: locProv.heading,
+                          zoom: 17.5,
+                          tilt: 50.0,
+                        );
+                      } else {
+                        _mapController?.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target:
+                                  LatLng(locProv.latitude, locProv.longitude),
+                              zoom: 16.5,
+                              bearing: 0.0,
+                              tilt: 0.0,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    onToggleTraffic: (trafficActive) {
+                      setState(() => _showTraffic = trafficActive);
+                    },
+                  );
+                }(),
+              ] else
+                SafeArea(
+                  child: Align(
+                    alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
                     child: Padding(
@@ -303,7 +458,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ),
                                     ),
                                     Text(
-                                      'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 0% Fee',
+                                      'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 2% Fee',
                                       style: TextStyle(
                                         color: isDark ? Colors.white70 : c.textMuted,
                                         fontSize: layout.fontSize(12),
@@ -466,36 +621,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
             ],
           ),
-          floatingActionButton: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              FloatingActionButton.small(
-                heroTag: 'driver_history_btn',
-                tooltip: 'Trip History',
-                backgroundColor: AppTheme.primaryNavy,
-                foregroundColor: AppTheme.accentCyan,
-                child: const Icon(Icons.history_rounded, size: 20),
-                onPressed: () => Navigator.of(context).pushNamed('/history'),
-              ),
-              const SizedBox(height: 12),
-              PulsingGlowWidget(
-                glowColor: AppTheme.accentCyan,
-                minSpread: 1.0,
-                maxSpread: 5.0,
-                child: FloatingActionButton.extended(
-                  onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
-                  backgroundColor: AppTheme.primaryNavy,
-                  foregroundColor: AppTheme.accentCyan,
-                  icon: const Icon(Icons.auto_awesome, size: 20),
-                  label: const Text(
-                    'AI Assistant',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
+          floatingActionButton: currentRide != null
+              ? null
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FloatingActionButton.small(
+                      heroTag: 'driver_history_btn',
+                      tooltip: 'Trip History',
+                      backgroundColor: AppTheme.primaryNavy,
+                      foregroundColor: AppTheme.accentCyan,
+                      child: const Icon(Icons.history_rounded, size: 20),
+                      onPressed: () => Navigator.of(context).pushNamed('/history'),
+                    ),
+                    const SizedBox(height: 12),
+                    PulsingGlowWidget(
+                      glowColor: AppTheme.accentCyan,
+                      minSpread: 1.0,
+                      maxSpread: 5.0,
+                      child: FloatingActionButton.extended(
+                        onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
+                        backgroundColor: AppTheme.primaryNavy,
+                        foregroundColor: AppTheme.accentCyan,
+                        icon: const Icon(Icons.auto_awesome, size: 20),
+                        label: const Text(
+                          'AI Assistant',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         );
       },
     );
@@ -1107,7 +1264,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                'Year 1: PKR 0 Fee',
+                'Year 1: 2% Fee',
                 style: TextStyle(
                   color: AppTheme.emeraldGreen,
                   fontWeight: FontWeight.w700,
@@ -1439,7 +1596,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ],
             ),
             Text(
-              'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (0% Fee)',
+              'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (2% Fee)',
               style: TextStyle(
                 color: AppTheme.emeraldGreen,
                 fontWeight: FontWeight.w800,
@@ -1677,7 +1834,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   ),
                   Text(
-                    'Counter-Offer (inDrive Bidding):',
+                    'Counter-Offer (Dynamic Bidding):',
                     style: TextStyle(
                       color: c.textMuted,
                       fontSize: layout.fontSize(12),

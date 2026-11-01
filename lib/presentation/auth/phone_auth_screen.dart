@@ -986,7 +986,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               child: ChoiceChip(
                 label: const FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('Driver (Earn 100%)'),
+                  child: Text('Driver (Earn 98%)'),
                 ),
                 selected: _selectedRole == UserRole.driver,
                 onSelected: (val) {

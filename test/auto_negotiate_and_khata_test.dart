@@ -101,8 +101,8 @@ void main() {
       expect(khata.totalGrossCashCollected, 1000.0);
       expect(khata.totalFuelExpense, 300.0);
       expect(khata.totalMaintenanceReserve, 100.0);
-      // Net Profit: 1000 - (300 + 100) = 600
-      expect(khata.netCashProfit, 600.0);
+      // Net Profit: 1000 - (300 + 100 + 20 [2% fee]) = 580
+      expect(khata.netCashProfit, 580.0);
 
       // Add Trip 2: Fare PKR 500, Fuel PKR 150, Maintenance PKR 50
       khata = khata.addTrip(
@@ -115,15 +115,15 @@ void main() {
       expect(khata.totalGrossCashCollected, 1500.0);
       expect(khata.totalFuelExpense, 450.0);
       expect(khata.totalMaintenanceReserve, 150.0);
-      // Net Profit: 1500 - (450 + 150) = 900
-      expect(khata.netCashProfit, 900.0);
+      // Net Profit: 1500 - (450 + 150 + 30 [2% fee]) = 870
+      expect(khata.netCashProfit, 870.0);
 
       // Verify serialization round-trip
       final map = khata.toMap();
       final restored = DriverDailyKhata.fromMap(map);
       expect(restored.completedTrips, 2);
       expect(restored.totalGrossCashCollected, 1500.0);
-      expect(restored.netCashProfit, 900.0);
+      expect(restored.netCashProfit, 870.0);
     });
 
     test('Exact change assistant calculates correct change for PKR 500 and PKR 1000 cash notes', () {

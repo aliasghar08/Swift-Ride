@@ -3,18 +3,19 @@ import '../domain/models/vehicle_info_model.dart';
 import '../domain/models/subscription_model.dart';
 
 /// Zero-dependency driver service handling profile management, online/offline status,
-/// 100% zero-commission earnings calculation, and Stripe payout requests.
+/// 2% commission earnings calculation, and Stripe payout requests.
 class DriverService {
   /// Toggles driver online status.
   DriverProfile setOnlineStatus(DriverProfile profile, bool isOnline) {
     return profile.copyWith(isOnline: isOnline);
   }
 
-  /// Credits 100% of ride fare to driver's balance ($0 platform commission deduction).
+  /// Credits 98% of ride fare to driver's balance (2% platform commission deduction).
   DriverProfile creditTripEarnings(DriverProfile profile, double rideFare) {
+    final netFare = ((rideFare * 0.98) * 100).round() / 100.0;
     return profile.copyWith(
       totalRides: profile.totalRides + 1,
-      totalEarnings: profile.totalEarnings + rideFare,
+      totalEarnings: profile.totalEarnings + netFare,
       payoutStatus: 'ready_for_payout',
     );
   }

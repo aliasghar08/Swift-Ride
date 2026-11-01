@@ -45,6 +45,7 @@ class NativeMapView(
     private val initialLng = (args?.get("initialLng") as? Number)?.toDouble() ?: 72.3317
     private val initialZoom = (args?.get("initialZoom") as? Number)?.toFloat() ?: 15.0f
     private val isDark = args?.get("darkMode") as? Boolean ?: false
+    private val showTraffic = args?.get("showTraffic") as? Boolean ?: true
     private val mapStyleJson = args?.get("mapStyle") as? String
 
     init {
@@ -66,6 +67,8 @@ class NativeMapView(
         map.uiSettings.isMyLocationButtonEnabled = false
         map.uiSettings.isMapToolbarEnabled = false
         map.uiSettings.isZoomControlsEnabled = false
+        map.isTrafficEnabled = showTraffic
+        map.isBuildingsEnabled = true
 
         if (!mapStyleJson.isNullOrBlank()) {
             try {
@@ -117,15 +120,18 @@ class NativeMapView(
                 val lat = call.argument<Double>("latitude") ?: initialLat
                 val lng = call.argument<Double>("longitude") ?: initialLng
                 val zoom = (call.argument<Number>("zoom"))?.toFloat()
+                val bearing = (call.argument<Number>("bearing"))?.toFloat()
+                val tilt = (call.argument<Number>("tilt"))?.toFloat()
                 val target = LatLng(lat, lng)
 
                 if (map != null) {
-                    val update = if (zoom != null) {
-                        CameraUpdateFactory.newLatLngZoom(target, zoom)
-                    } else {
-                        CameraUpdateFactory.newLatLng(target)
-                    }
-                    map.animateCamera(update)
+                    val cameraBuilder = com.google.android.gms.maps.model.CameraPosition.builder()
+                        .target(target)
+                    if (zoom != null) cameraBuilder.zoom(zoom) else cameraBuilder.zoom(map.cameraPosition.zoom)
+                    if (bearing != null) cameraBuilder.bearing(bearing)
+                    if (tilt != null) cameraBuilder.tilt(tilt)
+
+                    map.animateCamera(CameraUpdateFactory.newCameraPosition(cameraBuilder.build()))
                     result.success(true)
                 } else {
                     result.success(false)

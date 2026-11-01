@@ -15,11 +15,43 @@ import 'native/native_channel_constants.dart';
 
 class LocationService {
   LocationService() {
+    _channel.setMethodCallHandler(_handleNativeMethodCall);
     debugPrint('════ [IO FILE LOADED] ════');
   }
 
   static const MethodChannel _channel =
       MethodChannel(NativeChannelConstants.locationChannel);
+
+  Future<dynamic> _handleNativeMethodCall(MethodCall call) async {
+    if (call.method == 'onLocationUpdate') {
+      final args = call.arguments;
+      if (args is Map) {
+        final lat = (args['latitude'] as num?)?.toDouble();
+        final lng = (args['longitude'] as num?)?.toDouble();
+        if (lat != null && lng != null) {
+          _currentLat = lat;
+          _currentLng = lng;
+          _currentHeading =
+              (args['heading'] as num?)?.toDouble() ?? _currentHeading;
+          _currentSpeed =
+              (args['speed'] as num?)?.toDouble() ?? _currentSpeed;
+          _hasRealFix = true;
+
+          _locationStreamController.add(
+            LocationUpdate(
+              latitude: lat,
+              longitude: lng,
+              heading: _currentHeading,
+              speed: _currentSpeed,
+              geohash: GeohashUtil.encode(lat, lng),
+              timestamp: DateTime.now(),
+            ),
+          );
+        }
+      }
+    }
+    return null;
+  }
 
   Timer? _broadcastTimer;
   Timer? _pollingTimer;
@@ -29,6 +61,7 @@ class LocationService {
   double _currentLat = AppConstants.defaultLat;
   double _currentLng = AppConstants.defaultLng;
   double _currentHeading = 0.0;
+  double _currentSpeed = 0.0;
   double _simAngle = 0.0;
   bool _isBroadcasting = false;
   bool _hasRealFix = false;
@@ -41,6 +74,7 @@ class LocationService {
   double get currentLat => _currentLat;
   double get currentLng => _currentLng;
   double get currentHeading => _currentHeading;
+  double get currentSpeed => _currentSpeed;
   bool get isBroadcasting => _isBroadcasting;
 
   /// True once we have received a genuine GPS fix from the platform.
@@ -133,6 +167,7 @@ class LocationService {
     _currentLat = lat;
     _currentLng = lng;
     _currentHeading = heading;
+    _currentSpeed = speed;
     _hasRealFix = true;
 
     return LocationFetchResult(
@@ -164,6 +199,7 @@ class LocationService {
         latitude: _currentLat,
         longitude: _currentLng,
         heading: _currentHeading,
+        speed: _currentSpeed,
       );
     }
 
@@ -184,6 +220,7 @@ class LocationService {
             latitude: u.latitude,
             longitude: u.longitude,
             heading: u.heading,
+            speed: u.speed,
           ),
         );
         sub.cancel();
@@ -214,6 +251,7 @@ class LocationService {
             latitude: _currentLat,
             longitude: _currentLng,
             heading: _currentHeading,
+            speed: _currentSpeed,
             geohash: GeohashUtil.encode(_currentLat, _currentLng),
             timestamp: DateTime.now(),
           ),
@@ -230,6 +268,7 @@ class LocationService {
             latitude: _currentLat,
             longitude: _currentLng,
             heading: _currentHeading,
+            speed: _currentSpeed,
             geohash: GeohashUtil.encode(_currentLat, _currentLng),
             timestamp: DateTime.now(),
           ),
@@ -336,6 +375,7 @@ class LocationService {
   }
 
   void dispose() {
+    _channel.setMethodCallHandler(null);
     stopDriverLocationBroadcast();
     _locationStreamController.close();
   }

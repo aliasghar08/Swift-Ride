@@ -116,10 +116,22 @@ class RiderViewModel extends ChangeNotifier {
   Map<VehicleType, double> get vehicleFares => _vehicleFares;
   int get bookedSeats => _bookedSeats;
 
+  String _seatPreference = 'Any';
+  String get seatPreference => _seatPreference;
+
+  void setSeatPreference(String pref) {
+    if (_seatPreference != pref) {
+      _seatPreference = pref;
+      _deviceService.triggerHaptic('selection');
+      notifyListeners();
+    }
+  }
+
   void setBookedSeats(int count) {
     final clamped = count.clamp(1, _selectedVehicleType.seats);
     if (_bookedSeats != clamped) {
       _bookedSeats = clamped;
+      _recalculateRouteIfPossible();
       _deviceService.triggerHaptic('selection');
       notifyListeners();
     }
@@ -537,6 +549,7 @@ class RiderViewModel extends ChangeNotifier {
       durationMin: _estimatedDurationMin,
       vehicleType: _selectedVehicleType.id,
       bookedSeats: _bookedSeats,
+      seatPreference: _seatPreference,
       isAutoNegotiateEnabled: _autoNegotiate,
       maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare ?? ((fare * 1.2) / 10).round() * 10.0) : null,
       riderId: riderId,
@@ -550,7 +563,7 @@ class RiderViewModel extends ChangeNotifier {
     _notificationService.showNotification(
       id: 201,
       title: 'Searching Drivers',
-      body: 'Offer sent: PKR ${fare.toInt()} (0% Commission)',
+      body: 'Offer sent: PKR ${fare.toInt()} (2% Commission)',
     );
     return true;
   }

@@ -66,11 +66,23 @@ export const onRideCreated = onDocumentCreated(
       .map((d) => d.id);
 
     // 4. Send FCM notifications to matching drivers
+    const vehicleSeats: Record<string, number> = {
+      bike: 1,
+      rickshaw: 3,
+      car_economy: 4,
+      car_ac: 4,
+      comfort: 4,
+    };
+    const totalSeats = vehicleSeats[rideData.vehicleType] ?? 4;
+    const bookedSeats = rideData.bookedSeats ?? 1;
+
     await notifyDriversOfRide(
       topDriverIds,
       rideId,
       rideData.pickup.address,
-      rideData.offeredFare
+      rideData.offeredFare,
+      bookedSeats,
+      totalSeats
     );
 
     console.log(

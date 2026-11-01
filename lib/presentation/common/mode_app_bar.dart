@@ -97,7 +97,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Zero-commission Badge with pulsing glow
+            // 2% commission Badge with pulsing glow
             PulsingGlowWidget(
               glowColor: AppTheme.emeraldGreen,
               minSpread: 1.0,
@@ -112,7 +112,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 child: Text(
-                  '0% Fee (Year 1)',
+                  '2% Fee (Year 1)',
                   style: TextStyle(
                     color: AppTheme.emeraldGreen,
                     fontWeight: FontWeight.w700,

@@ -26,11 +26,11 @@ describe('SwiftRide Fare & Commission Business Logic', () => {
     expect(fare).toBe(330);
   });
 
-  it('verifies 0% commission rate during first year', () => {
-    expect(APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE).toBe(0.0);
+  it('verifies 2% commission rate during first year', () => {
+    expect(APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE).toBe(0.02);
     const fare = 500.0;
     const platformCommission = fare * APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE;
-    expect(platformCommission).toBe(0.0);
+    expect(platformCommission).toBe(10.0);
   });
 
   it('enforces cancellation fee tiers in PKR', () => {

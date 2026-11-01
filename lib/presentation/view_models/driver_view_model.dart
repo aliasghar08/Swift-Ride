@@ -287,7 +287,7 @@ class DriverViewModel extends ChangeNotifier {
       _notificationService.showNotification(
         id: 303,
         title: 'Trip Started',
-        body: 'Navigating to destination. Zero commission active.',
+        body: 'Navigating to destination. 2% commission active.',
       );
       _audioService.speak('PIN verified. Starting trip to destination.');
       notifyListeners();
@@ -322,7 +322,7 @@ class DriverViewModel extends ChangeNotifier {
       _notificationService.showNotification(
         id: 304,
         title: 'Trip Completed',
-        body: 'PKR ${fare.toStringAsFixed(0)} is due from the rider (0% commission).',
+        body: 'PKR ${fare.toStringAsFixed(0)} is due from the rider (2% commission).',
       );
       _audioService.playAlertTone('success');
       _audioService.speak(

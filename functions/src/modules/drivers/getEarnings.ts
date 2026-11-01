@@ -50,11 +50,13 @@ export const getEarnings = onCall(
       if (data.status === 'paid') paidOut += data.amount || 0;
     });
 
+    const commissionDeducted = Math.round(totalEarnings * 0.02 * 100) / 100;
+    const netEarnings = Math.round((totalEarnings - commissionDeducted) * 100) / 100;
     const availablePayoutBalance =
-      Math.round((totalEarnings - committedPayouts) * 100) / 100;
+      Math.round((netEarnings - committedPayouts) * 100) / 100;
 
-    // inDrive standard commission is ~13%, SwiftRide saves drivers 100% of this
-    const standardCommissionSaved = Math.round(totalEarnings * 0.13 * 100) / 100;
+    // Industry standard commission is ~13%, SwiftRide charges only 2% (saving drivers 11%)
+    const standardCommissionSaved = Math.round(totalEarnings * (0.13 - 0.02) * 100) / 100;
 
     return {
       success: true,
@@ -62,12 +64,12 @@ export const getEarnings = onCall(
       totalCompletedRides: snapshot.size,
       totalEarnings,
       todayEarnings,
-      commissionDeducted: 0.0, // 0 commission in Year 1!
+      commissionDeducted, // 2% commission
       standardCommissionSaved,
       availablePayoutBalance,
       committedPayouts: Math.round(committedPayouts * 100) / 100,
       paidOut: Math.round(paidOut * 100) / 100,
-      subscriptionStatus: 'TRIAL', // Free first year
+      subscriptionStatus: 'TRIAL', // Year 1 2% rate
     };
   }
 );

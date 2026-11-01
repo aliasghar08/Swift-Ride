@@ -149,7 +149,7 @@ class _SwiftRideAppState extends State<SwiftRideApp> {
 
         return MaterialApp(
           navigatorKey: _navigatorKey,
-          title: 'SwiftRide - Zero Commission Platform',
+          title: 'SwiftRide - 2% Commission Platform',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,

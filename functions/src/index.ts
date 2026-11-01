@@ -4,7 +4,7 @@
 // 1. Auth Module
 export { registerUser, verifyOtp, setUserRole, deleteUserAccount } from './modules/auth';
 
-// 2. Rides Module (Lifecycle & inDrive-style negotiation)
+// 2. Rides Module (Lifecycle & dynamic price negotiation)
 export {
   requestRide,
   submitOffer,
@@ -62,6 +62,7 @@ export {
   generateEarningsInsight,
   dailyEarningsInsightSchedule,
   safetyCheckIn,
+  swiftGuard,
   conversationalAssistant,
   predictVehicleMaintenance,
   weeklyMaintenanceSchedule,

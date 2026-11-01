@@ -16,7 +16,7 @@ export interface SafetyCheckInData {
 
 export async function processSafetyCheckIn(data: SafetyCheckInData) {
   const { rideId, flagType, durationSeconds = 180, deviationMeters = 350, currentSpeedKmh = 0 } = data;
-  logger.info({ rideId, flagType }, 'Executing AI safety check-in');
+  logger.info({ rideId, flagType }, 'Executing SwiftGuard safety check-in');
 
   const rideRef = db.collection(APP_CONSTANTS.COLLECTIONS.RIDES).doc(rideId);
   const rideDoc = await rideRef.get();
@@ -31,7 +31,7 @@ export async function processSafetyCheckIn(data: SafetyCheckInData) {
 
   // Build prompt for Gemini 3.8 Flash
   const prompt = `
-You are a safety assistant for a ride-hailing app. A ride has triggered a safety check.
+You are a safety assistant for a ride-hailing app. SwiftGuard Anomaly Detection has triggered a safety check.
 Generate a brief, non-alarming check-in message.
 
 Context:
@@ -62,7 +62,7 @@ Do NOT use markdown, quotes, or JSON formatting. Just output the clean message t
         checkInMessage = "We noticed an unexpected change in your route. Please confirm you're safe or let us know if you need help.";
         break;
       default:
-        checkInMessage = 'SwiftRide Safety Check: Everything looking good on your trip? Tap to let us know.';
+        checkInMessage = 'We noticed an unexpected route deviation or extended stop. Tap to verify you are safe or trigger emergency assistance.';
         break;
     }
   }
@@ -78,7 +78,7 @@ Do NOT use markdown, quotes, or JSON formatting. Just output the clean message t
   // Record in ai_insights collection for rider & driver history
   await db.collection(APP_CONSTANTS.COLLECTIONS.AI_INSIGHTS).add({
     userId: riderId,
-    type: 'SAFETY_CHECK',
+    type: 'SWIFT_GUARD_ANOMALY',
     content: checkInMessage,
     metadata: {
       rideId,
@@ -101,11 +101,11 @@ Do NOT use markdown, quotes, or JSON formatting. Just output the clean message t
         await messaging.send({
           token,
           notification: {
-            title: 'SwiftRide Safety Check',
-            body: checkInMessage,
+            title: 'SwiftGuard Safety Check-In',
+            body: checkInMessage || 'We noticed an unexpected route deviation or extended stop. Tap to verify you are safe or trigger emergency assistance.',
           },
           data: {
-            type: 'SAFETY_CHECK_ALERT',
+            type: 'SWIFT_GUARD_ANOMALY',
             rideId,
             flagType,
             message: checkInMessage,
@@ -153,3 +153,6 @@ export const safetyCheckIn = onCall(
     });
   }
 );
+
+export const swiftGuard = safetyCheckIn;
+export const processSwiftGuardCheckIn = processSafetyCheckIn;

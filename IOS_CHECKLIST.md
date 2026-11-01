@@ -33,7 +33,7 @@ Complete every item in this checklist before submitting **Swift Ride** (`com.dar
 - [x] **Camera:** `NSCameraUsageDescription` (Vehicle and verification document capture)
 - [x] **Photo Library:** `NSPhotoLibraryUsageDescription` & `NSPhotoLibraryAddUsageDescription` (Document upload and receipt saving)
 - [x] **Microphone & Speech:** `NSMicrophoneUsageDescription` & `NSSpeechRecognitionUsageDescription` (AI Assistant hands-free speech input)
-- [x] **Motion & Sensors:** `NSMotionUsageDescription` (RideCheck crash detection and hard brake sensing)
+- [x] **Motion & Sensors:** `NSMotionUsageDescription` (SwiftGuard crash detection and hard brake sensing)
 - [x] **Contacts:** `NSContactsUsageDescription` (Emergency contacts / Share My Trip)
 - [x] **Bluetooth:** `NSBluetoothAlwaysUsageDescription` (In-car peripheral connection)
 - [x] **Google Maps Platform:** `GMSApiKey` key defined in `Info.plist`

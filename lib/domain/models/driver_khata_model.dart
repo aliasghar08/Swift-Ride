@@ -17,10 +17,14 @@ class DriverDailyKhata {
     this.totalMaintenanceReserve = 0.0,
   });
 
-  /// Net take-home cash profit retained by the driver after live fuel & wear reserves.
-  /// Zero-fee platform guarantee (100% of cash profit retained).
+  /// 2% platform commission deduction.
+  double get platformCommission =>
+      ((totalGrossCashCollected * 0.02) * 10).round() / 10.0;
+
+  /// Net take-home cash profit retained by the driver after live fuel & wear reserves and 2% fee.
+  /// 98% cash profit retained.
   double get netCashProfit =>
-      totalGrossCashCollected - (totalFuelExpense + totalMaintenanceReserve);
+      totalGrossCashCollected - (totalFuelExpense + totalMaintenanceReserve + platformCommission);
 
   DriverDailyKhata copyWith({
     DateTime? date,

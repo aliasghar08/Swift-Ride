@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🚖 Swift Ride (Swft Ride)
-### Next-Generation Zero-Commission Ride-Hailing Platform with Gemini AI
+### Next-Generation Ultra-Low 2% Commission Ride-Hailing Platform with Gemini AI
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.47.5-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
 [![Firebase](https://img.shields.io/badge/Firebase-Gen_2-FFCA28?style=for-the-badge&logo=firebase&logoColor=black)](https://firebase.google.com)
@@ -23,7 +23,7 @@
 
 **Swift Ride** is an autonomous, full-stack, production-grade ride-hailing ecosystem built with **Flutter 3.x** and **Firebase Gen 2 (Cloud Functions, Firestore, Realtime Database)**, supercharged with an integrated **Gemini AI** layer (`gemini-3.8-flash`) via **Firebase AI Logic**.
 
-Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform cuts, SwiftRide offers **0% commission for riders and drivers in Year 1**. Drivers keep 100% of their negotiated fares, riders enjoy fair pricing, and both parties benefit from proactive AI-powered safety and earnings advisory intelligence.
+Unlike traditional high-commission transportation networks that deduct 15–30% platform cuts, Swift Ride operates on an ultra-low 2% platform fee model for riders and drivers in Year 1. Drivers keep 98% of their negotiated fares, riders enjoy fair pricing, and both parties benefit from proactive AI-powered safety and earnings advisory intelligence.
 
 ---
 
@@ -56,10 +56,10 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
                               ┌─────────────────────────────────┐
                               │      Cloud Functions Gen 2      │
                               │         (TypeScript 5.6)        │
-                              │  • inDrive Bidding Engine       │
+                              │  • Dynamic Bidding Engine       │
                               │  • Geohash Spatial Driver Match │
                               │  • Stripe Connect Express       │
-                              │  • RideCheck Telemetry Monitor  │
+                              │  • SwiftGuard Telemetry Monitor │
                               └────────────────┬────────────────┘
                                                │
                                                ▼
@@ -78,21 +78,21 @@ Unlike legacy ride-hailing incumbents (Uber, Lyft) that charge 15–30% platform
 
 ## 💎 Core Differentiators & Features
 
-### 1. 0% Commission & Fair Price Negotiation
-- **Zero Platform Cut**: In Year 1, drivers keep 100% of trip fares.
-- **inDrive Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+Rs 50`, `+Rs 100`, or custom offers.
+### 1. Ultra-Low 2% Commission & Fair Price Negotiation
+- **Driver-First 98% Retained**: In Year 1, drivers keep 98% of trip fares (only 2% platform fee).
+- **Dynamic Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+Rs 50`, `+Rs 100`, or custom offers.
 - **Suggested Fare Formula**: `Base (PKR 150) + (PKR 45/km) + (PKR 5/min)`.
 
 ### 2. Built-in Gemini AI Layer (`gemini-3.8-flash`)
 - **Daily Earnings Advisor**: Automated 6:00 AM analysis of the driver's past 7 days, local demand hotspots, weather, and events with 3 actionable tips (cached 24h in Firestore).
-- **Proactive Safety Check-In**: Instant calm, natural-language check-in message dispatched to both parties whenever RideCheck flags anomalies (extended stop, route deviation).
+- **Proactive Safety Check-In**: Instant calm, natural-language check-in message dispatched to both parties whenever SwiftGuard flags anomalies (extended stop, route deviation).
 - **In-App Conversational Assistant**: Streaming role-aware chatbot (Rider vs Driver) with intent routing for `track_ride`, `show_earnings`, and `trigger_sos`.
 - **Predictive Fleet Maintenance**: Weekly Monday vehicle wear analysis forecasting brake, tire, and oil service urgency (`LOW`, `MEDIUM`, `HIGH`).
 - **Cost-Controlled & Secure**: Strict token budgets (`256` chat / `512` insights) with low thinking level and Firebase Remote Config emergency kill-switches.
 
 ### 3. Comprehensive Passenger & Driver Safety
 - **4-Digit PIN Verification**: Eliminates wrong-car entries; drivers cannot start trips without passenger PIN verification.
-- **RideCheck Anomaly Detection**: Monitors speed, route deviation, and stationary duration in real time.
+- **SwiftGuard Anomaly Detection**: Monitors speed, route deviation, and stationary duration in real time.
 - **Share My Trip**: Web tracking URLs (`/track?token=...`) allowing family to track active rides without installing the app.
 - **One-Tap Emergency SOS**: Triggers native siren vibrations, emergency SMS dispatches, and emergency contact broadcasts.
 

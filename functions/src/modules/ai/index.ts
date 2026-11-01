@@ -7,6 +7,8 @@ export {
 export {
   safetyCheckIn,
   processSafetyCheckIn,
+  swiftGuard,
+  processSwiftGuardCheckIn,
 } from './safetyCheckIn';
 
 export {

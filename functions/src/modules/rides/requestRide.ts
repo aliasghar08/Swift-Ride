@@ -44,7 +44,7 @@ export const requestRide = onCall(
       bookedSeats: data.bookedSeats,
       isAutoNegotiateEnabled: data.isAutoNegotiateEnabled,
       maxAutoAcceptFare: data.maxAutoAcceptFare ?? null,
-      commissionAmount: 0.0, // 0 commission in year 1
+      commissionAmount: Math.round(data.offeredFare * APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE * 10) / 10, // 2% commission
       paymentIntentId: null,
       paymentStatus: 'pending',
       safetyFlags: [],

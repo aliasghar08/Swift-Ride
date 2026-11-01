@@ -263,9 +263,9 @@ In App Store Connect under **App Review Information**, provide the following not
   - Phone: `+1 555-010-0002`
   - SMS OTP: `123456`
 - **Notes for Reviewer:**
-  > "SwiftRide is a zero-commission ride-hailing app. During Year 1, 100% of the negotiated fare goes directly to the driver with zero platform cut. 
+  > "SwiftRide is an ultra-low 2% commission ride-hailing app. During Year 1, 98% of the negotiated fare goes directly to the driver with only a 2% platform fee. 
   > 
   > To test the flow:
   > 1. Sign in with Rider credentials to view nearby simulated drivers and request a trip.
   > 2. Use the in-app AI assistant (tap 'Ask AI') to ask questions regarding safety, earnings, or trip tracking.
-  > 3. The emergency RideCheck and SOS features simulate haptic and contact alerts without dispatching actual emergency services in test mode."
+  > 3. The emergency SwiftGuard and SOS features simulate haptic and contact alerts without dispatching actual emergency services in test mode."

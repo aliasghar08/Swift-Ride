@@ -83,7 +83,7 @@ class _StaggeredEntryWidgetState extends State<StaggeredEntryWidget>
   }
 }
 
-/// An ambient pulsing glow widget for active elements (e.g. SOS beacons, live drivers, 0% commission badge).
+/// An ambient pulsing glow widget for active elements (e.g. SOS beacons, live drivers, 2% commission badge).
 class PulsingGlowWidget extends StatefulWidget {
   final Widget child;
   final Color glowColor;

@@ -28,16 +28,27 @@ export async function notifyDriversOfRide(
   driverIds: string[],
   rideId: string,
   pickupAddress: string,
-  offeredFare: number
+  offeredFare: number,
+  bookedSeats: number = 1,
+  totalSeats: number = 4
 ): Promise<void> {
+  const emptySeats = Math.max(0, totalSeats - bookedSeats);
+  // Do not notify if there are no empty seats left
+  if (emptySeats <= 0) {
+    return;
+  }
+
   for (const driverId of driverIds) {
     await sendNotificationToUser(driverId, {
       title: 'New SwiftRide Request Nearby!',
-      body: `Fare offer: $${offeredFare.toFixed(2)} - Pickup: ${pickupAddress}`,
+      body: `Fare offer: $${offeredFare.toFixed(2)} - Pickup: ${pickupAddress} (${emptySeats} seat${emptySeats === 1 ? '' : 's'} available)`,
       data: {
         type: 'RIDE_REQUEST',
         rideId,
         offeredFare: offeredFare.toString(),
+        bookedSeats: bookedSeats.toString(),
+        totalSeats: totalSeats.toString(),
+        emptySeats: emptySeats.toString(),
       },
     });
   }

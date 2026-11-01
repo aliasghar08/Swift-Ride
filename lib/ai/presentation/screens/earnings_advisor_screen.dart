@@ -58,7 +58,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Zero Commission Banner
+                // Top 2% Commission Banner
                 StaggeredEntryWidget(
                   index: 0,
                   child: GlassContainer(
@@ -98,7 +98,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Year 1 Zero Commission Active',
+                                'Year 1 Low Commission (2%) Active',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
@@ -107,7 +107,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'You keep 100% of all gross passenger fares (${CurrencyFormatter.format(driverProv.driver.totalEarnings)} earned).',
+                                'You keep 98% of all gross passenger fares (${CurrencyFormatter.format(driverProv.driver.totalEarnings)} earned).',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: isDark ? Colors.white70 : Colors.black87,

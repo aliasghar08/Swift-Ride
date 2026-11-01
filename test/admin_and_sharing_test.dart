@@ -13,7 +13,7 @@ void main() {
         'unresolvedSafetyEvents': 1,
         'grossBookingVolume': 250000.0,
         'zeroCommissionDriverSavings': 32500.0,
-        'commissionRate': 0.0,
+        'commissionRate': 0.02,
       });
 
       // These are real platform aggregates. The dashboard previously derived its

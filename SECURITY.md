@@ -33,7 +33,7 @@ SwiftRide implements defense-in-depth across the Flutter mobile applications and
 
 ### 2.3 Trip Verification & Safety
 - **4-Digit Safety PIN**: A secure, randomly generated 4-digit PIN is generated upon ride booking. Drivers cannot transition a ride to `IN_PROGRESS` without verifying the PIN.
-- **RideCheck Anomaly Detection**: Cloud Function monitors active ride telemetry (long stops, route deviation, crash detection) and triggers instant check-ins.
+- **SwiftGuard Anomaly Detection**: Cloud Function monitors active ride telemetry (long stops, route deviation, crash detection) and triggers instant check-ins.
 - **Location Ephemerality**: High-frequency driver GPS locations in Realtime Database are scoped to active trips and purged upon completion.
 
 ### 2.4 Financial & Payment Security

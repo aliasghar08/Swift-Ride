@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../services/native_map_service.dart';
 
-/// Renders Uber-style map glyphs to PNG bytes at runtime and caches the
+/// Renders custom clean map glyphs to PNG bytes at runtime and caches the
 /// resulting [BitmapDescriptor]s.
 ///
 /// These are drawn with `dart:ui` rather than shipped as assets so they stay
@@ -88,7 +88,7 @@ class MapMarkerIcons {
 
   // ---------------------------------------------------------------- glyphs
 
-  /// Pickup: solid green disc with a white ring, like Uber's boarding point.
+  /// Pickup: solid green disc with a white ring for the boarding point.
   static void _drawPickup(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     canvas.drawCircle(c, 10.5, Paint()..color = _Glyph.shadowSoft);

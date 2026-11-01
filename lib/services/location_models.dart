@@ -24,6 +24,7 @@ class LocationUpdate {
   final double latitude;
   final double longitude;
   final double heading;
+  final double speed;
   final String geohash;
   final DateTime timestamp;
 
@@ -31,6 +32,7 @@ class LocationUpdate {
     required this.latitude,
     required this.longitude,
     required this.heading,
+    this.speed = 0.0,
     required this.geohash,
     required this.timestamp,
   });

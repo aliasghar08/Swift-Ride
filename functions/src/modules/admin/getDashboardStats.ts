@@ -27,8 +27,8 @@ export const getDashboardStats = onCall(
       }
     });
 
-    // Zero-commission year 1 savings calculation
-    const zeroCommissionDriverSavings = Math.round(grossBookingVolume * 0.13 * 100) / 100;
+    // Low-commission 2% year 1 savings calculation (vs 13% incumbent)
+    const zeroCommissionDriverSavings = Math.round(grossBookingVolume * (0.13 - 0.02) * 100) / 100;
 
     return {
       success: true,
@@ -39,7 +39,7 @@ export const getDashboardStats = onCall(
       unresolvedSafetyEvents: safetySnap.size,
       grossBookingVolume: Math.round(grossBookingVolume * 100) / 100,
       zeroCommissionDriverSavings,
-      commissionRate: 0.0, // Free first year
+      commissionRate: 0.02, // 2% commission
     };
   }
 );

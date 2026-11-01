@@ -30,7 +30,7 @@ class AiChatProvider extends ChangeNotifier {
         'How can I maximize earnings today?',
         'Where are current high-demand zones?',
         'Show my vehicle maintenance status',
-        'Explain Year 1 zero-commission policy',
+        'Explain Year 1 2% commission policy',
       ];
     }
     return [

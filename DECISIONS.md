@@ -11,7 +11,7 @@ This document records the architectural decisions, trade-offs, and operational a
   - `users`: User profiles, roles, ratings, multi-device FCM tokens.
   - `drivers`: Vehicle specifications, verification status, subscription records, Stripe Connect metadata.
   - `rides`: Lifecycle states (`REQUESTED`, `ACCEPTED`, `DRIVER_ARRIVED`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`), negotiated fares, 4-digit verification PINs, safety flags.
-  - `ride_offers`: Driver counter-offers for inDrive-style negotiation.
+  - `ride_offers`: Driver counter-offers for dynamic price negotiation.
   - `payments`: Transaction records, Stripe PaymentIntent IDs, fee breakdowns.
   - `safety_events`: SOS alerts, prolonged unexpected stops, route deviations, crash alerts.
   - `shared_trips`: Ephemeral 24-hour public sharing tokens.
@@ -26,12 +26,12 @@ This document records the architectural decisions, trade-offs, and operational a
 
 ---
 
-## 2. Business Model & Zero Commission Structure
+## 2. Business Model & Ultra-Low 2% Commission Structure
 
 ### Decision
-- **Year 1 (Launch Phase)**: Free for riders and drivers. **0.0% platform commission** is charged on rides.
-- **Year 2+ (Sustainability Phase)**: Flat driver subscription model ($1.00/day, $15.00/month, or $150.00/year for unlimited rides at zero commission).
-- **Target Market**: Regional cities where major incumbents (Uber, Lyft, inDrive) charge 13–25% commission.
+- **Year 1 (Launch Phase)**: Free for riders and ultra-low for drivers. **2.0% platform commission** is charged on rides (drivers retain 98%).
+- **Year 2+ (Sustainability Phase)**: Flat driver subscription model ($1.00/day, $15.00/month, or $150.00/year for unlimited rides at low commission).
+- **Target Market**: Regional cities where major incumbents charge 13–25% commission.
 - **Cancellation Policy**:
   - Prior to driver acceptance: **$0.00** (Free cancellation).
   - After acceptance, prior to driver arrival: **$2.00 fee**.
@@ -40,7 +40,7 @@ This document records the architectural decisions, trade-offs, and operational a
 
 ---
 
-## 3. inDrive-Style Fair Price Negotiation (Bidding Model)
+## 3. Dynamic Fair Price Negotiation (Bidding Model)
 
 ### Decision
 - Riders propose an initial offer fare based on an algorithmic suggestion:
@@ -81,7 +81,7 @@ This document records the architectural decisions, trade-offs, and operational a
 ### Rationale & Trade-offs
 - **Free Tier Eligibility**: The Gemini Developer API provider runs seamlessly on the Firebase Spark (free) plan without requiring a credit card or mandatory billing account, enabling zero-cost development and testing for the first ~5,000 monthly calls.
 - **Cost Efficiency at Scale**: Input tokens cost $0.75 / 1M and output tokens cost $3.75 / 1M (through Dec 31, 2026), making AI assistance economically viable even at 100,000+ monthly rides.
-- **Latency**: `gemini-3.8-flash` delivers sub-second response times for in-app conversational assistant turns and real-time RideCheck safety messages.
+- **Latency**: `gemini-3.8-flash` delivers sub-second response times for in-app conversational assistant turns and real-time SwiftGuard safety messages.
 
 ---
 
@@ -203,7 +203,7 @@ This document records the architectural decisions, trade-offs, and operational a
   - `AuthService`: Phone Authentication with SMS OTP verification (`verifyPhoneNumber`, `signInWithCredential`), supporting test phone numbers (`+923000000000`) for instant CI/CD validation.
   - `FirestoreUserService`: User profiles, role management (Rider, Driver, Admin), ratings, and push tokens.
   - `FirestoreDriverService`: Driver profiles, vehicle specs, real-time online status broadcasts, and geohash location updates.
-  - `FirestoreRideService`: Full inDrive-style bidding lifecycle (`REQUESTED` -> `OFFERED` -> `ACCEPTED` -> `DRIVER_ARRIVED` -> `IN_PROGRESS` -> `COMPLETED`), with 4-digit PIN verification and atomic transaction protection.
+  - `FirestoreRideService`: Full dynamic bidding lifecycle (`REQUESTED` -> `OFFERED` -> `ACCEPTED` -> `DRIVER_ARRIVED` -> `IN_PROGRESS` -> `COMPLETED`), with 4-digit PIN verification and atomic transaction protection.
   - `FirestoreSafetyService`: Safety event logging (SOS, route deviations, crash alerts) and ephemeral trip sharing.
 
 ---
@@ -223,7 +223,7 @@ This document records the architectural decisions, trade-offs, and operational a
 
 ### Rationale
 - Fixes previous geographical discrepancies (12,000 km distance between San Francisco coordinates and Islamabad Airport text).
-- Provides a consistent, realistic demonstration of regional zero-commission ride-hailing in a thriving metropolitan market.
+- Provides a consistent, realistic demonstration of regional 2% commission ride-hailing in a thriving metropolitan market.
 
 
 

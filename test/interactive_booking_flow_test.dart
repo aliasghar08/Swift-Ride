@@ -5,7 +5,7 @@ import 'package:swiftride/presentation/rider/address_search_screen.dart';
 import 'package:swiftride/presentation/view_models/rider_view_model.dart';
 
 void main() {
-  group('Uber/Careem-Style UX Upgrade Tests', () {
+  group('Interactive Map Picker UX Tests', () {
     testWidgets('AddressSearchScreen returns ChooseOnMapSignal with chooseOnMap and isPickup flags', (tester) async {
       dynamic returnedResult;
 

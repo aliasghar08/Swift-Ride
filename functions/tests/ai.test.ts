@@ -3,6 +3,7 @@ import { AI_CONFIG } from '../src/config/ai';
 import {
   generateEarningsInsight,
   safetyCheckIn,
+  swiftGuard,
   conversationalAssistant,
   predictVehicleMaintenance,
   routeOptimizer,
@@ -23,6 +24,7 @@ describe('SwiftRide AI Module & Gemini Configuration', () => {
     const callables = [
       generateEarningsInsight,
       safetyCheckIn,
+      swiftGuard,
       conversationalAssistant,
       predictVehicleMaintenance,
       routeOptimizer,
@@ -36,7 +38,7 @@ describe('SwiftRide AI Module & Gemini Configuration', () => {
     }
   });
 
-  it('evaluates safety check-in fallback heuristics for long stop and route deviation', () => {
+  it('evaluates SwiftGuard safety check-in fallback heuristics for long stop and route deviation', () => {
     // Verify appropriate messaging generation for safety flags
     const getFallbackMessage = (flagType: string) => {
       switch (flagType) {
@@ -46,7 +48,7 @@ describe('SwiftRide AI Module & Gemini Configuration', () => {
         case 'ROUTE_DEVIATION':
           return "We noticed an unexpected change in your route. Please confirm you're safe or let us know if you need help.";
         default:
-          return 'SwiftRide Safety Check: Everything looking good on your trip? Tap to let us know.';
+          return 'We noticed an unexpected route deviation or extended stop. Tap to verify you are safe or trigger emergency assistance.';
       }
     };
 
@@ -55,6 +57,9 @@ describe('SwiftRide AI Module & Gemini Configuration', () => {
 
     const devMsg = getFallbackMessage('ROUTE_DEVIATION');
     expect(devMsg).toContain('unexpected change in your route');
+
+    const defaultMsg = getFallbackMessage('UNKNOWN');
+    expect(defaultMsg).toContain('unexpected route deviation or extended stop');
   });
 
   it('correctly maps user messages to intent triggers for function calling', () => {

@@ -13,6 +13,7 @@ class LocationProvider extends ChangeNotifier {
   double _latitude = AppConstants.defaultLat;
   double _longitude = AppConstants.defaultLng;
   double _heading = 0.0;
+  double _speed = 0.0;
   bool _isBroadcasting = false;
   bool _hasRealFix = false;
 
@@ -30,6 +31,7 @@ class LocationProvider extends ChangeNotifier {
       _latitude = update.latitude;
       _longitude = update.longitude;
       _heading = update.heading;
+      _speed = update.speed;
       final wasFirst = !_hasRealFix;
       _hasRealFix = true;
       notifyListeners();
@@ -49,6 +51,7 @@ class LocationProvider extends ChangeNotifier {
   double get latitude => _latitude;
   double get longitude => _longitude;
   double get heading => _heading;
+  double get speed => _speed;
   bool get isBroadcasting => _isBroadcasting;
   bool get hasRealFix => _hasRealFix;
 

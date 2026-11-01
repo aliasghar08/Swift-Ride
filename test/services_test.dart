@@ -82,12 +82,12 @@ void main() {
       expect(offer.driverName, 'Your driver');
     });
 
-    test('DriverService credits 100% earnings with \$0 commission', () {
+    test('DriverService credits 98% earnings with 2% commission', () {
       final initialEarnings = testDriver.totalEarnings;
       final tripFare = 24.50;
 
       final updated = driverService.creditTripEarnings(testDriver, tripFare);
-      expect(updated.totalEarnings, initialEarnings + tripFare);
+      expect(updated.totalEarnings, initialEarnings + 24.01);
       expect(updated.totalRides, testDriver.totalRides + 1);
     });
 
@@ -127,7 +127,7 @@ void main() {
       expect(dist, lessThan(3.0));
 
       final savings = DistanceCalculator.calculateZeroCommissionSavings(100.0);
-      expect(savings, 13.0); // $13 saved on $100 fare vs 13% incumbent commission
+      expect(savings, 11.0); // PKR 11 saved on PKR 100 fare (13% - 2%)
     });
 
     test('IdGenerator generates unique IDs and 4-digit PINs', () {

@@ -76,8 +76,8 @@ class RealMapView extends StatefulWidget {
 }
 
 class _RealMapViewState extends State<RealMapView> {
-  /// Uber-style clean map: muted land, white roads, no POI clutter.
-  static const String _uberLightStyle = '''[
+  /// Clean map style: muted land, white roads, no POI clutter.
+  static const String _cleanLightStyle = '''[
   {"elementType":"geometry","stylers":[{"color":"#f5f5f5"}]},
   {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
   {"elementType":"labels.text.fill","stylers":[{"color":"#616161"}]},
@@ -92,8 +92,8 @@ class _RealMapViewState extends State<RealMapView> {
   {"featureType":"water","elementType":"geometry","stylers":[{"color":"#c9d6e3"}]}
 ]''';
 
-  /// Uber-style night map.
-  static const String _uberDarkStyle = '''[
+  /// Night map style.
+  static const String _cleanDarkStyle = '''[
   {"elementType":"geometry","stylers":[{"color":"#1d2330"}]},
   {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
   {"elementType":"labels.text.fill","stylers":[{"color":"#8a93a6"}]},
@@ -294,7 +294,7 @@ class _RealMapViewState extends State<RealMapView> {
               initialZoom: widget.initialZoom,
               darkMode: isDark,
               showTraffic: widget.showTraffic,
-              mapStyle: isDark ? _uberDarkStyle : _uberLightStyle,
+              mapStyle: isDark ? _cleanDarkStyle : _cleanLightStyle,
               markers: widget.markers,
               polylines: widget.polylines,
               onMapTap: widget.onMapTap,

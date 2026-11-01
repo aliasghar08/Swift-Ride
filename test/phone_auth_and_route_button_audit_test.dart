@@ -367,7 +367,7 @@ void main() {
       expect(find.text('PKR 1850'), findsOneWidget);
       expect(find.text('29.4 km'), findsOneWidget);
       expect(find.text('32 min'), findsOneWidget);
-      expect(find.text('0% Fee'), findsOneWidget);
+      expect(find.text('2% Fee'), findsOneWidget);
     });
   });
 }

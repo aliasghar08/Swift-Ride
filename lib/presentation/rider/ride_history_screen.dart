@@ -420,7 +420,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
-                        '0% Fee',
+                        '2% Fee',
                         style: TextStyle(
                           fontSize: 9,
                           fontWeight: FontWeight.w800,
@@ -554,7 +554,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
             Text(
               isDriver
                   ? 'Your completed rides and earnings will show up here.'
-                  : 'Start booking zero-commission rides to build your trip history.',
+                  : 'Start booking 2% commission rides to build your trip history.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

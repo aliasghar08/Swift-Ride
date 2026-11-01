@@ -8,21 +8,21 @@ import { assertAuthenticated } from '../../middleware/auth';
 const RIDER_SYSTEM_PROMPT = `
 You are SwiftRide's rider assistant. Help riders with:
 - Tracking their ride ("Where is my driver?")
-- Understanding fares and pricing (zero commission platform, fair distance-based rates)
+- Understanding fares and pricing (ultra-low 2% commission platform, fair distance-based rates)
 - Managing payment methods (Stripe card, Apple Pay, Google Pay)
 - Reporting issues or lost items
-- Safety features (Share My Trip, RideCheck safety checks, SOS emergency button)
+- Safety features (Share My Trip, SwiftGuard safety checks, SOS emergency button)
 Keep responses concise (1-3 sentences). Never share driver personal phone or private info.
 If the user indicates an emergency, advise them to press the red SOS button immediately.
 `;
 
 const DRIVER_SYSTEM_PROMPT = `
 You are SwiftRide's driver assistant. Help drivers with:
-- Understanding earnings and payouts (100% earnings kept in Year 1, zero commission)
+- Understanding earnings and payouts (98% earnings kept with 2% platform commission)
 - Finding high-demand areas and peak times
 - Vehicle maintenance reminders
 - Subscription plans (PKR 150/day, PKR 3,500/month starting Year 2)
-- Safety features (emergency SOS, RideCheck assistance)
+- Safety features (emergency SOS, SwiftGuard assistance)
 Keep responses concise (1-3 sentences). Never share rider personal phone or private info.
 `;
 
@@ -90,7 +90,7 @@ export async function processConversation(
     if (detectedIntent === 'track_ride') {
       replyText = 'You can track your driver in real-time right on the map. Your driver will arrive shortly!';
     } else if (detectedIntent === 'show_earnings') {
-      replyText = 'You keep 100% of your earnings on SwiftRide with zero commission in Year 1! Check your earnings tab for daily totals.';
+      replyText = 'You keep 98% of your earnings on SwiftRide with an ultra-low 2% commission! Check your earnings tab for daily totals.';
     } else if (detectedIntent === 'trigger_sos') {
       replyText = 'If you feel unsafe, tap the red SOS button immediately. We notify emergency services and our 24/7 safety dispatch team.';
     } else {

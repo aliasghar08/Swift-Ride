@@ -177,7 +177,7 @@ class DriverKhataSheet extends StatelessWidget {
                           const Icon(Icons.check_circle_rounded, color: Colors.white, size: 14),
                           const SizedBox(width: 6),
                           Text(
-                            "SwiftRide Fee: PKR 0 (100% Cash Retained)",
+                            "SwiftRide Fee: 2% (98% Cash Retained)",
                             style: TextStyle(
                               fontSize: layout.fontSize(11),
                               fontWeight: FontWeight.bold,

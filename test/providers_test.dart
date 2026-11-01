@@ -41,7 +41,7 @@ void main() {
       expect(driver.driverProfile.totalEarnings, 0);
 
       driver.creditTripEarnings(30.0);
-      expect(driver.totalEarnings, 30.0);
+      expect(driver.totalEarnings, 29.4); // 98% retained after 2% commission
 
       driver.dispose();
     });

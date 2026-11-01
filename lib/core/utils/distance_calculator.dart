@@ -47,9 +47,9 @@ class DistanceCalculator {
     return ((rawFare / 10).round() * 10).toDouble();
   }
 
-  /// Computes money saved by driver due to SwiftRide 0% commission vs 13% incumbent commission.
+  /// Computes money saved by driver due to SwiftRide 2% commission vs 13% incumbent commission (11% savings).
   static double calculateZeroCommissionSavings(double totalFares) {
-    final savings = totalFares * AppConstants.standardIndustryCommission;
+    final savings = totalFares * (AppConstants.standardIndustryCommission - AppConstants.commissionRateYear1);
     return (savings * 100).round() / 100.0;
   }
 }

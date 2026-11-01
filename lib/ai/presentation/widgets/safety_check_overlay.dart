@@ -88,7 +88,7 @@ class SafetyCheckOverlay extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  'RideCheck AI',
+                  'SwiftGuard Anomaly Monitor',
                   style: TextStyle(
                     fontSize: 11,
                     fontStyle: FontStyle.italic,

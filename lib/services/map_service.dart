@@ -405,6 +405,7 @@ class MapService {
   }
 
   Future<String> reverseGeocode(double lat, double lng) async {
+    // 1. Firebase Functions (only if returning genuine place name, not generic placeholder)
     if (Firebase.apps.isNotEmpty) {
       if (FirebaseAuth.instance.currentUser == null) {
         try {
@@ -422,19 +423,68 @@ class MapService {
             });
         final address = (res.data['address'] as String?) ??
             (res.data['formattedAddress'] as String?);
-        if (address != null && address.trim().isNotEmpty) return address;
+        if (address != null &&
+            address.trim().isNotEmpty &&
+            !address.startsWith('Pinned Spot') &&
+            !address.startsWith('Location (')) {
+          return address;
+        }
       } catch (e) {
         debugPrint('[MapService] reverseGeocode failed: $e');
       }
     }
 
-    // 2. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder)
+    // 2. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
     try {
       final nativeAddr = await NativeMapService.instance.reverseGeocode(lat, lng);
-      if (nativeAddr != null && nativeAddr.trim().isNotEmpty) {
+      if (nativeAddr != null &&
+          nativeAddr.trim().isNotEmpty &&
+          !nativeAddr.startsWith('Location (')) {
         return nativeAddr;
       }
     } catch (_) {}
+
+    // 3. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
+      );
+      final req = await client.getUrl(url);
+      req.headers.set('User-Agent', 'SwiftRideApp/1.0 (RideHailing)');
+      final resp = await req.close();
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final addr = data['address'] as Map<String, dynamic>?;
+        if (addr != null) {
+          final houseNumber = (addr['house_number'] ?? addr['house_name'] ?? '') as String;
+          final road = (addr['road'] ?? addr['street'] ?? addr['pedestrian'] ?? '') as String;
+          final neighbourhood = (addr['neighbourhood'] ?? addr['suburb'] ?? addr['residential'] ?? '') as String;
+          final city = (addr['city'] ?? addr['town'] ?? addr['village'] ?? '') as String;
+
+          final parts = <String>[];
+          if (houseNumber.isNotEmpty) {
+            parts.add(houseNumber.toLowerCase().startsWith('plot') ? houseNumber : 'Plot $houseNumber');
+          }
+          if (road.isNotEmpty) parts.add(road);
+          if (neighbourhood.isNotEmpty) parts.add(neighbourhood);
+          if (city.isNotEmpty && !parts.contains(city)) parts.add(city);
+
+          if (parts.isNotEmpty) {
+            return parts.join(', ');
+          }
+        }
+        final displayName = data['display_name'] as String?;
+        if (displayName != null && displayName.isNotEmpty) {
+          final segments = displayName.split(',').map((s) => s.trim()).take(3).join(', ');
+          if (segments.isNotEmpty) return segments;
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Nominatim reverseGeocode fallback error: $e');
+    }
 
     return 'Location (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
   }

@@ -101,7 +101,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Zero Commission Platform Monitoring • Regional Fleet Operations',
+                      '2% Low Commission Platform Monitoring • Regional Fleet Operations',
                       style: TextStyle(fontSize: layout.fontSize(11), color: Colors.grey.shade600),
                     ),
                     const SizedBox(height: 8),
@@ -119,7 +119,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              'Year 1: 0% Platform Commission',
+                              'Year 1: 2% Platform Commission',
                               style: TextStyle(
                                 color: AppTheme.emeraldGreen,
                                 fontWeight: FontWeight.w700,
@@ -191,7 +191,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                         _buildKpiCard(
                           layout: layout,
-                          title: 'Driver Savings (100%)',
+                          title: 'Driver Savings (98% Retained)',
                           value: CurrencyFormatter.format(kpis.driverCommissionSavings),
                           subtitle: 'Saved vs 13% commission',
                           icon: Icons.savings,

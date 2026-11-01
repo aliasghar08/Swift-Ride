@@ -403,6 +403,15 @@ class NativeMapController {
         if (zoom != null) args['zoom'] = zoom;
         final res = await _channel.invokeMethod<bool>('animateCamera', args);
         return res ?? false;
+      } else if (update is CameraPosition) {
+        final res = await _channel.invokeMethod<bool>('animateCamera', {
+          'latitude': update.target.latitude,
+          'longitude': update.target.longitude,
+          'zoom': update.zoom,
+          'tilt': update.tilt,
+          'bearing': update.bearing,
+        });
+        return res ?? false;
       } else if (update is CameraUpdate) {
         final params = update.toJson();
         final type = params['type'] as String?;
@@ -415,6 +424,17 @@ class NativeMapController {
           if (params['zoom'] != null) args['zoom'] = params['zoom'];
           final res = await _channel.invokeMethod<bool>('animateCamera', args);
           return res ?? false;
+        } else if (type == 'newCameraPosition') {
+          final target = params['target'] as Map<String, dynamic>;
+          final args = <String, dynamic>{
+            'latitude': target['latitude'],
+            'longitude': target['longitude'],
+            if (params['zoom'] != null) 'zoom': params['zoom'],
+            if (params['tilt'] != null) 'tilt': params['tilt'],
+            if (params['bearing'] != null) 'bearing': params['bearing'],
+          };
+          final res = await _channel.invokeMethod<bool>('animateCamera', args);
+          return res ?? false;
         } else if (type == 'newLatLngBounds') {
           final sw = params['southwest'] as Map<String, dynamic>;
           final ne = params['northeast'] as Map<String, dynamic>;
@@ -424,7 +444,12 @@ class NativeMapController {
           final res = await _channel.invokeMethod<bool>('animateCamera', {
             'latitude': centerLat,
             'longitude': centerLng,
-            'zoom': 13.5,
+            'zoom': 14.5,
+          });
+          return res ?? false;
+        } else if (type == 'zoomTo') {
+          final res = await _channel.invokeMethod<bool>('animateCamera', {
+            'zoom': params['zoom'],
           });
           return res ?? false;
         }
@@ -434,6 +459,21 @@ class NativeMapController {
       debugPrint('[NativeMapController] animateCamera failed: $e');
       return false;
     }
+  }
+
+  /// 3D navigation perspective follow camera.
+  Future<bool> followNavigation({
+    required LatLng target,
+    required double bearing,
+    double zoom = 17.5,
+    double tilt = 48.0,
+  }) {
+    return animateCamera(CameraPosition(
+      target: target,
+      zoom: zoom,
+      bearing: bearing,
+      tilt: tilt,
+    ));
   }
 
   Future<void> moveCamera(dynamic update) => animateCamera(update);

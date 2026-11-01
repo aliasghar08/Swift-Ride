@@ -3,6 +3,7 @@ import 'native_platform_map.dart';
 import 'real_map_view.dart';
 
 export '../../services/native_map_service.dart';
+export 'live_navigation_hud.dart';
 export 'native_platform_map.dart';
 export 'real_map_view.dart';
 

@@ -186,7 +186,7 @@ void main() {
     });
   });
 
-  group('TripEconomics Calculations (Fuel, Maintenance, 0% Comm, Profit)', () {
+  group('TripEconomics Calculations (Fuel, Maintenance, 2% Comm, Profit)', () {
     test('predicts Car fuel mileage using Google Maps route telemetry and traffic', () {
       // 1. Heavy traffic / crawl (e.g. 5 km in 30 mins = 10 km/h)
       final heavyTrafficMileage = VehicleType.car.predictMileage(
@@ -221,8 +221,8 @@ void main() {
       expect(bikeEcon.fuelCost, equals(285.0));
       // Maintenance: 30 * 1.5 = 45.0
       expect(bikeEcon.maintenanceCost, equals(45.0));
-      // Driver net profit: 350 - (285 + 45 + 0) = 20.0
-      expect(bikeEcon.driverNetProfit, equals(20.0));
+      // Driver net profit: 350 - (285 + 45 + 7.0 [2% fee]) = 13.0
+      expect(bikeEcon.driverNetProfit, equals(13.0));
 
       // Rikshaw: 22 km / 22 km/L = 1.0 Liters consumed
       final rikshawEcon = TripEconomics.calculate(
@@ -235,7 +235,8 @@ void main() {
       expect(rikshawEcon.fuelCost, equals(285.0));
       // Maintenance: 22 * 2.5 = 55.0
       expect(rikshawEcon.maintenanceCost, equals(55.0));
-      expect(rikshawEcon.driverNetProfit, equals(110.0));
+      // Driver net profit: 450 - (285 + 55 + 9.0 [2% fee]) = 101.0
+      expect(rikshawEcon.driverNetProfit, equals(101.0));
     });
 
     test('calculates correct economics for Car with Google Maps calibration', () {

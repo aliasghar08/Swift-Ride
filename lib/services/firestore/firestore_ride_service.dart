@@ -70,6 +70,7 @@ class FirestoreRideService {
         'durationMin': ride.durationMin,
         'vehicleType': ride.vehicleType,
         'bookedSeats': ride.bookedSeats,
+        'seatPreference': ride.seatPreference,
         'commissionAmount': ride.commissionAmount,
         'paymentIntentId': ride.paymentIntentId,
         'paymentStatus': ride.paymentStatus,
@@ -461,7 +462,9 @@ class FirestoreRideService {
   Stream<List<RideModel>> streamAvailableRides() {
     final fs = _firestore;
     if (fs == null) {
-      final list = _memoryRides.values.where((r) => r.status == RideStatus.requested).toList();
+      final list = _memoryRides.values
+          .where((r) => r.status == RideStatus.requested && r.hasEmptySeats)
+          .toList();
       return Stream.value(list);
     }
 
@@ -475,6 +478,7 @@ class FirestoreRideService {
       return querySnap.docs
           .map((doc) => _parseRide(doc.data(), doc.id))
           .whereType<RideModel>()
+          .where((r) => r.hasEmptySeats)
           .toList();
     });
   }
@@ -614,7 +618,7 @@ class FirestoreRideService {
     }
   }
 
-  /// Completes trip, settling fare in PKR with 0% commission.
+  /// Completes trip, settling fare in PKR with 2% commission.
   ///
   /// Deliberately does NOT mark the ride as paid. Settlement is owned by the
   /// payment flow (payment intent + webhook confirmation); marking a trip paid

@@ -129,6 +129,7 @@ class RideProvider extends ChangeNotifier {
     required double durationMin,
     String vehicleType = 'car',
     int bookedSeats = 1,
+    String? seatPreference,
     bool isAutoNegotiateEnabled = false,
     double? maxAutoAcceptFare,
     String? riderId,
@@ -165,6 +166,7 @@ class RideProvider extends ChangeNotifier {
         'durationMin': durationMin,
         'vehicleType': vehicleType,
         'bookedSeats': bookedSeats,
+        'seatPreference': ?seatPreference,
         'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
         'maxAutoAcceptFare': maxAutoAcceptFare,
       });
@@ -191,6 +193,7 @@ class RideProvider extends ChangeNotifier {
         durationMin: durationMin,
         vehicleType: vehicleType,
         bookedSeats: bookedSeats,
+        seatPreference: seatPreference,
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,
         riderId: effectiveRiderId,
@@ -213,6 +216,7 @@ class RideProvider extends ChangeNotifier {
         durationMin: durationMin,
         vehicleType: vehicleType,
         bookedSeats: bookedSeats,
+        seatPreference: seatPreference,
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,
         riderId: effectiveRiderId,
@@ -234,6 +238,7 @@ class RideProvider extends ChangeNotifier {
     required double durationMin,
     required String vehicleType,
     required int bookedSeats,
+    String? seatPreference,
     required bool isAutoNegotiateEnabled,
     double? maxAutoAcceptFare,
     required String riderId,
@@ -254,9 +259,10 @@ class RideProvider extends ChangeNotifier {
       durationMin: durationMin,
       vehicleType: vehicleType,
       bookedSeats: bookedSeats,
+      seatPreference: seatPreference,
       isAutoNegotiateEnabled: isAutoNegotiateEnabled,
       maxAutoAcceptFare: maxAutoAcceptFare,
-      commissionAmount: 0.0,
+      commissionAmount: ((offeredFare * 0.02) * 10).round() / 10.0,
       pin: pin,
       createdAt: DateTime.now(),
     );
@@ -444,7 +450,7 @@ class RideProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Driver submits an inDrive-style counter offer. Persisted server-side.
+  /// Driver submits a dynamic counter offer. Persisted server-side.
   void submitDriverCounterOffer({
     required String rideId,
     required DriverProfile driver,

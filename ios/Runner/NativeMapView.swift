@@ -64,6 +64,8 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
 
     mapView.delegate = self
     mapView.isBuildingsEnabled = true
+    let showTraffic = params?["showTraffic"] as? Bool ?? true
+    mapView.isTrafficEnabled = showTraffic
 
     if let styleJson = params?["mapStyle"] as? String, !styleJson.isEmpty {
       do {
@@ -99,14 +101,19 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
     channel.invokeMethod("onCameraIdle", arguments: [
       "latitude": position.target.latitude,
       "longitude": position.target.longitude,
-      "zoom": position.zoom
+      "zoom": position.zoom,
+      "bearing": position.bearing,
+      "tilt": position.viewingAngle
     ])
   }
 
   func mapView(_ mapView: GMSMapView, didChange position: GMSCameraPosition) {
     channel.invokeMethod("onCameraMove", arguments: [
       "latitude": position.target.latitude,
-      "longitude": position.target.longitude
+      "longitude": position.target.longitude,
+      "zoom": position.zoom,
+      "bearing": position.bearing,
+      "tilt": position.viewingAngle
     ])
   }
 
@@ -123,13 +130,18 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
       let lng = args["longitude"] as? Double ?? initialLng
       let target = CLLocationCoordinate2D(latitude: lat, longitude: lng)
 
-      if let zoom = args["zoom"] as? Double {
-        let update = GMSCameraUpdate.setTarget(target, zoom: Float(zoom))
-        mapView.animate(with: update)
-      } else {
-        let update = GMSCameraUpdate.setTarget(target)
-        mapView.animate(with: update)
-      }
+      let currentZoom = mapView.camera.zoom
+      let zoom = Float(args["zoom"] as? Double ?? Double(currentZoom))
+      let bearing = args["bearing"] as? Double ?? Double(mapView.camera.bearing)
+      let tilt = args["tilt"] as? Double ?? Double(mapView.camera.viewingAngle)
+
+      let newCamera = GMSCameraPosition.camera(
+        withTarget: target,
+        zoom: zoom,
+        bearing: CLLocationDirection(bearing),
+        viewingAngle: tilt
+      )
+      mapView.animate(to: newCamera)
       result(true)
 
     case "setMarkers":

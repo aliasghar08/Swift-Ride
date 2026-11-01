@@ -11,7 +11,7 @@ import 'package:swiftride/ai/ai.dart';
 import 'package:swiftride/main.dart';
 
 void main() {
-  testWidgets('SwiftRide App loads with Rider Mode and Zero Commission branding', (WidgetTester tester) async {
+  testWidgets('SwiftRide App loads with Rider Mode and 2% Commission branding', (WidgetTester tester) async {
     // Set a realistic mobile screen size for testing
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.0;
@@ -84,16 +84,16 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Verify brand title and 0% fee badge
+    // Verify brand title and 2% fee badge
     expect(find.text('SwiftRide'), findsWidgets);
-    expect(find.text('0% Fee (Year 1)'), findsOneWidget);
+    expect(find.text('2% Fee (Year 1)'), findsOneWidget);
 
     // Verify Rider view is loaded initially
     expect(find.text('Rider'), findsWidgets);
     expect(find.text('Where to? (Destination)'), findsOneWidget);
     // Fare preview is only visible when destination is selected
     expect(find.text('Your Offer (Rider sets the price):'), findsNothing);
-    expect(find.text('Find Nearby Drivers (0% Commission)'), findsNothing);
+    expect(find.text('Find Nearby Drivers (2% Commission)'), findsNothing);
 
     // Switch to Driver Mode
     await tester.tap(find.text('Driver'));
@@ -101,7 +101,7 @@ void main() {
 
     // Verify Driver view
     expect(find.text('Driver Dashboard'), findsOneWidget);
-    expect(find.text('Year 1: PKR 0 Fee'), findsOneWidget);
+    expect(find.text('Year 1: 2% Fee'), findsOneWidget);
 
     // Switch to Admin Mode
     await tester.tap(find.text('Admin'));

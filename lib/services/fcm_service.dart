@@ -109,7 +109,32 @@ class FcmService {
   ///
   /// Neither platform surfaces notification payloads on its own in this state.
   Future<void> _showForeground(RemoteMessage message) async {
-    final isSos = message.data['type'] == 'SOS';
+    final type = message.data['type'];
+    final isSos = type == 'SOS';
+
+    // A rider/driver should only receive notifications for new/available rides
+    // if there are empty seats remaining.
+    if (type == 'RIDE_REQUEST' || type == 'AVAILABLE_RIDE' || type == 'NEW_RIDE') {
+      final emptySeatsVal = message.data['emptySeats'];
+      final bookedSeatsVal = message.data['bookedSeats'];
+      final totalSeatsVal = message.data['totalSeats'];
+
+      if (emptySeatsVal != null) {
+        final emptySeats = int.tryParse(emptySeatsVal.toString());
+        if (emptySeats != null && emptySeats <= 0) {
+          debugPrint('[FcmService] Suppressing notification for ride with 0 empty seats.');
+          return;
+        }
+      }
+      if (bookedSeatsVal != null && totalSeatsVal != null) {
+        final booked = int.tryParse(bookedSeatsVal.toString()) ?? 0;
+        final total = int.tryParse(totalSeatsVal.toString()) ?? 4;
+        if (booked >= total) {
+          debugPrint('[FcmService] Suppressing notification for fully booked ride ($booked/$total).');
+          return;
+        }
+      }
+    }
 
     await _notifications.showNotification(
       id: message.messageId?.hashCode ?? DateTime.now().millisecondsSinceEpoch.remainder(1 << 31),

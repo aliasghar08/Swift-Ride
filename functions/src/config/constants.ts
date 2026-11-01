@@ -4,7 +4,7 @@ export const APP_CONSTANTS = {
   FARE_BASE: 150.00,
   FARE_PER_KM: 45.00,
   FARE_PER_MIN: 5.00,
-  COMMISSION_RATE_YEAR_ONE: 0.0, // Free 0% commission for first year
+  COMMISSION_RATE_YEAR_ONE: 0.02, // Ultra-low 2% commission
   COMMISSION_RATE_YEAR_TWO: 0.13,
 
   // Cancellation fees (PKR)

@@ -1,5 +1,6 @@
 import 'ride_status.dart';
 import 'location_point_model.dart';
+import 'vehicle_type.dart';
 
 /// Live position of the driver assigned to a ride, mirrored onto the ride
 /// document by the `updateDriverLocation` Cloud Function.
@@ -67,7 +68,7 @@ class RideModel {
   final double suggestedFare;
   final double distanceKm;
   final double durationMin;
-  final double commissionAmount; // $0 in year 1
+  final double commissionAmount; // 2% in year 1
   final String? paymentIntentId;
   final String paymentStatus;
 
@@ -82,10 +83,15 @@ class RideModel {
   final DriverTelemetry? driverLocation;
   final String vehicleType;
   final int bookedSeats;
+  final String? seatPreference;
   final double? maxAutoAcceptFare;
   final bool isAutoNegotiateEnabled;
   final double? cashReceived;
   final double? changeDue;
+
+  int get totalSeats => VehicleTypeX.fromString(vehicleType).seats;
+  int get emptySeats => (totalSeats - bookedSeats).clamp(0, totalSeats);
+  bool get hasEmptySeats => emptySeats > 0 || bookedSeats < totalSeats;
 
   const RideModel({
     required this.id,
@@ -111,6 +117,7 @@ class RideModel {
     this.driverLocation,
     this.vehicleType = 'car',
     this.bookedSeats = 1,
+    this.seatPreference,
     this.maxAutoAcceptFare,
     this.isAutoNegotiateEnabled = false,
     this.cashReceived,
@@ -141,6 +148,7 @@ class RideModel {
     DriverTelemetry? driverLocation,
     String? vehicleType,
     int? bookedSeats,
+    String? seatPreference,
     double? maxAutoAcceptFare,
     bool? isAutoNegotiateEnabled,
     double? cashReceived,
@@ -170,6 +178,7 @@ class RideModel {
       driverLocation: driverLocation ?? this.driverLocation,
       vehicleType: vehicleType ?? this.vehicleType,
       bookedSeats: bookedSeats ?? this.bookedSeats,
+      seatPreference: seatPreference ?? this.seatPreference,
       maxAutoAcceptFare: maxAutoAcceptFare ?? this.maxAutoAcceptFare,
       isAutoNegotiateEnabled: isAutoNegotiateEnabled ?? this.isAutoNegotiateEnabled,
       cashReceived: cashReceived ?? this.cashReceived,
@@ -200,6 +209,7 @@ class RideModel {
         'completedAt': completedAt?.toIso8601String(),
         'vehicleType': vehicleType,
         'bookedSeats': bookedSeats,
+        if (seatPreference != null) 'seatPreference': seatPreference,
         if (maxAutoAcceptFare != null) 'maxAutoAcceptFare': maxAutoAcceptFare,
         'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
         if (cashReceived != null) 'cashReceived': cashReceived,
@@ -257,6 +267,7 @@ class RideModel {
       ),
       vehicleType: map['vehicleType'] ?? 'car',
       bookedSeats: (map['bookedSeats'] as num?)?.toInt() ?? 1,
+      seatPreference: map['seatPreference'] as String?,
       maxAutoAcceptFare: (map['maxAutoAcceptFare'] as num?)?.toDouble(),
       isAutoNegotiateEnabled: map['isAutoNegotiateEnabled'] == true,
       cashReceived: (map['cashReceived'] as num?)?.toDouble(),

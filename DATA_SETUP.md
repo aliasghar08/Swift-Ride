@@ -1,6 +1,6 @@
 # SwiftRide Firebase Authentication & Firestore Data Setup Guide
 
-This document outlines the complete production setup for **Firebase Authentication (Phone OTP)**, **Cloud Firestore Data Models**, **Security Rules**, and **Composite Indexes** for the SwiftRide zero-commission ride-hailing platform.
+This document outlines the complete production setup for **Firebase Authentication (Phone OTP)**, **Cloud Firestore Data Models**, **Security Rules**, and **Composite Indexes** for the SwiftRide ultra-low 2% commission ride-hailing platform.
 
 ---
 
@@ -116,7 +116,7 @@ interface DriverDocument {
   payoutStatus: "pending" | "ready_for_payout" | "paid_out";
   rating: number;               // e.g. 4.95
   totalRides: number;
-  totalEarnings: number;        // total PKR earned (100% driver kept)
+  totalEarnings: number;        // total PKR earned (98% driver kept after 2% fee)
   currentLocation: {
     geopoint: GeoPoint;
     geohash: string;            // 5-character geohash for radius querying
@@ -147,7 +147,7 @@ interface RideDocument {
   suggestedFare: number;        // Benchmark fare in PKR
   distanceKm: number;           // Road distance in km
   durationMin: number;          // Estimated duration in minutes
-  commissionAmount: number;     // PKR 0.00 (Zero commission in Year 1)
+  commissionAmount: number;     // PKR (2% commission in Year 1)
   paymentIntentId: string | null;
   paymentStatus: "pending" | "paid" | "failed";
   safetyFlags: string[];
@@ -262,7 +262,7 @@ Composite indexes are defined in `firestore.indexes.json` to support high-throug
    - Fields: `driverId` ASC, `createdAt` DESC
    - Query: Driver earnings history and active dispatch.
 
-4. **`ride_offers` — Rider InDrive Bidding Cockpit**
+4. **`ride_offers` — Rider Dynamic Bidding Cockpit**
    - Fields: `rideId` ASC, `status` ASC, `counterFare` ASC
    - Query: Real-time driver counter-offers sorted by lowest fare.
 

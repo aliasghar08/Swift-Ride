@@ -55,6 +55,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   bool _userCustomPickup = false;
   VoidCallback? _locProvListener;
   LocationProvider? _attachedLocProv;
+  Timer? _gpsFallbackTimer;
 
   // Choose on Map & Camera Pinning State
   bool _isPinningOnMap = false;
@@ -72,6 +73,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   bool _userMovedMap = false;
   String? _lastRouteId;
+  bool _is3DNavigationMode = false;
+  bool _showTraffic = true;
 
   void _fitSelectedRoute() {
     final sel = _viewModel.selectedRoute;
@@ -107,27 +110,69 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       );
       _attachedLocProv = locProv;
 
-      final fix = await locProv.waitForFirstFix(
-        timeout: const Duration(seconds: 4),
-      );
-      if (!mounted) return;
+      // If we already have a genuine GPS fix, initialize immediately!
+      if (locProv.hasRealFix) {
+        _viewModel.initializeFromCoordinates(locProv.latitude, locProv.longitude);
+        if (_mapController != null && !_userMovedMap) {
+          _mapController!.animateCamera(
+            CameraUpdate.newLatLngZoom(
+              LatLng(locProv.latitude, locProv.longitude),
+              15.5,
+            ),
+          );
+        }
+        if (mounted) setState(() => _waitingForGps = false);
+      } else {
+        // Never reverse-geocode default placeholder coordinates. Show waiting banner.
+        if (mounted) setState(() => _waitingForGps = true);
+        _gpsFallbackTimer = Timer(const Duration(milliseconds: 4000), () {
+          if (mounted && _waitingForGps) {
+            setState(() => _waitingForGps = false);
+          }
+        });
+      }
 
-      final lat = fix?.latitude ?? locProv.latitude;
-      final lng = fix?.longitude ?? locProv.longitude;
-      _viewModel.initializeFromCoordinates(lat, lng);
-      setState(() => _waitingForGps = false);
+      // Await precise first fix in background without blocking initial UI
+      locProv.waitForFirstFix(timeout: const Duration(seconds: 10)).then((fix) {
+        if (!mounted) return;
+        if (fix != null && !_userCustomPickup) {
+          _viewModel.initializeFromCoordinates(fix.latitude, fix.longitude);
+          if (_mapController != null && !_userMovedMap) {
+            _mapController!.animateCamera(
+              CameraUpdate.newLatLngZoom(
+                LatLng(fix.latitude, fix.longitude),
+                15.5,
+              ),
+            );
+          }
+        }
+        setState(() => _waitingForGps = false);
+      }).catchError((_) {
+        if (mounted) setState(() => _waitingForGps = false);
+      });
 
       _locProvListener = () {
         if (!mounted || _userCustomPickup) return;
         if (locProv.hasRealFix) {
           final cur = _viewModel.pickupLocation;
+          // Update pickup if unset or if user position changed significantly (> 20 meters)
           if (cur == null ||
-              (cur.latitude - locProv.latitude).abs() > 0.0001 ||
-              (cur.longitude - locProv.longitude).abs() > 0.0001) {
+              (cur.latitude - locProv.latitude).abs() > 0.0002 ||
+              (cur.longitude - locProv.longitude).abs() > 0.0002) {
             _viewModel.initializeFromCoordinates(
               locProv.latitude,
               locProv.longitude,
             );
+            if (!_userMovedMap && _mapController != null && _viewModel.dropoffLocation == null) {
+              _mapController!.animateCamera(
+                CameraUpdate.newLatLng(
+                  LatLng(locProv.latitude, locProv.longitude),
+                ),
+              );
+            }
+            if (_waitingForGps) {
+              setState(() => _waitingForGps = false);
+            }
           }
         }
       };
@@ -222,7 +267,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     } else {
       if (_viewModel.pickupLocation == null) {
         final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
-        _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+        if (loc.hasRealFix) {
+          _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+        }
       }
       _userMovedMap = false;
       _lastRouteId = null;
@@ -299,7 +346,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
     if (!isPickup && _viewModel.pickupLocation == null) {
       final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
-      _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+      if (loc.hasRealFix) {
+        _viewModel.initializeFromCoordinates(loc.latitude, loc.longitude);
+      }
     }
     _viewModel.confirmPinLocation();
     _userMovedMap = false;
@@ -338,6 +387,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
   @override
   void dispose() {
+    _gpsFallbackTimer?.cancel();
     _cameraIdleDebounce?.cancel();
     if (_locProvListener != null && _attachedLocProv != null) {
       _attachedLocProv!.removeListener(_locProvListener!);
@@ -389,7 +439,25 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final ctrl = _mapController;
-          if (ctrl == null || currentRide != null) return;
+          if (ctrl == null) return;
+          if (currentRide != null) {
+            if (!_userMovedMap && _is3DNavigationMode) {
+              final lat = (driverTelemetry != null && !driverTelemetry.isStale)
+                  ? driverTelemetry.latitude
+                  : currentRide.pickup.latitude;
+              final lng = (driverTelemetry != null && !driverTelemetry.isStale)
+                  ? driverTelemetry.longitude
+                  : currentRide.pickup.longitude;
+              final heading = driverTelemetry?.heading ?? 0.0;
+              ctrl.followNavigation(
+                target: LatLng(lat, lng),
+                bearing: heading,
+                zoom: 17.5,
+                tilt: 48.0,
+              );
+            }
+            return;
+          }
           final sel = _viewModel.selectedRoute;
           if (sel != null && sel.polylinePoints.isNotEmpty) {
             final routeId =
@@ -515,66 +583,77 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               }),
             ],
           ] else if (currentRide != null) ...[
-            Polyline(
-              polylineId: const PolylineId('rider_active_route_casing'),
-              points: [
-                if (driverTelemetry != null && !driverTelemetry.isStale)
-                  LatLng(
-                    driverTelemetry.latitude,
-                    driverTelemetry.longitude,
-                  )
-                else
-                  LatLng(
-                    currentRide.pickup.latitude,
-                    currentRide.pickup.longitude,
-                  ),
-                LatLng(
-                  currentRide.pickup.latitude,
-                  currentRide.pickup.longitude,
+            ...() {
+              final activePoints = (_viewModel.selectedRoute?.polylinePoints.isNotEmpty == true)
+                  ? _viewModel.selectedRoute!.polylinePoints
+                  : [
+                      if (driverTelemetry != null && !driverTelemetry.isStale)
+                        LatLng(
+                          driverTelemetry.latitude,
+                          driverTelemetry.longitude,
+                        )
+                      else
+                        LatLng(
+                          currentRide.pickup.latitude,
+                          currentRide.pickup.longitude,
+                        ),
+                      LatLng(
+                        currentRide.pickup.latitude,
+                        currentRide.pickup.longitude,
+                      ),
+                      LatLng(
+                        currentRide.dropoff.latitude,
+                        currentRide.dropoff.longitude,
+                      ),
+                    ];
+              final intervals = _viewModel.selectedRoute?.trafficIntervals ??
+                  const <TrafficInterval>[];
+
+              return [
+                Polyline(
+                  polylineId: const PolylineId('rider_active_route_casing'),
+                  points: activePoints,
+                  color: AppTheme.darkNavy,
+                  width: casingWidth,
+                  jointType: JointType.round,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  geodesic: true,
+                  zIndex: 0,
                 ),
-                LatLng(
-                  currentRide.dropoff.latitude,
-                  currentRide.dropoff.longitude,
+                Polyline(
+                  polylineId: const PolylineId('rider_active_route_fill'),
+                  points: activePoints,
+                  color: AppTheme.accentCyan,
+                  width: fillWidth,
+                  jointType: JointType.round,
+                  startCap: Cap.roundCap,
+                  endCap: Cap.roundCap,
+                  geodesic: true,
+                  zIndex: 1,
                 ),
-              ],
-              color: AppTheme.darkNavy,
-              width: casingWidth,
-              jointType: JointType.round,
-              startCap: Cap.roundCap,
-              endCap: Cap.roundCap,
-              geodesic: true,
-              zIndex: 0,
-            ),
-            Polyline(
-              polylineId: const PolylineId('rider_active_route_fill'),
-              points: [
-                if (driverTelemetry != null && !driverTelemetry.isStale)
-                  LatLng(
-                    driverTelemetry.latitude,
-                    driverTelemetry.longitude,
-                  )
-                else
-                  LatLng(
-                    currentRide.pickup.latitude,
-                    currentRide.pickup.longitude,
-                  ),
-                LatLng(
-                  currentRide.pickup.latitude,
-                  currentRide.pickup.longitude,
-                ),
-                LatLng(
-                  currentRide.dropoff.latitude,
-                  currentRide.dropoff.longitude,
-                ),
-              ],
-              color: AppTheme.accentCyan,
-              width: fillWidth,
-              jointType: JointType.round,
-              startCap: Cap.roundCap,
-              endCap: Cap.roundCap,
-              geodesic: true,
-              zIndex: 1,
-            ),
+                if (_showTraffic && intervals.isNotEmpty)
+                  ...TrafficInterval.segment(
+                    activePoints,
+                    intervals,
+                  ).asMap().entries.map((entry) {
+                    final interval = entry.value.interval;
+                    return Polyline(
+                      polylineId: PolylineId(
+                        'rider_active_route_traffic_${entry.key}',
+                      ),
+                      points: entry.value.points,
+                      color: _trafficColour(interval),
+                      width: fillWidth,
+                      jointType: JointType.round,
+                      startCap: Cap.roundCap,
+                      endCap: Cap.roundCap,
+                      geodesic: true,
+                      zIndex: 2,
+                    );
+                  }),
+              ];
+            }(),
           ],
         };
 
@@ -608,9 +687,17 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             ? MapMode.liveTracking
                             : MapMode.viewOnly),
                   darkMode: true,
-                  showTraffic: true,
+                  showTraffic: _showTraffic,
                   onControllerCreated: (controller) {
                     _mapController = controller;
+                    if (locProv.hasRealFix && !_userMovedMap && _viewModel.pickupLocation == null) {
+                      controller.animateCamera(
+                        CameraUpdate.newLatLngZoom(
+                          LatLng(locProv.latitude, locProv.longitude),
+                          15.5,
+                        ),
+                      );
+                    }
                   },
                   onCameraMove: (target) {
                     _mapCenterLocation = target;
@@ -711,6 +798,115 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   polylines: polylines,
                 ),
               ),
+
+              // 1c. Live Navigation HUD for Rider
+              if (currentRide != null &&
+                  (currentRide.status == RideStatus.accepted ||
+                      currentRide.status == RideStatus.driverArrived ||
+                      currentRide.status == RideStatus.inProgress)) ...[
+                () {
+                  final activeRoute = _viewModel.selectedRoute;
+                  final isEnRouteToDropoff =
+                      currentRide.status == RideStatus.inProgress ||
+                          currentRide.status == RideStatus.driverArrived;
+                  final targetName = isEnRouteToDropoff
+                      ? currentRide.dropoff.address
+                      : currentRide.pickup.address;
+
+                  final driverSpeedKmh =
+                      (driverTelemetry != null && !driverTelemetry.isStale)
+                          ? (driverTelemetry.speed * 3.6).clamp(0.0, 160.0)
+                          : 0.0;
+
+                  return LiveNavigationHud(
+                    isDriver: false,
+                    activeRoute: activeRoute,
+                    currentVehicleLocation: LatLng(
+                      driverTelemetry != null && !driverTelemetry.isStale
+                          ? driverTelemetry.latitude
+                          : currentRide.pickup.latitude,
+                      driverTelemetry != null && !driverTelemetry.isStale
+                          ? driverTelemetry.longitude
+                          : currentRide.pickup.longitude,
+                    ),
+                    currentSpeedKmh: driverSpeedKmh,
+                    heading: driverTelemetry?.heading ?? 0.0,
+                    destinationAddress: targetName,
+                    remainingDistanceKm: activeRoute?.distanceKm ?? 2.5,
+                    remainingDurationMin: activeRoute?.durationMin ?? 6.0,
+                    isMapPanned: _userMovedMap,
+                    is3DMode: _is3DNavigationMode,
+                    isTrafficLayerActive: _showTraffic,
+                    onRecenter: () {
+                      setState(() => _userMovedMap = false);
+                      final lat = driverTelemetry != null &&
+                              !driverTelemetry.isStale
+                          ? driverTelemetry.latitude
+                          : currentRide.pickup.latitude;
+                      final lng = driverTelemetry != null &&
+                              !driverTelemetry.isStale
+                          ? driverTelemetry.longitude
+                          : currentRide.pickup.longitude;
+                      final heading = driverTelemetry?.heading ?? 0.0;
+
+                      if (_is3DNavigationMode) {
+                        _mapController?.followNavigation(
+                          target: LatLng(lat, lng),
+                          bearing: heading,
+                          zoom: 17.5,
+                          tilt: 48.0,
+                        );
+                      } else {
+                        _mapController?.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: LatLng(lat, lng),
+                              zoom: 16.5,
+                              bearing: 0.0,
+                              tilt: 0.0,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    onToggle3D: (is3D) {
+                      setState(() => _is3DNavigationMode = is3D);
+                      final lat = driverTelemetry != null &&
+                              !driverTelemetry.isStale
+                          ? driverTelemetry.latitude
+                          : currentRide.pickup.latitude;
+                      final lng = driverTelemetry != null &&
+                              !driverTelemetry.isStale
+                          ? driverTelemetry.longitude
+                          : currentRide.pickup.longitude;
+                      final heading = driverTelemetry?.heading ?? 0.0;
+
+                      if (_is3DNavigationMode) {
+                        _mapController?.followNavigation(
+                          target: LatLng(lat, lng),
+                          bearing: heading,
+                          zoom: 17.5,
+                          tilt: 48.0,
+                        );
+                      } else {
+                        _mapController?.animateCamera(
+                          CameraUpdate.newCameraPosition(
+                            CameraPosition(
+                              target: LatLng(lat, lng),
+                              zoom: 16.5,
+                              bearing: 0.0,
+                              tilt: 0.0,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    onToggleTraffic: (trafficActive) {
+                      setState(() => _showTraffic = trafficActive);
+                    },
+                  );
+                }(),
+              ],
 
               if (currentRide == null && !_isPinningOnMap && !_viewModel.isPinMode)
                 SafeArea(
@@ -918,17 +1114,37 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             context,
                           );
                       _userCustomPickup = false;
-                      _viewModel.initializeFromCoordinates(
-                        loc.latitude,
-                        loc.longitude,
-                      );
-                      if (_mapController != null) {
-                        _mapController!.animateCamera(
-                          CameraUpdate.newLatLngZoom(
-                            LatLng(loc.latitude, loc.longitude),
-                            15.5,
-                          ),
+                      if (loc.hasRealFix) {
+                        _viewModel.initializeFromCoordinates(
+                          loc.latitude,
+                          loc.longitude,
                         );
+                        if (_mapController != null) {
+                          _mapController!.animateCamera(
+                            CameraUpdate.newLatLngZoom(
+                              LatLng(loc.latitude, loc.longitude),
+                              15.5,
+                            ),
+                          );
+                        }
+                      } else {
+                        setState(() => _waitingForGps = true);
+                        loc.waitForFirstFix(timeout: const Duration(seconds: 5)).then((fix) {
+                          if (!mounted) return;
+                          setState(() => _waitingForGps = false);
+                          if (fix != null) {
+                            _viewModel.initializeFromCoordinates(
+                              fix.latitude,
+                              fix.longitude,
+                            );
+                            _mapController?.animateCamera(
+                              CameraUpdate.newLatLngZoom(
+                                LatLng(fix.latitude, fix.longitude),
+                                15.5,
+                              ),
+                            );
+                          }
+                        });
                       }
                     }
                   },
@@ -2096,7 +2312,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                       width: 20,
                                       child: CircularProgressIndicator(strokeWidth: 2),
                                     )
-                                  : const Text('Find Nearby Drivers (0% Commission)'),
+                                  : const Text('Find Nearby Drivers (2% Commission)'),
                             ),
                           ),
                         ),
@@ -2623,7 +2839,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                '0% Commission',
+                '2% Commission',
                 style: TextStyle(
                   fontSize: layout.fontSize(10.5),
                   fontWeight: FontWeight.w700,
@@ -2941,6 +3157,79 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     );
                   }),
                 ),
+              if (selectedType != VehicleType.bike) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.airline_seat_recline_normal_rounded,
+                      size: 16,
+                      color: AppTheme.primaryBlue,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Preferred Seat Position:',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11.5),
+                        fontWeight: FontWeight.w700,
+                        color: c.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    'Any Seat',
+                    'Front Passenger',
+                    'Window Seat',
+                    'Back Row',
+                  ].map((pref) {
+                    final isPrefSelected = _viewModel.seatPreference == pref;
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          _viewModel.setSeatPreference(pref);
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isPrefSelected
+                              ? AppTheme.accentCyan.withValues(alpha: 0.18)
+                              : c.surface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isPrefSelected
+                                ? AppTheme.accentCyan
+                                : c.border,
+                            width: isPrefSelected ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: Text(
+                          pref,
+                          style: TextStyle(
+                            fontSize: layout.fontSize(11),
+                            fontWeight: isPrefSelected
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: isPrefSelected
+                                ? AppTheme.accentCyan
+                                : c.textSecondary,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
             ],
           ),
         ),
@@ -3735,7 +4024,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           ],
         ),
         content: const Text(
-          'Please sign in with your phone number to request rides and connect with nearby 0% commission drivers.',
+          'Please sign in with your phone number to request rides and connect with nearby 2% commission drivers.',
           style: TextStyle(fontSize: 14),
         ),
         actions: [

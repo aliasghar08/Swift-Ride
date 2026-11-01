@@ -248,6 +248,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('UNEXPECTED STOP DETECTED'), findsOneWidget);
+      expect(find.text('SwiftGuard Anomaly Monitor'), findsOneWidget);
       expect(find.text('Vehicle stopped for 4 minutes. Need any assistance?'), findsOneWidget);
 
       await tester.tap(find.text("I'm OK"));
@@ -296,7 +297,7 @@ void main() {
       expect(find.byType(TextField), findsOneWidget);
     });
 
-    testWidgets('EarningsAdvisorScreen renders insight, zero commission banner and hotspots', (WidgetTester tester) async {
+    testWidgets('EarningsAdvisorScreen renders insight, 2% commission banner and hotspots', (WidgetTester tester) async {
       final driverProv = DriverProvider();
       final advisorProv = EarningsAdvisorProvider();
 
@@ -321,7 +322,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('AI Earnings Advisor'), findsOneWidget);
-      expect(find.text('Year 1 Zero Commission Active'), findsOneWidget);
+      expect(find.text('Year 1 Low Commission (2%) Active'), findsOneWidget);
       expect(find.text('Projected Surge Hotspots Today'), findsOneWidget);
       expect(find.text('Predictive Vehicle Health'), findsOneWidget);
     });

@@ -240,7 +240,7 @@ class PricingMLService {
     final roundedFare = ((predictedFarePkr / 5.0).round() * 5.0).toDouble();
     final fuelCost = ((predictedFuelLiters * validFuelPrice) * 10).round() / 10.0;
     final maintenanceCost = (predictedMaintPkr * 10).round() / 10.0;
-    const serviceFee = 0.0; // SwiftRide 0% Commission Guarantee
+    final serviceFee = ((roundedFare * 0.02) * 10).round() / 10.0; // SwiftRide 2% Commission
     final driverTotalExpenses = ((fuelCost + maintenanceCost + serviceFee) * 10).round() / 10.0;
     final driverNetProfit = math.max(0.0, ((roundedFare - driverTotalExpenses) * 10).round() / 10.0);
     final profitRate = validDur > 0 ? ((driverNetProfit / validDur) * 10).round() / 10.0 : 0.0;

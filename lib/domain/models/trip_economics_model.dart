@@ -16,7 +16,7 @@ class TripEconomics {
   final double fuelCost;
   final double maintenanceRatePerKm;
   final double maintenanceCost;
-  final double serviceCharges; // 0% Commission
+  final double serviceCharges; // 2% Commission
   final double driverTotalExpenses;
   final double driverNetProfit;
   final double profitPerMinute;
@@ -105,7 +105,7 @@ class TripEconomics {
     final liters = distanceKm > 0 && mileage > 0 ? (distanceKm / mileage) : 0.0;
     final fuel = (liters * effectiveFuelPrice * 10).round() / 10.0;
     final maint = (distanceKm * maintRate * 10).round() / 10.0;
-    const serviceFee = 0.0; // SwiftRide 0% Commission Guarantee
+    final serviceFee = (fare * 0.02 * 10).round() / 10.0; // SwiftRide 2% Commission
     final expenses = ((fuel + maint + serviceFee) * 10).round() / 10.0;
     final profit = (fare - expenses).clamp(0.0, 999999.0);
     final profitRate = effectiveDuration > 0

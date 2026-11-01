@@ -12,7 +12,7 @@ import '../view_models/responsive_layout_helper.dart';
 /// - Seating capacity and seat reservation (1 for bike, 2 for rikshaw, 4 for car)
 /// - Fuel consumption and fuel cost calculated with vehicle mileage & petrol rates
 /// - Wear-and-tear vehicle maintenance charges
-/// - 0% platform service charges
+/// - 2% platform service charges
 /// - Step-by-step transparent mathematical formulas and calculation breakdown
 /// - Net driver take-home profit & earning rate per minute
 class TripEconomicsSheet extends StatefulWidget {
@@ -172,7 +172,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
             ),
             const SizedBox(height: 14),
 
-            // Header: Vehicle Title & 0% Commission Badge
+            // Header: Vehicle Title & 2% Commission Badge
             Row(
               children: [
                 Container(
@@ -234,7 +234,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '0% Commission',
+                            '2% Commission',
                             style: TextStyle(
                               fontSize: layout.fontSize(11),
                               fontWeight: FontWeight.w800,
@@ -535,8 +535,8 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     icon: Icons.shield_rounded,
                     iconColor: AppTheme.emeraldGreen,
                     title: 'Platform Service Fee',
-                    subtitle: 'SwiftRide 0% commission direct direct-to-driver',
-                    trailing: 'PKR 0.00',
+                    subtitle: 'SwiftRide 2% commission (98% to driver)',
+                    trailing: '- PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                     trailingColor: AppTheme.emeraldGreen,
                   ),
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
@@ -649,8 +649,8 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                           _buildFormulaStep(
                             step: '4. Service Charges',
                             formula: 'Platform Commission Fee',
-                            calculation: 'SwiftRide 0% Driver Commission Guarantee',
-                            result: 'PKR 0.00',
+                            calculation: 'SwiftRide 2% Driver Commission',
+                            result: 'PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                             layout: layout,
                             c: c,
                           ),

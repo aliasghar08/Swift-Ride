@@ -96,6 +96,16 @@ void main() {
       expect(selectedResult, isNotNull);
       expect(selectedResult!.address, equals('__CHOOSE_ON_MAP__'));
     });
+
+    test('RiderViewModel initializeFromCoordinates sets pickup with real coordinates', () async {
+      final vm = RiderViewModel();
+      await vm.initializeFromCoordinates(33.6844, 73.0479);
+
+      expect(vm.pickupLocation, isNotNull);
+      expect(vm.pickupLocation!.latitude, equals(33.6844));
+      expect(vm.pickupLocation!.longitude, equals(73.0479));
+      expect(vm.hasPickupFromGps, isTrue);
+    });
   });
 
   group('OTP and Account Creation Tests', () {

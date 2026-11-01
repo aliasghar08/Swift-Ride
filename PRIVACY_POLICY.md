@@ -11,7 +11,7 @@
 
 ## 1. Introduction
 
-DartNexusLab ("we", "our", or "us") operates the **SwiftRide** mobile application[cite: 10]. SwiftRide is a zero-commission, peer-to-peer ride-hailing and smart bidding platform connecting passengers ("Riders") with independent drivers ("Drivers")[cite: 10].
+DartNexusLab ("we", "our", or "us") operates the **SwiftRide** mobile application[cite: 10]. SwiftRide is an ultra-low 2% commission, peer-to-peer ride-hailing and smart bidding platform connecting passengers ("Riders") with independent drivers ("Drivers")[cite: 10].
 
 This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application across Android and iOS platforms. By downloading, accessing, or using SwiftRide, you agree to the collection and use of information in accordance with this policy.
 

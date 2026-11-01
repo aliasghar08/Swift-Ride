@@ -100,7 +100,7 @@ Configure AI Logic quota rules to prevent individual users from draining quotas:
 |---|---|---|
 | **In-App Assistant Chat** | 20 messages / hour | Enforced by client counter & Cloud Function rate limiter |
 | **Earnings Advisor** | 10 calls / day | Enforced by 24-hour Firestore cache & rate limiter |
-| **Safety Check-in** | Unlimited | Safety critical, triggered only on RideCheck flags |
+| **Safety Check-in** | Unlimited | Safety critical, triggered only on SwiftGuard flags |
 | **Maintenance Predictor** | 1 run / week | Scheduled via Cloud Scheduler every Monday 8:00 AM |
 
 ### Cloud Function App Check Enforcement
@@ -145,7 +145,7 @@ Control AI behavior dynamically without redeploying mobile apps:
 |---|---|---|---|
 | `ai_features_enabled` | Boolean | `true` | Master kill switch for all AI assistant features |
 | `voice_assistant_enabled` | Boolean | `true` | Enables speech-to-text voice assistant button |
-| `safety_ai_enabled` | Boolean | `true` | Enables RideCheck automated safety messages |
+| `safety_ai_enabled` | Boolean | `true` | Enables SwiftGuard automated safety messages |
 | `earnings_advisor_enabled` | Boolean | `true` | Enables driver daily earnings recommendations |
 | `ai_max_tokens_chat` | Number | `256` | Maximum response length for in-app assistant |
 

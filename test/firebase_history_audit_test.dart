@@ -284,7 +284,7 @@ void main() {
       expect(find.textContaining('F-7 Jinnah Super'), findsOneWidget);
       expect(find.textContaining('Centaurus Mall'), findsOneWidget);
       expect(find.text('PKR 350'), findsOneWidget);
-      expect(find.text('0% Fee'), findsOneWidget);
+      expect(find.text('2% Fee'), findsOneWidget);
       expect(find.text('4.8 km'), findsOneWidget);
       expect(find.text('11 min'), findsOneWidget);
       expect(find.text('Completed'), findsNWidgets(2)); // Filter chip + status badge

@@ -29,10 +29,10 @@ void main() {
       expect(econ.maintenanceCost, greaterThan(0.0));
       expect(econ.totalFare, greaterThan(econ.fuelCost));
       expect(econ.driverNetProfit, greaterThan(0.0));
-      expect(econ.serviceCharges, equals(0.0)); // 0% commission
+      expect(econ.serviceCharges, equals((econ.totalFare * 0.02 * 10).round() / 10.0)); // 2% commission
 
       // Assert mathematical identity: Profit = Fare - Expenses
-      final expectedExpenses = ((econ.fuelCost + econ.maintenanceCost) * 10).round() / 10.0;
+      final expectedExpenses = ((econ.fuelCost + econ.maintenanceCost + econ.serviceCharges) * 10).round() / 10.0;
       expect(econ.driverTotalExpenses, closeTo(expectedExpenses, 0.1));
       expect(econ.driverNetProfit, closeTo(econ.totalFare - econ.driverTotalExpenses, 0.1));
     });

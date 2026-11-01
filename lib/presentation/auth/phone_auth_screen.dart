@@ -229,16 +229,35 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       onCodeSent: (vId, token) {
         if (!mounted) return;
         _autoVerifyTimer?.cancel();
+        if (fullPhone != '+923000000000') {
+          _otpController.clear();
+        }
         setState(() {
           _currentStep = AuthStep.otp;
         });
         _startResendTimer();
         ScaffoldMessenger.of(context).clearSnackBars();
+
+        final isDevTestNumber = !kReleaseMode && fullPhone == '+923000000000';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Verification code sent to $fullPhone. Enter 123456 or the SMS code.'),
+            content: Row(
+              children: [
+                const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isDevTestNumber
+                        ? '[Dev Test Mode] Verification code is 123456.'
+                        : '6-digit verification code sent via SMS to $fullPhone.',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
             backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -259,9 +278,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         setState(() {
           _currentStep = AuthStep.phone;
         });
+        String friendlyError = err;
+        if (err.contains('invalid-phone-number')) {
+          friendlyError = 'Invalid phone number format. Please enter a valid number (e.g. 0300 1234567).';
+        } else if (err.contains('too-many-requests')) {
+          friendlyError = 'Too many requests. Please wait a minute before requesting a new code.';
+        } else if (err.contains('quota-exceeded')) {
+          friendlyError = 'Daily SMS verification quota reached. Please try again tomorrow or contact support.';
+        } else if (err.contains('network-request-failed')) {
+          friendlyError = 'Network connection problem. Please check your internet connection.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(err),
+            content: Text(friendlyError),
             backgroundColor: AppTheme.sunsetCoral,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 7),
@@ -279,12 +308,14 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   }
 
   Future<void> _handleVerifyOtp() async {
-    final code = _otpController.text.trim();
+    final rawCode = _otpController.text;
+    final code = rawCode.replaceAll(RegExp(r'\D'), '').trim();
     if (code.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter the 6-digit OTP code'),
+          content: Text('Please enter the complete 6-digit OTP code received via SMS'),
           backgroundColor: AppTheme.sunsetCoral,
+          behavior: SnackBarBehavior.floating,
         ),
       );
       return;
@@ -311,8 +342,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         }
       },
       onError: (err) {
+        String friendlyError = err;
+        if (err.contains('invalid-verification-code')) {
+          friendlyError = 'Incorrect 6-digit code. Please verify the code in your SMS and try again.';
+        } else if (err.contains('session-expired')) {
+          friendlyError = 'The verification code has expired. Please tap "Resend Code" to receive a fresh SMS.';
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(err), backgroundColor: AppTheme.sunsetCoral),
+          SnackBar(
+            content: Text(friendlyError),
+            backgroundColor: AppTheme.sunsetCoral,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       },
     );
@@ -875,40 +916,85 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Flexible(
-              child: TextButton.icon(
-                onPressed: () {
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _currentStep = AuthStep.phone;
+                });
+              },
+              icon: const Icon(Icons.edit, size: 14),
+              label: const Text('Edit Phone', style: TextStyle(fontSize: 12.5)),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                final data = await Clipboard.getData(Clipboard.kTextPlain);
+                final text = data?.text ?? '';
+                final digits = text.replaceAll(RegExp(r'\D'), '');
+                if (digits.length >= 6) {
+                  final code = digits.substring(0, 6);
                   setState(() {
-                    _currentStep = AuthStep.phone;
+                    _otpController.text = code;
                   });
-                },
-                icon: const Icon(Icons.edit, size: 14),
-                label: const Text('Edit Phone', style: TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis),
-              ),
-            ),
-            Flexible(
-              child: _canResend
-                  ? TextButton(
-                      onPressed: _handleSendOtp,
-                      child: const Text(
-                        'Resend Code',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  : Text(
-                      'Resend Code in 00:${_secondsRemaining.toString().padLeft(2, '0')}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.slateMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                  _handleVerifyOtp();
+                } else {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No 6-digit code found in clipboard'),
+                      duration: Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
                     ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.paste_rounded, size: 14),
+              label: const Text('Paste Code', style: TextStyle(fontSize: 12.5)),
             ),
+            _canResend
+                ? TextButton(
+                    onPressed: _handleSendOtp,
+                    child: const Text(
+                      'Resend Code',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                    ),
+                  )
+                : Text(
+                    'Resend Code in 00:${_secondsRemaining.toString().padLeft(2, '0')}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.slateMuted,
+                    ),
+                  ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF132035) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.accentCyan.withValues(alpha: 0.3),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.shield_outlined, size: 16, color: AppTheme.accentCyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Security Reminder: Never share your SwiftRide verification code with anyone.',
+                  style: TextStyle(
+                    fontSize: layout.fontSize(10.5),
+                    color: c.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         ElevatedButton(
           onPressed: auth.isLoading ? null : _handleVerifyOtp,
           style: ElevatedButton.styleFrom(

@@ -73,7 +73,7 @@ class AuthService {
   }) async {
     final auth = _auth;
     if (auth == null) {
-      debugPrint('[AuthService] Firebase unavailable: simulating OTP');
+      debugPrint('[AuthService] Firebase unavailable: simulating OTP for test environment');
       await Future.delayed(const Duration(milliseconds: 300));
       onCodeSent('mock_verification_id_${DateTime.now().millisecondsSinceEpoch}', 123456);
       return;
@@ -100,17 +100,17 @@ class AuthService {
           debugPrint('[AuthService] Phone verification failed: [${e.code}] ${e.message}');
           String message = '[${e.code}] ${e.message ?? 'Phone verification failed.'}';
           if (e.code == 'invalid-phone-number') {
-            message = '[${e.code}] The phone number format is invalid. Please use international format (e.g. +923001234567).';
+            message = 'The phone number format is invalid. Please use standard format (e.g. 0300 1234567 or +923001234567).';
           } else if (e.code == 'too-many-requests') {
-            message = '[${e.code}] Too many requests sent. Please wait a few moments before trying again.';
+            message = 'Too many requests sent. Please wait a minute before requesting a new code.';
           } else if (e.code == 'quota-exceeded') {
-            message = '[${e.code}] SMS quota exceeded for today.';
+            message = 'SMS quota temporarily exceeded. Please try again later.';
           } else if (e.code == 'app-not-authorized') {
-            message = '[${e.code}] App not authorized. Ensure SHA-1/SHA-256 fingerprints are registered in Firebase Console.';
+            message = 'App not authorized. Ensure SHA-1/SHA-256 fingerprints are registered in Firebase Console.';
           } else if (e.code == 'captcha-check-failed') {
-            message = '[${e.code}] reCAPTCHA verification failed. Please check network/Play Services and retry.';
+            message = 'reCAPTCHA verification failed. Please check network/Play Services and retry.';
           } else if (e.code == 'invalid-app-credential') {
-            message = '[${e.code}] Invalid app credential. Please register SHA-1 and SHA-256 fingerprints in Firebase Console.';
+            message = 'Invalid app credential. Please check Firebase configuration.';
           }
           onError(message);
         },
@@ -125,9 +125,9 @@ class AuthService {
       );
     } catch (e) {
       debugPrint('[AuthService] Caught verifyPhoneNumber exception: $e');
-      if (!kReleaseMode) {
-        debugPrint('[AuthService] Non-release fallback activated: providing test verification ID for local testing');
-        onCodeSent('sim_fallback_${DateTime.now().millisecondsSinceEpoch}', 123456);
+      if (!kReleaseMode && (phoneNumber == '+923000000000' || phoneNumber.startsWith('+92300000'))) {
+        debugPrint('[AuthService] Non-release fallback activated for test number: $phoneNumber');
+        onCodeSent('sim_fallback_${DateTime.now().millisecondsSinceEpoch}', null);
         return;
       }
       onError('Verification error: $e');

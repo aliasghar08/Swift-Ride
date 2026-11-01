@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/provider/custom_provider.dart';
@@ -141,6 +142,226 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     _locProv?.onLocationUpdate = null;
     _viewModel.dispose();
     super.dispose();
+  }
+
+  void _showDriverCustomFareSheet({
+    required BuildContext context,
+    required RideProvider rideProv,
+    required DriverProfile driver,
+    required String driverName,
+    required String rideId,
+    required double initialFare,
+  }) {
+    final controller = TextEditingController(text: initialFare.round().toString());
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        final c = AppColors.of(ctx);
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final parsedFare = double.tryParse(controller.text) ?? initialFare;
+            final commission = (parsedFare * 0.02).round();
+            final netEarnings = (parsedFare * 0.98).round();
+
+            void adjust(double delta) {
+              final cur = double.tryParse(controller.text) ?? initialFare;
+              final next = math.max(50.0, cur + delta).round();
+              controller.text = next.toString();
+              setModalState(() {});
+            }
+
+            return Container(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+                top: 20,
+                left: 20,
+                right: 20,
+              ),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                border: Border.all(color: c.border),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Your Custom Counter-Offer',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : AppTheme.primaryNavy,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'You have full control over your fare. Type any amount or decrease/increase using quick buttons.',
+                    style: TextStyle(fontSize: 13, color: c.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Container(
+                        height: 52,
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: c.surfaceRaised,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'PKR',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.primaryNavy,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: controller,
+                          autofocus: true,
+                          keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : AppTheme.primaryNavy,
+                          ),
+                          onChanged: (_) => setModalState(() {}),
+                          decoration: InputDecoration(
+                            hintText: 'Enter fare',
+                            filled: true,
+                            fillColor: c.surfaceRaised,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () => adjust(-100),
+                        child: const Text('-100'),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton(
+                        onPressed: () => adjust(-50),
+                        child: const Text('-50'),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton(
+                        onPressed: () => adjust(50),
+                        child: const Text('+50'),
+                      ),
+                      const SizedBox(width: 6),
+                      OutlinedButton(
+                        onPressed: () => adjust(100),
+                        child: const Text('+100'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: c.surfaceRaised,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '2% Platform Fee',
+                              style: TextStyle(fontSize: 12, color: c.textSecondary),
+                            ),
+                            Text(
+                              'PKR $commission',
+                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              'Your Net Take-Home (98%)',
+                              style: TextStyle(fontSize: 12, color: AppTheme.emeraldGreen),
+                            ),
+                            Text(
+                              'PKR $netEarnings',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.emeraldGreen,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentCyan,
+                        foregroundColor: AppTheme.primaryNavy,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () {
+                        final val = double.tryParse(controller.text);
+                        if (val != null && val >= 50) {
+                          Navigator.of(ctx).pop();
+                          _viewModel.submitCounterOffer(
+                            rideProv: rideProv,
+                            driver: driver,
+                            driverName: driverName,
+                            rideId: rideId,
+                            fare: val,
+                          );
+                        }
+                      },
+                      child: Text(
+                        'Send Counter-Offer (PKR ${(double.tryParse(controller.text) ?? initialFare).round()})',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   @override
@@ -1158,12 +1379,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
+                            SizedBox(
+                              height: layout.touchTarget(44),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.orange.shade400,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  minimumSize: Size.zero,
+                                ),
+                                onPressed: () => _viewModel.submitCounterOffer(
+                                  rideProv: rideProv,
+                                  driver: driver,
+                                  driverName: authProv.currentUser.fullName,
+                                  rideId: request.id,
+                                  fare: math.max(50.0, request.offeredFare - 50.0),
+                                ),
+                                child: const Text(
+                                  '-50',
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             Expanded(
                               child: SizedBox(
                                 height: layout.touchTarget(44),
                                 child: OutlinedButton(
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
                                   ),
                                   onPressed: () => _viewModel.submitCounterOffer(
                                     rideProv: rideProv,
@@ -1174,12 +1418,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   ),
                                   child: Text(
                                     'Match ${CurrencyFormatter.format(request.offeredFare)}',
-                                    style: const TextStyle(fontSize: 11),
+                                    style: const TextStyle(fontSize: 10.5),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             // Match AI Recommended Fare Button
                             Expanded(
                               child: SizedBox(
@@ -1202,22 +1446,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     fare: aiFare,
                                   ),
                                   child: Text(
-                                    'Match AI (${CurrencyFormatter.format(aiFare)})',
+                                    'AI (${CurrencyFormatter.format(aiFare)})',
                                     style: const TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 10.5,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             SizedBox(
                               height: layout.touchTarget(44),
                               child: OutlinedButton(
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: AppTheme.accentCyan,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  minimumSize: Size.zero,
                                 ),
                                 onPressed: () => _viewModel.submitCounterOffer(
                                   rideProv: rideProv,
@@ -1228,8 +1473,28 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 ),
                                 child: const Text(
                                   '+50',
-                                  style: TextStyle(fontSize: 11),
+                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                                 ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            SizedBox(
+                              height: layout.touchTarget(44),
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.accentCyan,
+                                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                                  minimumSize: Size.zero,
+                                ),
+                                onPressed: () => _showDriverCustomFareSheet(
+                                  context: context,
+                                  rideProv: rideProv,
+                                  driver: driver,
+                                  driverName: authProv.currentUser.fullName,
+                                  rideId: request.id,
+                                  initialFare: request.offeredFare,
+                                ),
+                                child: const Icon(Icons.edit_note_rounded, size: 20),
                               ),
                             ),
                           ],
@@ -1844,12 +2109,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   const SizedBox(height: 6),
                   Row(
                     children: [
+                      SizedBox(
+                        height: layout.touchTarget(48),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange.shade400,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () => _viewModel.submitCounterOffer(
+                            rideProv: rideProv,
+                            driver: driverProv.driverProfile,
+                            driverName: authProv.currentUser.fullName,
+                            rideId: ride.id,
+                            fare: math.max(50.0, ride.offeredFare - 50.0),
+                          ),
+                          child: const Text(
+                            '-50',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: SizedBox(
                           height: layout.touchTarget(48),
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
                             ),
                             onPressed: () => _viewModel.submitCounterOffer(
                               rideProv: rideProv,
@@ -1860,12 +2148,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             ),
                             child: Text(
                               'Match ${CurrencyFormatter.format(ride.offeredFare)}',
-                              style: const TextStyle(fontSize: 11),
+                              style: const TextStyle(fontSize: 10.5),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       Expanded(
                         child: SizedBox(
                           height: layout.touchTarget(48),
@@ -1887,22 +2175,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               fare: aiFare,
                             ),
                             child: Text(
-                              'Match AI (${CurrencyFormatter.format(aiFare)})',
+                              'AI (${CurrencyFormatter.format(aiFare)})',
                               style: const TextStyle(
-                                fontSize: 11,
+                                fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       SizedBox(
                         height: layout.touchTarget(48),
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.accentCyan,
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
                           ),
                           onPressed: () => _viewModel.submitCounterOffer(
                             rideProv: rideProv,
@@ -1913,8 +2202,28 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           ),
                           child: const Text(
                             '+50',
-                            style: TextStyle(fontSize: 11),
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      SizedBox(
+                        height: layout.touchTarget(48),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppTheme.accentCyan,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () => _showDriverCustomFareSheet(
+                            context: context,
+                            rideProv: rideProv,
+                            driver: driverProv.driverProfile,
+                            driverName: authProv.currentUser.fullName,
+                            rideId: ride.id,
+                            initialFare: ride.offeredFare,
+                          ),
+                          child: const Icon(Icons.edit_note_rounded, size: 20),
                         ),
                       ),
                     ],

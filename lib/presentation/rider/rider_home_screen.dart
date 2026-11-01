@@ -2096,6 +2096,18 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                         padding: EdgeInsets.symmetric(horizontal: layout.scale(8)),
                                         minimumSize: Size.zero,
                                       ),
+                                      onPressed: () => _viewModel.quickIncrementFare(-50.0),
+                                      child: const Text('-50'),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  SizedBox(
+                                    height: layout.touchTarget(48),
+                                    child: OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: EdgeInsets.symmetric(horizontal: layout.scale(8)),
+                                        minimumSize: Size.zero,
+                                      ),
                                       onPressed: () => _viewModel.quickIncrementFare(50.0),
                                       child: const Text('+50'),
                                     ),

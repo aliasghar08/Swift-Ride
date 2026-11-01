@@ -509,7 +509,8 @@ class RiderViewModel extends ChangeNotifier {
   void quickIncrementFare(double increment) {
     _fareTouchedByUser = true;
     final cur = double.tryParse(fareController.text) ?? suggestedFare;
-    fareController.text = (cur + increment).round().toString();
+    final next = (cur + increment).round();
+    fareController.text = (next < 50 ? 50 : next).toString();
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }

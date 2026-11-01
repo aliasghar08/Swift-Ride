@@ -109,7 +109,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         final exact = await _mapService.resolveExactLocation(
           lat: parsed.latitude,
           lng: parsed.longitude,
-          query: parsed.originalCode ?? trimmed,
+          query: trimmed,
         );
         if (exact != null &&
             exact.address.isNotEmpty &&
@@ -218,20 +218,24 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
             place.secondaryText,
           ].where((s) => s.trim().isNotEmpty).join(', ');
 
-    final isPinnedOrPlus = place.placeId.startsWith('pinned:') ||
+    final isBroadCityOnly = !address.contains(',') &&
+        CoordinateParser.pakistanCities.containsKey(address.toLowerCase().trim());
+
+    final needsExactResolution = place.placeId.startsWith('pinned:') ||
         place.placeId.startsWith('plus:') ||
         address == 'Pinned Location' ||
         address.startsWith('Coordinates:') ||
-        RegExp(r'[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,4}').hasMatch(address);
+        RegExp(r'[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,4}').hasMatch(address) ||
+        isBroadCityOnly ||
+        address.toLowerCase().trim() == 'faisalabad' ||
+        address.toLowerCase().trim() == 'jhang';
 
-    if (isPinnedOrPlus) {
+    if (needsExactResolution) {
       setState(() => _isLoading = true);
       try {
-        final queryHint = place.mainText.contains('+')
-            ? place.mainText
-            : (_searchController.text.trim().contains('+')
-                ? _searchController.text.trim()
-                : null);
+        final queryHint = _searchController.text.trim().isNotEmpty
+            ? _searchController.text.trim()
+            : (place.mainText.contains('+') ? place.mainText : null);
 
         final exact = await _mapService.resolveExactLocation(
           lat: coords.latitude,

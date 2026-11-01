@@ -486,6 +486,220 @@ class MapService {
     return rawFormatted.isNotEmpty ? rawFormatted : (best['formatted_address'] as String? ?? '');
   }
 
+  String _buildPreciseAddressFromPlacesPlace(Map<dynamic, dynamic> place) {
+    final rawFormatted = ((place['formattedAddress'] as String?) ?? '')
+        .replaceAll(RegExp(r',\s*Pakistan$', caseSensitive: false), '')
+        .trim();
+    final displayName = place['displayName'] is Map
+        ? ((place['displayName']['text'] as String?) ?? '')
+        : '';
+
+    final comps = (place['addressComponents'] as List?)?.whereType<Map>().toList() ?? [];
+    String getComp(String type) {
+      for (final c in comps) {
+        final types = (c['types'] as List?)?.map((t) => t.toString()).toList() ?? [];
+        if (types.contains(type)) {
+          return (c['longText'] as String?) ?? (c['shortText'] as String?) ?? '';
+        }
+      }
+      return '';
+    }
+
+    final streetNumber = getComp('street_number');
+    final subpremise = getComp('subpremise');
+    final premise = getComp('premise');
+    final landmark = getComp('landmark');
+    final poi = getComp('point_of_interest');
+    final route = getComp('route');
+    final subloc2 = getComp('sublocality_level_2');
+    final subloc1 = getComp('sublocality_level_1').isNotEmpty
+        ? getComp('sublocality_level_1')
+        : getComp('neighborhood');
+    final locality = getComp('locality').isNotEmpty
+        ? getComp('locality')
+        : getComp('administrative_area_level_2');
+
+    // Filter out generic plus code from displayName
+    final isNamePlusCode = RegExp(r'^[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,4}$').hasMatch(displayName.trim());
+    final effectiveName = (!isNamePlusCode && displayName.isNotEmpty && displayName.toLowerCase() != locality.toLowerCase())
+        ? displayName.trim()
+        : '';
+
+    // If we have a genuine building or property name (e.g. "Babar House", "CANAL Hospital", "House 145")
+    if (effectiveName.isNotEmpty) {
+      if (rawFormatted.toLowerCase().contains(effectiveName.toLowerCase())) {
+        return rawFormatted;
+      }
+      final parts = <String>[effectiveName];
+      if (route.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(route.toLowerCase()))) {
+        parts.add(route);
+      }
+      if (subloc2.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(subloc2.toLowerCase()))) {
+        parts.add(subloc2);
+      }
+      if (subloc1.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(subloc1.toLowerCase()))) {
+        parts.add(subloc1);
+      }
+      if (locality.isNotEmpty && !parts.any((p) => p.toLowerCase().contains(locality.toLowerCase()))) {
+        parts.add(locality);
+      }
+      return parts.join(', ');
+    }
+
+    // Synthesize from street number / plot / route / blocks
+    final propertyPrefix = subpremise.isNotEmpty
+        ? subpremise
+        : (premise.isNotEmpty
+            ? premise
+            : (streetNumber.isNotEmpty
+                ? (RegExp(r'^\d+[A-Za-z]?$').hasMatch(streetNumber.trim()) ? 'House ${streetNumber.trim()}' : streetNumber.trim())
+                : (landmark.isNotEmpty ? landmark : poi)));
+
+    if (propertyPrefix.isNotEmpty) {
+      if (rawFormatted.toLowerCase().contains(propertyPrefix.toLowerCase())) {
+        return rawFormatted;
+      }
+      final parts = <String>[propertyPrefix];
+      if (route.isNotEmpty) parts.add(route);
+      if (subloc2.isNotEmpty) parts.add(subloc2);
+      if (subloc1.isNotEmpty && !parts.contains(subloc1)) parts.add(subloc1);
+      if (locality.isNotEmpty && !parts.contains(locality)) parts.add(locality);
+      return parts.join(', ');
+    }
+
+    if (rawFormatted.isNotEmpty && rawFormatted.toLowerCase() != locality.toLowerCase()) {
+      return rawFormatted;
+    }
+
+    final fallbackParts = <String>[
+      if (route.isNotEmpty) route,
+      if (subloc2.isNotEmpty) subloc2,
+      if (subloc1.isNotEmpty) subloc1,
+      if (locality.isNotEmpty) locality,
+    ];
+    return fallbackParts.isNotEmpty ? fallbackParts.join(', ') : rawFormatted;
+  }
+
+  Future<String?> _fetchPlacesNearbyReverseGeocode(double lat, double lng) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final url = Uri.parse('https://places.googleapis.com/v1/places:searchNearby');
+      final req = await client.postUrl(url);
+      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      req.headers.set('Content-Type', 'application/json');
+      req.headers.set('X-Goog-Api-Key', apiKey);
+      req.headers.set(
+        'X-Goog-FieldMask',
+        'places.displayName,places.formattedAddress,places.addressComponents',
+      );
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+
+      final body = jsonEncode({
+        'locationRestriction': {
+          'circle': {
+            'center': {'latitude': lat, 'longitude': lng},
+            'radius': 120.0,
+          },
+        },
+        'maxResultCount': 5,
+      });
+      req.write(body);
+      final resp = await req.close();
+      if (resp.statusCode == 200) {
+        final respBody = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(respBody) as Map<String, dynamic>;
+        final places = data['places'] as List?;
+        if (places != null && places.isNotEmpty) {
+          for (final p in places) {
+            if (p is Map) {
+              final formatted = _buildPreciseAddressFromPlacesPlace(p);
+              if (formatted.isNotEmpty && !formatted.toLowerCase().startsWith('location (')) {
+                return formatted;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Places API New searchNearby error: $e');
+    }
+    return null;
+  }
+
+  Future<({String address, LatLng coordinates})?> _fetchPlacesTextSearch(
+    String query, {
+    double? lat,
+    double? lng,
+  }) async {
+    try {
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 4);
+      final url = Uri.parse('https://places.googleapis.com/v1/places:searchText');
+      final req = await client.postUrl(url);
+      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      req.headers.set('Content-Type', 'application/json');
+      req.headers.set('X-Goog-Api-Key', apiKey);
+      req.headers.set(
+        'X-Goog-FieldMask',
+        'places.displayName,places.formattedAddress,places.location,places.addressComponents',
+      );
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+
+      final reqData = <String, dynamic>{
+        'textQuery': query,
+      };
+      if (lat != null && lng != null) {
+        reqData['locationBias'] = {
+          'circle': {
+            'center': {'latitude': lat, 'longitude': lng},
+            'radius': 50000.0,
+          },
+        };
+      }
+
+      req.write(jsonEncode(reqData));
+      final resp = await req.close();
+      if (resp.statusCode == 200) {
+        final respBody = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(respBody) as Map<String, dynamic>;
+        final places = data['places'] as List?;
+        if (places != null && places.isNotEmpty) {
+          final first = places.first as Map;
+          final loc = first['location'] as Map?;
+          final resLat = (loc?['latitude'] as num?)?.toDouble() ?? lat;
+          final resLng = (loc?['longitude'] as num?)?.toDouble() ?? lng;
+
+          if (resLat != null && resLng != null) {
+            final nearbyAddr = await _fetchPlacesNearbyReverseGeocode(resLat, resLng);
+            final builtAddr = _buildPreciseAddressFromPlacesPlace(first);
+            final finalAddr = (nearbyAddr != null &&
+                    nearbyAddr.isNotEmpty &&
+                    nearbyAddr.length > builtAddr.length &&
+                    !nearbyAddr.toLowerCase().startsWith('location ('))
+                ? nearbyAddr
+                : (builtAddr.isNotEmpty
+                    ? builtAddr
+                    : (first['formattedAddress'] as String? ?? query));
+
+            return (address: finalAddr, coordinates: LatLng(resLat, resLng));
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Places API New searchText error: $e');
+    }
+    return null;
+  }
+
   Future<String?> _fetchGoogleReverseGeocode(double lat, double lng) async {
     try {
       final client = HttpClient();
@@ -525,7 +739,23 @@ class MapService {
   }) async {
     final cleanQuery = query?.trim() ?? '';
 
-    // If query is a Plus Code or address string, query Google Geocoding directly
+    // 1. First try Google Places API (New) Text Search with property/building resolution
+    if (cleanQuery.isNotEmpty) {
+      final placesRes = await _fetchPlacesTextSearch(cleanQuery, lat: lat, lng: lng);
+      if (placesRes != null && placesRes.address.isNotEmpty) {
+        return placesRes;
+      }
+    }
+
+    // 2. If we have coordinates, try Google Places API (New) Nearby Search
+    if (lat != null && lng != null) {
+      final nearby = await _fetchPlacesNearbyReverseGeocode(lat, lng);
+      if (nearby != null && nearby.isNotEmpty && !nearby.startsWith('Location (')) {
+        return (address: nearby, coordinates: LatLng(lat, lng));
+      }
+    }
+
+    // 3. Direct Google Geocoding REST fallback
     if (cleanQuery.isNotEmpty) {
       try {
         final client = HttpClient();
@@ -599,13 +829,21 @@ class MapService {
   }
 
   Future<String> reverseGeocode(double lat, double lng) async {
-    // 1. Direct Google Geocoding API with rooftop & property/house precision
+    // 1. Google Places API (New) Nearby Search with rich building/shop/house precision
+    final nearby = await _fetchPlacesNearbyReverseGeocode(lat, lng);
+    if (nearby != null &&
+        nearby.trim().isNotEmpty &&
+        !nearby.startsWith('Location (')) {
+      return nearby;
+    }
+
+    // 2. Direct Google Geocoding API with rooftop & property/house precision
     final directGoogle = await _fetchGoogleReverseGeocode(lat, lng);
     if (directGoogle != null && directGoogle.trim().isNotEmpty && !directGoogle.startsWith('Location (')) {
       return directGoogle;
     }
 
-    // 2. Firebase Functions (with server-side buildPrecisePropertyAddress)
+    // 3. Firebase Functions (with server-side buildPrecisePropertyAddress)
     if (Firebase.apps.isNotEmpty) {
       if (FirebaseAuth.instance.currentUser == null) {
         try {
@@ -634,7 +872,7 @@ class MapService {
       }
     }
 
-    // 3. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
+    // 4. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
     try {
       final nativeAddr = await NativeMapService.instance.reverseGeocode(lat, lng);
       if (nativeAddr != null &&
@@ -644,7 +882,7 @@ class MapService {
       }
     } catch (_) {}
 
-    // 4. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
+    // 5. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
     try {
       final client = HttpClient();
       client.connectionTimeout = const Duration(seconds: 4);
@@ -708,13 +946,27 @@ class MapService {
     final remote = await _fetchAutocomplete(trimmed, near);
 
     if (parsed != null) {
+      // Asynchronously resolve exact property address using Google Places API (New)
+      final exact = await _fetchPlacesTextSearch(
+        trimmed,
+        lat: parsed.latitude,
+        lng: parsed.longitude,
+      );
+
+      final fullAddress = (exact != null &&
+              exact.address.isNotEmpty &&
+              !exact.address.startsWith('Location ('))
+          ? exact.address
+          : (parsed.label ?? 'Pinned Location');
+      final coords = exact?.coordinates ?? LatLng(parsed.latitude, parsed.longitude);
+
       final pinnedItem = PlaceSuggestion(
         placeId:
-            'pinned:${parsed.latitude},${parsed.longitude}:${parsed.label ?? 'Pinned Location'}',
-        mainText: parsed.label ?? 'Pinned Location',
+            'pinned:${coords.latitude},${coords.longitude}:$fullAddress',
+        mainText: fullAddress,
         secondaryText:
-            'Coordinates: ${parsed.latitude.toStringAsFixed(5)}, ${parsed.longitude.toStringAsFixed(5)}',
-        coordinates: LatLng(parsed.latitude, parsed.longitude),
+            'Coordinates: ${coords.latitude.toStringAsFixed(5)}, ${coords.longitude.toStringAsFixed(5)}',
+        coordinates: coords,
       );
 
       // Prepend pinned result so it appears as the immediate #1 suggestion

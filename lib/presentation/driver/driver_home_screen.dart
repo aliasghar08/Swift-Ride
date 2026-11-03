@@ -1795,7 +1795,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                'Year 1: 2% Fee',
+                'Fixed 2% Fee (Always)',
                 style: TextStyle(
                   color: AppTheme.emeraldGreen,
                   fontWeight: FontWeight.w700,

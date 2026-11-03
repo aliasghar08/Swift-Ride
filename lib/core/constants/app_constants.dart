@@ -6,13 +6,14 @@ class AppConstants {
   static const String currencyCode = 'PKR';
   static const String currencySymbol = 'Rs ';
 
-  // Pricing constants in PKR (Year 1: 2% Commission)
+  // Pricing constants in PKR (Permanent 2% Commission Always)
   static const double baseFare = 150.00; // Base fare PKR 150
   static const double perKmFare = 45.00; // PKR 45 per km
   static const double perMinFare = 5.00; // PKR 5 per min
   static const double perKmRate = perKmFare;
   static const double perMinRate = perMinFare;
-  static const double commissionRateYear1 = 0.02; // Ultra-low 2% Commission
+  static const double commissionRate = 0.02; // Permanent ultra-low 2% Commission
+  static const double commissionRateYear1 = 0.02; // Legacy alias for 2% Commission
   static const double standardIndustryCommission = 0.13; // ~13% industry benchmark comparison
 
   // Cancellation Fees in PKR
@@ -20,7 +21,7 @@ class AppConstants {
   static const double cancelAfterAccept = 100.00; // PKR 100
   static const double cancelAfterArrive = 200.00; // PKR 200
 
-  // Subscriptions in PKR (Year 2+)
+  // Subscriptions in PKR
   static const double subscriptionDaily = 150.00; // PKR 150/day
   static const double subscriptionMonthly = 3500.00; // PKR 3,500/month
   static const double subscriptionYearly = 35000.00; // PKR 35,000/year

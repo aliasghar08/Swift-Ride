@@ -113,7 +113,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
                 child: Text(
-                  '2% Fee (Year 1)',
+                  '2% Fee (Always)',
                   style: TextStyle(
                     color: AppTheme.emeraldGreen,
                     fontWeight: FontWeight.w700,
@@ -222,12 +222,16 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
         final user = auth.currentUser;
         final isUserSignedIn = auth.isAuthenticated || user.phone.isNotEmpty;
         return SafeArea(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.all(layout.scale(20)),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.all(layout.scale(20)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 Center(
                   child: Container(
                     width: 40,
@@ -456,7 +460,8 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
               ],
             ),
           ),
-        );
+        ),
+      );
       },
     );
   }

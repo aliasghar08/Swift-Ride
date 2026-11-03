@@ -68,7 +68,7 @@ class RideModel {
   final double suggestedFare;
   final double distanceKm;
   final double durationMin;
-  final double commissionAmount; // 2% in year 1
+  final double commissionAmount; // 2% always
   final String? paymentIntentId;
   final String paymentStatus;
 

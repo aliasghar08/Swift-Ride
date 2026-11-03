@@ -25,7 +25,7 @@ class DriverService {
     return profile.copyWith(vehicle: newVehicle);
   }
 
-  /// Updates subscription status (e.g. active trial for year 1).
+  /// Updates subscription status (e.g. permanent 2% commission model).
   DriverProfile updateSubscription(DriverProfile profile, SubscriptionStatus status, DateTime expiresAt) {
     return profile.copyWith(
       subscriptionStatus: status,

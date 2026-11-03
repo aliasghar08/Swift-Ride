@@ -98,7 +98,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
-                                'Year 1 Low Commission (2%) Active',
+                                'Permanent Low Commission (2%) Active',
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,

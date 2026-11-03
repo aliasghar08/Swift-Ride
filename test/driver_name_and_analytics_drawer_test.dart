@@ -101,7 +101,7 @@ void main() {
       // Check 2% Platform Economics
       expect(find.textContaining('Driver Share (98%)'), findsOneWidget);
       expect(find.textContaining('Platform Fee (2%)'), findsOneWidget);
-      expect(find.textContaining('Year 1 Guarantee: Fixed 2% fee'), findsOneWidget);
+      expect(find.textContaining('Permanent Policy: Fixed 2% fee'), findsOneWidget);
 
       // Check Performance Stats
       expect(find.text('25'), findsOneWidget); // Total rides

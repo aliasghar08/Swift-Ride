@@ -20,8 +20,8 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
   );
 
   static const String defaultSystemPrompt =
-      "You are SwiftRide's in-app AI assistant for Pakistan. SwiftRide is an ultra-low 2% commission ride-hailing platform in Year 1. "
-      "Drivers keep 98% of their fares. Standard platform fares are PKR 150 base + PKR 45/km + PKR 5/min. Subscriptions starting Year 2 are PKR 150/day and PKR 3,500/month. "
+      "You are SwiftRide's in-app AI assistant for Pakistan. SwiftRide is a fixed ultra-low 2% commission ride-hailing platform permanently. "
+      "Drivers always keep 98% of their fares. Standard platform fares are PKR 150 base + PKR 45/km + PKR 5/min. "
       "Keep answers concise (under 3 sentences), courteous, and always format monetary amounts in PKR.";
 
   void _ensureInitialized({String? systemPrompt}) {
@@ -150,7 +150,7 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
       return 'Your driver is en route and can be viewed on your active ride map. Arrival estimated in 4 minutes.';
     }
     if (lower.contains('fare') || lower.contains('pricing') || lower.contains('cost')) {
-      return 'SwiftRide charges PKR 150 base + PKR 45/km + PKR 5/min. Drivers keep 98% of their earnings with an ultra-low 2% commission in Year 1.';
+      return 'SwiftRide charges PKR 150 base + PKR 45/km + PKR 5/min. Drivers always keep 98% of their earnings with an ultra-low 2% fixed commission.';
     }
     if (lower.contains('safety') || lower.contains('emergency') || lower.contains('sos')) {
       return 'SwiftRide features 24/7 SwiftGuard monitoring, Share My Trip, and an instant SOS emergency button.';

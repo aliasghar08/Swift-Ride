@@ -322,7 +322,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('AI Earnings Advisor'), findsOneWidget);
-      expect(find.text('Year 1 Low Commission (2%) Active'), findsOneWidget);
+      expect(find.text('Permanent Low Commission (2%) Active'), findsOneWidget);
       expect(find.text('Projected Surge Hotspots Today'), findsOneWidget);
       expect(find.text('Predictive Vehicle Health'), findsOneWidget);
     });

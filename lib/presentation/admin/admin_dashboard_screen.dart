@@ -119,7 +119,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                           SizedBox(width: 4),
                           Flexible(
                             child: Text(
-                              'Year 1: 2% Platform Commission',
+                              'Fixed 2% Platform Commission (Always)',
                               style: TextStyle(
                                 color: AppTheme.emeraldGreen,
                                 fontWeight: FontWeight.w700,

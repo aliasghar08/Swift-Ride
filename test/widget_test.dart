@@ -86,7 +86,7 @@ void main() {
 
     // Verify brand title and 2% fee badge
     expect(find.text('SwiftRide'), findsWidgets);
-    expect(find.text('2% Fee (Year 1)'), findsOneWidget);
+    expect(find.text('2% Fee (Always)'), findsOneWidget);
 
     // Verify Rider view is loaded initially
     expect(find.text('Rider'), findsWidgets);
@@ -101,7 +101,7 @@ void main() {
 
     // Verify Driver view
     expect(find.text('Driver Dashboard'), findsOneWidget);
-    expect(find.text('Year 1: 2% Fee'), findsOneWidget);
+    expect(find.text('Fixed 2% Fee (Always)'), findsOneWidget);
 
     // Switch to Admin Mode
     await tester.tap(find.text('Admin'));

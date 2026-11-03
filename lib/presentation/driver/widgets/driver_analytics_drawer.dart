@@ -416,7 +416,7 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                               SizedBox(width: 6),
                               Expanded(
                                 child: Text(
-                                  'Year 1 Guarantee: Fixed 2% fee gives you 98% take-home on every trip.',
+                                  'Permanent Policy: Fixed 2% fee always gives you 98% take-home on every trip.',
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: AppTheme.emeraldGreen,

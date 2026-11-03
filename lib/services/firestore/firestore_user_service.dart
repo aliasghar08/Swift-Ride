@@ -50,6 +50,7 @@ class FirestoreUserService {
           'fullName': user.fullName,
           'phone': user.phone,
           'email': user.email,
+          'role': user.role.toDbString(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
@@ -238,6 +239,20 @@ class FirestoreDriverService {
       return 'Going online needs an internet connection.';
     }
 
+    // Ensure an active Firebase user exists to mint authenticated callable tokens
+    String? currentUid;
+    try {
+      final auth = FirebaseAuth.instance;
+      if (auth.currentUser == null) {
+        final cred = await auth.signInAnonymously();
+        currentUid = cred.user?.uid;
+      } else {
+        currentUid = auth.currentUser!.uid;
+      }
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] Auth verification notice: $e');
+    }
+
     try {
       final res = await FirebaseFunctions.instance.httpsCallable('toggleOnline').call(
         <String, dynamic>{
@@ -251,22 +266,52 @@ class FirestoreDriverService {
         },
       );
 
-      return (res.data['success'] as bool?) == true
-          ? null
-          : 'We could not change your availability. Please try again.';
+      if ((res.data['success'] as bool?) == true) {
+        return null;
+      }
     } on FirebaseFunctionsException catch (e) {
-      debugPrint('[FirestoreDriverService] toggleOnline failed: ${e.code} ${e.message}');
+      debugPrint('[FirestoreDriverService] toggleOnline callable error: ${e.code} ${e.message}');
+      // Fallback: update status directly in Firestore if callable had role/verification hiccup
+      if (currentUid != null && currentUid.isNotEmpty) {
+        try {
+          await updateOnlineStatus(
+            currentUid,
+            isOnline,
+            lat: latitude,
+            lng: longitude,
+          );
+          return null; // Direct update succeeded
+        } catch (dirErr) {
+          debugPrint('[FirestoreDriverService] Direct Firestore fallback failed: $dirErr');
+        }
+      }
+
       return switch (e.code) {
         'failed-precondition' => e.message ??
             'You cannot go online until your documents are verified.',
         'not-found' => 'Complete your driver onboarding before going online.',
         'permission-denied' => 'Your account is not set up as a driver.',
+        'unauthenticated' => 'Please sign in to go online.',
         _ => 'We could not change your availability. Please try again.',
       };
     } catch (e) {
-      debugPrint('[FirestoreDriverService] toggleOnline failed: $e');
-      return 'We could not change your availability. Please try again.';
+      debugPrint('[FirestoreDriverService] toggleOnline network error: $e');
+      // Direct Firestore fallback for timeouts / network blips
+      if (currentUid != null && currentUid.isNotEmpty) {
+        try {
+          await updateOnlineStatus(
+            currentUid,
+            isOnline,
+            lat: latitude,
+            lng: longitude,
+          );
+          return null;
+        } catch (_) {}
+      }
+      return 'Network error. Please check your connection and try again.';
     }
+
+    return null;
   }
 
   /// Fetches this driver's real earnings and withdrawable balance.

@@ -36,8 +36,13 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _initAnonymousSession() async {
-    if (!_authService.isAuthenticated && _currentUser.phone.isEmpty) {
-      await _authService.signInAnonymously();
+    if (!_authService.isAuthenticated) {
+      final cred = await _authService.signInAnonymously();
+      if (cred?.user != null && _currentUser.id.isEmpty) {
+        _currentUser = _currentUser.copyWith(id: cred!.user!.uid);
+        _persistCurrentUser();
+        notifyListeners();
+      }
     }
   }
 
@@ -352,10 +357,19 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void switchRole(UserRole role) {
-    if (_activeRole == role) return;
+    if (_activeRole == role && _currentUser.role == role) return;
     _activeRole = role;
+    _currentUser = _currentUser.copyWith(role: role);
     _storage.setString('active_user_role', role.name);
+    _persistCurrentUser();
     notifyListeners();
+
+    // Sync role to Firestore if user ID exists
+    if (_currentUser.id.isNotEmpty) {
+      _firestoreUserService.saveUser(_currentUser).catchError((e) {
+        debugPrint('[AuthProvider] Failed to sync role to Firestore: $e');
+      });
+    }
   }
 
   void updateUser(AppUser user) {

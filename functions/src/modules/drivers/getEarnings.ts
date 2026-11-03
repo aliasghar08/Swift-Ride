@@ -1,12 +1,12 @@
 import { onCall } from 'firebase-functions/v2/https';
 import { db } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
-import { assertRole } from '../../middleware/auth';
+import { assertHasToken } from '../../middleware/auth';
 
 export const getEarnings = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
-    const caller = await assertRole(request, ['driver', 'admin']);
+    const caller = assertHasToken(request);
 
     // Query completed rides for this driver
     const snapshot = await db

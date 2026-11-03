@@ -713,178 +713,193 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   blur: 16,
                                 )
                               : (isDark ? AppTheme.darkElevation : AppTheme.subtleElevation),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              InkWell(
-                                onTap: () => _scaffoldKey.currentState?.openDrawer(),
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  padding: const EdgeInsets.all(7),
-                                  margin: const EdgeInsets.only(right: 10),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                              Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () => _scaffoldKey.currentState?.openDrawer(),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
-                                    ),
-                                  ),
-                                  child: const Icon(
-                                    Icons.menu_rounded,
-                                    color: AppTheme.emeraldGreen,
-                                    size: 18,
-                                  ),
-                                ),
-                              ),
-                              driverProv.isOnline
-                                  ? PulsingGlowWidget(
-                                      glowColor: AppTheme.emeraldGreen,
-                                      child: const CircleAvatar(
-                                        backgroundColor: AppTheme.emeraldGreen,
-                                        child: Icon(
-                                          Icons.drive_eta,
-                                          color: Colors.white,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(7),
+                                      margin: const EdgeInsets.only(right: 10),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
                                         ),
-                                      ),
-                                    )
-                                  : CircleAvatar(
-                                      backgroundColor: Colors.grey.withValues(
-                                        alpha: 0.2,
                                       ),
                                       child: const Icon(
-                                        Icons.drive_eta,
-                                        color: Colors.grey,
-                                      ),
-                                    ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      driverProv.isOnline
-                                          ? 'ONLINE (Broadcasting RTDB)'
-                                          : 'OFFLINE',
-                                      style: TextStyle(
-                                        color: driverProv.isOnline
-                                            ? AppTheme.emeraldGreen
-                                            : Colors.grey,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: layout.fontSize(13),
-                                      ),
-                                    ),
-                                    Text(
-                                      'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 2% Fee',
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white70 : c.textMuted,
-                                        fontSize: layout.fontSize(12),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // Floating Action Chip for Khata
-                              InkWell(
-                                onTap: () => DriverKhataSheet.show(context),
-                                borderRadius: BorderRadius.circular(16),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  margin: const EdgeInsets.only(right: 8),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.5),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.account_balance_wallet_rounded,
+                                        Icons.menu_rounded,
                                         color: AppTheme.emeraldGreen,
-                                        size: 15,
+                                        size: 18,
                                       ),
-                                      const SizedBox(width: 4),
-                                      ListenableBuilder(
-                                        listenable: DriverKhataService(),
-                                        builder: (ctx, _) {
-                                          final khata = DriverKhataService().todayKhata;
-                                          return Text(
-                                            'Khata: PKR ${khata.netCashProfit.toInt()}',
-                                            style: TextStyle(
-                                              color: AppTheme.emeraldGreen,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: layout.fontSize(11),
+                                    ),
+                                  ),
+                                  driverProv.isOnline
+                                      ? PulsingGlowWidget(
+                                          glowColor: AppTheme.emeraldGreen,
+                                          child: const CircleAvatar(
+                                            backgroundColor: AppTheme.emeraldGreen,
+                                            child: Icon(
+                                              Icons.drive_eta,
+                                              color: Colors.white,
                                             ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              Switch(
-                                value: driverProv.isOnline,
-                                activeThumbColor: AppTheme.accentCyan,
-                                onChanged: (val) async {
-                                  final error = await _viewModel.toggleOnline(
-                                    driverProv: driverProv,
-                                    locProv: locProv,
-                                    online: val,
-                                  );
-                                  if (error != null && context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(error),
-                                        backgroundColor: AppTheme.sunsetCoral,
-                                      ),
-                                    );
-                                  }
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () =>
-                                    Navigator.of(context)
-                                        .pushNamed('/earnings-advisor'),
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.accentTeal.withValues(
-                                      alpha: 0.2,
-                                    ),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: AppTheme.accentTeal.withValues(
-                                        alpha: 0.45,
-                                      ),
+                                          ),
+                                        )
+                                      : CircleAvatar(
+                                          backgroundColor: Colors.grey.withValues(
+                                            alpha: 0.2,
+                                          ),
+                                          child: const Icon(
+                                            Icons.drive_eta,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          driverProv.isOnline
+                                              ? 'ONLINE (Broadcasting RTDB)'
+                                              : 'OFFLINE',
+                                          style: TextStyle(
+                                            color: driverProv.isOnline
+                                                ? AppTheme.emeraldGreen
+                                                : Colors.grey,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: layout.fontSize(13),
+                                          ),
+                                        ),
+                                        Text(
+                                          'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 2% Fee',
+                                          style: TextStyle(
+                                            color: isDark ? Colors.white70 : c.textMuted,
+                                            fontSize: layout.fontSize(12),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.psychology,
-                                        size: 14,
-                                        color: AppTheme.accentTeal,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'AI',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.accentTeal,
+                                  const SizedBox(width: 8),
+                                  Switch(
+                                    value: driverProv.isOnline,
+                                    activeThumbColor: AppTheme.accentCyan,
+                                    onChanged: (val) async {
+                                      final error = await _viewModel.toggleOnline(
+                                        driverProv: driverProv,
+                                        locProv: locProv,
+                                        online: val,
+                                      );
+                                      if (error != null && context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(error),
+                                            backgroundColor: AppTheme.sunsetCoral,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  // Floating Action Chip for Khata
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () => DriverKhataSheet.show(context),
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(
+                                            color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(
+                                              Icons.account_balance_wallet_rounded,
+                                              color: AppTheme.emeraldGreen,
+                                              size: 15,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            ListenableBuilder(
+                                              listenable: DriverKhataService(),
+                                              builder: (ctx, _) {
+                                                final khata = DriverKhataService().todayKhata;
+                                                return Text(
+                                                  'Khata: PKR ${khata.netCashProfit.toInt()}',
+                                                  style: TextStyle(
+                                                    color: AppTheme.emeraldGreen,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: layout.fontSize(11),
+                                                  ),
+                                                );
+                                              },
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 8),
+                                  // AI Advisor shortcut
+                                  InkWell(
+                                    onTap: () =>
+                                        Navigator.of(context)
+                                            .pushNamed('/earnings-advisor'),
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.accentTeal.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: AppTheme.accentTeal.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.psychology,
+                                            size: 14,
+                                            color: AppTheme.accentTeal,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'AI Advisor',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.accentTeal,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),

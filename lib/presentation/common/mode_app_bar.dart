@@ -213,6 +213,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   ) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.of(context).surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -221,7 +222,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
         final user = auth.currentUser;
         final isUserSignedIn = auth.isAuthenticated || user.phone.isNotEmpty;
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: EdgeInsets.all(layout.scale(20)),
             child: Column(
               mainAxisSize: MainAxisSize.min,

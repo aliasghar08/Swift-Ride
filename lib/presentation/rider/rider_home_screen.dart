@@ -3059,18 +3059,21 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       color: AppTheme.primaryBlue,
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      'Shared Ride & Seat Selection:',
-                      style: TextStyle(
-                        fontSize: layout.fontSize(12.5),
-                        fontWeight: FontWeight.w700,
-                        color: c.textPrimary,
+                    Expanded(
+                      child: Text(
+                        'Shared Ride & Seat Selection:',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(12.5),
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 6),
                     if (_viewModel.bookedSeats > 1)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                         decoration: BoxDecoration(
                           color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -3083,7 +3086,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             Text(
                               _viewModel.bookedSeats == 4
                                   ? 'Private Car (4 Seats)'
-                                  : '${_viewModel.bookedSeats} Shared Seats',
+                                  : '${_viewModel.bookedSeats} Seats',
                               style: TextStyle(
                                 fontSize: layout.fontSize(10.5),
                                 fontWeight: FontWeight.w700,

@@ -1473,8 +1473,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 ),
                               ),
                             ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 2,
+                              alignment: WrapAlignment.end,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1491,8 +1494,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     ),
                                   ),
                                 ),
-                                if (VehicleTypeX.fromString(request.vehicleType) == VehicleType.car) ...[
-                                  const SizedBox(width: 4),
+                                if (VehicleTypeX.fromString(request.vehicleType) == VehicleType.car)
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
@@ -1506,7 +1508,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         const SizedBox(width: 3),
                                         Text(
                                           request.bookedSeats > 1
-                                              ? '${request.bookedSeats} Passengers Along'
+                                              ? '${request.bookedSeats} Seats'
                                               : '1 Seat',
                                           style: TextStyle(
                                             fontSize: layout.fontSize(9.5),
@@ -1517,7 +1519,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ],
                                     ),
                                   ),
-                                ],
                               ],
                             ),
                           ],
@@ -2076,89 +2077,92 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accentCyan.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Semantics(
-                    liveRegion: true,
-                    label: 'Trip status: ${ride.status.displayName}',
-                    child: Text(
-                      ride.status.displayName,
-                      style: TextStyle(
-                        color: AppTheme.accentCyan,
-                        fontWeight: FontWeight.w700,
-                        fontSize: layout.fontSize(12),
+            Expanded(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Semantics(
+                      liveRegion: true,
+                      label: 'Trip status: ${ride.status.displayName}',
+                      child: Text(
+                        ride.status.displayName,
+                        style: TextStyle(
+                          color: AppTheme.accentCyan,
+                          fontWeight: FontWeight.w700,
+                          fontSize: layout.fontSize(11.5),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.emeraldGreen),
-                        const SizedBox(width: 4),
-                        Text(
-                          ride.bookedSeats > 1
-                              ? '${ride.bookedSeats} Passengers Along'
-                              : '1 Seat',
-                          style: TextStyle(
-                            color: AppTheme.emeraldGreen,
-                            fontWeight: FontWeight.w700,
-                            fontSize: layout.fontSize(11),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (ride.emptySeats > 0) ...[
-                    const SizedBox(width: 6),
+                  if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car) ...[
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                       decoration: BoxDecoration(
-                        color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                        color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.airline_seat_recline_extra_rounded, size: 12, color: AppTheme.accentCyan),
+                          const Icon(Icons.people_alt_rounded, size: 11, color: AppTheme.emeraldGreen),
                           const SizedBox(width: 4),
                           Text(
-                            '${ride.emptySeats} Empty',
+                            ride.bookedSeats > 1
+                                ? '${ride.bookedSeats} Seats'
+                                : '1 Seat',
                             style: TextStyle(
-                              color: AppTheme.accentCyan,
+                              color: AppTheme.emeraldGreen,
                               fontWeight: FontWeight.w700,
-                              fontSize: layout.fontSize(11),
+                              fontSize: layout.fontSize(10.5),
                             ),
                           ),
                         ],
                       ),
                     ),
+                    if (ride.emptySeats > 0)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.airline_seat_recline_extra_rounded, size: 11, color: AppTheme.accentCyan),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${ride.emptySeats} Empty',
+                              style: TextStyle(
+                                color: AppTheme.accentCyan,
+                                fontWeight: FontWeight.w700,
+                                fontSize: layout.fontSize(10.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ],
-              ],
+              ),
             ),
+            const SizedBox(width: 8),
             Text(
-              'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)} (2% Fee)',
+              'Fare: ${CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare)}',
               style: TextStyle(
                 color: AppTheme.emeraldGreen,
                 fontWeight: FontWeight.w800,
-                fontSize: layout.fontSize(15),
+                fontSize: layout.fontSize(14),
               ),
             ),
           ],

@@ -32,6 +32,9 @@ import '../../services/driver_khata_service.dart';
 import 'widgets/driver_khata_sheet.dart';
 import '../common/exact_change_dialog.dart';
 import '../../services/route_corridor_service.dart';
+import 'widgets/driver_analytics_drawer.dart';
+import 'widgets/driver_name_dialog.dart';
+import '../../domain/models/user_role.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -41,6 +44,8 @@ class DriverHomeScreen extends StatefulWidget {
 }
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _hasCheckedDriverName = false;
   late final DriverViewModel _viewModel;
   final RideService _rideService = RideService();
 
@@ -70,6 +75,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     super.didChangeDependencies();
     final loc = CustomChangeNotifierProvider.of<LocationProvider>(context);
     final ride = CustomChangeNotifierProvider.of<RideProvider>(context);
+
+    if (!_hasCheckedDriverName) {
+      _hasCheckedDriverName = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+        final user = auth.currentUser;
+        final isDriverAccount = auth.activeRole == UserRole.driver &&
+            (user.phone.isNotEmpty || auth.isAuthenticated);
+        if (isDriverAccount && isDefaultDriverName(user.fullName)) {
+          DriverNameDialog.show(
+            context,
+            currentName: user.fullName,
+            barrierDismissible: false,
+          );
+        }
+      });
+    }
+
     if (identical(loc, _locProv) && identical(ride, _rideProv)) return;
 
     _locProv?.onLocationUpdate = null;
@@ -431,6 +455,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       listenable: _viewModel,
       builder: (context, _) {
         return Scaffold(
+          key: _scaffoldKey,
+          drawer: const DriverAnalyticsDrawer(),
           backgroundColor: c.canvas,
           body: Stack(
             children: [
@@ -689,6 +715,26 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               : (isDark ? AppTheme.darkElevation : AppTheme.subtleElevation),
                           child: Row(
                             children: [
+                              InkWell(
+                                onTap: () => _scaffoldKey.currentState?.openDrawer(),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  margin: const EdgeInsets.only(right: 10),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.menu_rounded,
+                                    color: AppTheme.emeraldGreen,
+                                    size: 18,
+                                  ),
+                                ),
+                              ),
                               driverProv.isOnline
                                   ? PulsingGlowWidget(
                                       glowColor: AppTheme.emeraldGreen,

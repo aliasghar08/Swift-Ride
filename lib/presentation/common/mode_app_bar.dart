@@ -11,6 +11,7 @@ import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
 import 'trusted_contacts_screen.dart';
 import '../auth/phone_auth_screen.dart';
+import '../driver/widgets/driver_name_dialog.dart';
 
 class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -260,13 +261,40 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            user.fullName,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: layout.fontSize(17),
-                              color: isDark ? Colors.white : AppTheme.darkNavy,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  user.fullName.isNotEmpty ? user.fullName : 'SwiftRide User',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: layout.fontSize(17),
+                                    color: isDark ? Colors.white : AppTheme.darkNavy,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  DriverNameDialog.show(
+                                    context,
+                                    currentName: user.fullName,
+                                    barrierDismissible: true,
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.edit_outlined,
+                                    size: 16,
+                                    color: isDark ? Colors.white60 : AppTheme.primaryBlue,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 2),
                           Text(

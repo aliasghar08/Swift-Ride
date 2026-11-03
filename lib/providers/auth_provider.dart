@@ -364,6 +364,19 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateFullName(String fullName) async {
+    final trimmed = fullName.trim();
+    if (trimmed.isEmpty) return;
+    _currentUser = _currentUser.copyWith(fullName: trimmed);
+    await _persistCurrentUser();
+    try {
+      await _firestoreUserService.saveUser(_currentUser);
+    } catch (e) {
+      debugPrint('[AuthProvider] Failed to save updated name to Firestore: $e');
+    }
+    notifyListeners();
+  }
+
   void incrementRidesCount() {
     _currentUser = _currentUser.copyWith(totalRides: _currentUser.totalRides + 1);
     notifyListeners();

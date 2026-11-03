@@ -57,7 +57,7 @@ class FirestoreDriverService {
           'totalEarnings': driver.totalEarnings,
           'currentLocation': {
             'geopoint': GeoPoint(driver.latitude, driver.longitude),
-            'geohash': 'sv8wr', // Default Islamabad geohash
+            'geohash': GeohashUtil.encode(driver.latitude, driver.longitude, 7),
           },
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
@@ -142,7 +142,9 @@ class FirestoreDriverService {
       if (lat != null && lng != null) {
         updates['currentLocation'] = {
           'geopoint': GeoPoint(lat, lng),
-          'geohash': geohash ?? 'sv8wr',
+          'geohash': (geohash != null && geohash.isNotEmpty)
+              ? geohash
+              : GeohashUtil.encode(lat, lng, 7),
         };
       }
 
@@ -367,11 +369,31 @@ class FirestoreDriverService {
   }
 
   /// Streams online and verified drivers.
+  /// If [centerLat] and [centerLng] are provided, sorts drivers by proximity
+  /// and optionally filters out drivers beyond [radiusKm].
   /// Utilizes composite index: `drivers (isOnline ASC, isVerified ASC, currentLocation.geohash ASC)`.
-  Stream<List<DriverProfile>> streamNearbyOnlineDrivers() {
+  Stream<List<DriverProfile>> streamNearbyOnlineDrivers({
+    double? centerLat,
+    double? centerLng,
+    double? radiusKm,
+  }) {
     final fs = _firestore;
     if (fs == null) {
-      return Stream.value(_memoryDrivers.values.where((d) => d.isOnline).toList());
+      var list = _memoryDrivers.values.where((d) => d.isOnline).toList();
+      if (centerLat != null && centerLng != null) {
+        if (radiusKm != null) {
+          list = list
+              .where((d) =>
+                  GeohashUtil.distanceKm(centerLat, centerLng, d.latitude, d.longitude) <=
+                  radiusKm)
+              .toList();
+        }
+        list.sort((a, b) => GeohashUtil.distanceKm(
+                centerLat, centerLng, a.latitude, a.longitude)
+            .compareTo(GeohashUtil.distanceKm(
+                centerLat, centerLng, b.latitude, b.longitude)));
+      }
+      return Stream.value(list);
     }
 
     return fs
@@ -380,7 +402,22 @@ class FirestoreDriverService {
         .where('isVerified', isEqualTo: true)
         .snapshots()
         .map((querySnap) {
-      return querySnap.docs.map((doc) => _parseDriverProfile(doc.data(), doc.id)).toList();
+      var drivers =
+          querySnap.docs.map((doc) => _parseDriverProfile(doc.data(), doc.id)).toList();
+      if (centerLat != null && centerLng != null) {
+        if (radiusKm != null) {
+          drivers = drivers
+              .where((d) =>
+                  GeohashUtil.distanceKm(centerLat, centerLng, d.latitude, d.longitude) <=
+                  radiusKm)
+              .toList();
+        }
+        drivers.sort((a, b) => GeohashUtil.distanceKm(
+                centerLat, centerLng, a.latitude, a.longitude)
+            .compareTo(GeohashUtil.distanceKm(
+                centerLat, centerLng, b.latitude, b.longitude)));
+      }
+      return drivers;
     });
   }
 

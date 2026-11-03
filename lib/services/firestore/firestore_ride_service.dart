@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/geohash_util.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_offer_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -56,12 +57,12 @@ class FirestoreRideService {
         'pickup': {
           'geopoint': GeoPoint(ride.pickup.latitude, ride.pickup.longitude),
           'address': ride.pickup.address,
-          'geohash': ride.pickup.geohash,
+          'geohash': ride.pickup.effectiveGeohash,
         },
         'dropoff': {
           'geopoint': GeoPoint(ride.dropoff.latitude, ride.dropoff.longitude),
           'address': ride.dropoff.address,
-          'geohash': ride.dropoff.geohash,
+          'geohash': ride.dropoff.effectiveGeohash,
         },
         'offeredFare': ride.offeredFare,
         'acceptedFare': ride.acceptedFare,
@@ -379,12 +380,12 @@ class FirestoreRideService {
         'pickup': {
           'geopoint': GeoPoint(ride.pickup.latitude, ride.pickup.longitude),
           'address': ride.pickup.address,
-          'geohash': ride.pickup.geohash,
+          'geohash': ride.pickup.effectiveGeohash,
         },
         'dropoff': {
           'geopoint': GeoPoint(ride.dropoff.latitude, ride.dropoff.longitude),
           'address': ride.dropoff.address,
-          'geohash': ride.dropoff.geohash,
+          'geohash': ride.dropoff.effectiveGeohash,
         },
         'offeredFare': ride.offeredFare,
         'acceptedFare': ride.acceptedFare,
@@ -450,6 +451,7 @@ class FirestoreRideService {
         'pointType': pointType,
         'location': GeoPoint(latitude, longitude),
         'address': address ?? '',
+        'geohash': GeohashUtil.encode(latitude, longitude, 7),
         'timestamp': FieldValue.serverTimestamp(),
       });
     } catch (e) {
@@ -458,13 +460,32 @@ class FirestoreRideService {
   }
 
   /// Streams requested rides nearby for driver bidding cockpit.
+  /// If [centerLat] and [centerLng] are provided, sorts rides by proximity to driver
+  /// and optionally filters out rides beyond [radiusKm].
   /// Utilizes composite index: `rides (status ASC, createdAt DESC)`.
-  Stream<List<RideModel>> streamAvailableRides() {
+  Stream<List<RideModel>> streamAvailableRides({
+    double? centerLat,
+    double? centerLng,
+    double? radiusKm,
+  }) {
     final fs = _firestore;
     if (fs == null) {
-      final list = _memoryRides.values
+      var list = _memoryRides.values
           .where((r) => r.status == RideStatus.requested && r.hasEmptySeats)
           .toList();
+      if (centerLat != null && centerLng != null) {
+        if (radiusKm != null) {
+          list = list
+              .where((r) =>
+                  GeohashUtil.distanceKm(centerLat, centerLng, r.pickup.latitude, r.pickup.longitude) <=
+                  radiusKm)
+              .toList();
+        }
+        list.sort((a, b) => GeohashUtil.distanceKm(
+                centerLat, centerLng, a.pickup.latitude, a.pickup.longitude)
+            .compareTo(GeohashUtil.distanceKm(
+                centerLat, centerLng, b.pickup.latitude, b.pickup.longitude)));
+      }
       return Stream.value(list);
     }
 
@@ -475,11 +496,25 @@ class FirestoreRideService {
         .limit(20)
         .snapshots()
         .map((querySnap) {
-      return querySnap.docs
+      var rides = querySnap.docs
           .map((doc) => _parseRide(doc.data(), doc.id))
           .whereType<RideModel>()
           .where((r) => r.hasEmptySeats)
           .toList();
+      if (centerLat != null && centerLng != null) {
+        if (radiusKm != null) {
+          rides = rides
+              .where((r) =>
+                  GeohashUtil.distanceKm(centerLat, centerLng, r.pickup.latitude, r.pickup.longitude) <=
+                  radiusKm)
+              .toList();
+        }
+        rides.sort((a, b) => GeohashUtil.distanceKm(
+                centerLat, centerLng, a.pickup.latitude, a.pickup.longitude)
+            .compareTo(GeohashUtil.distanceKm(
+                centerLat, centerLng, b.pickup.latitude, b.pickup.longitude)));
+      }
+      return rides;
     });
   }
 

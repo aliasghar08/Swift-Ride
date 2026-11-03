@@ -1,3 +1,5 @@
+import '../../core/utils/geohash_util.dart';
+
 class LocationPoint {
   final double latitude;
   final double longitude;
@@ -10,6 +12,24 @@ class LocationPoint {
     required this.address,
     this.geohash = '',
   });
+
+  /// Factory constructor guaranteeing an auto-computed geohash if not explicitly provided.
+  factory LocationPoint.withGeotag({
+    required double latitude,
+    required double longitude,
+    required String address,
+    String? geohash,
+    int precision = 7,
+  }) {
+    return LocationPoint(
+      latitude: latitude,
+      longitude: longitude,
+      address: address,
+      geohash: (geohash != null && geohash.isNotEmpty)
+          ? geohash
+          : GeohashUtil.encode(latitude, longitude, precision),
+    );
+  }
 
   LocationPoint copyWith({
     double? latitude,
@@ -25,10 +45,29 @@ class LocationPoint {
     );
   }
 
+  /// Returns the stored geohash if non-empty, otherwise lazily computes a precision-7 geohash.
+  String get effectiveGeohash =>
+      geohash.isNotEmpty ? geohash : GeohashUtil.encode(latitude, longitude, 7);
+
+  /// Computes distance in kilometers to another [LocationPoint].
+  double distanceTo(LocationPoint other) =>
+      GeohashUtil.distanceKm(latitude, longitude, other.latitude, other.longitude);
+
+  /// Computes initial compass bearing in degrees [0, 360) to another [LocationPoint].
+  double bearingTo(LocationPoint other) =>
+      GeohashUtil.bearing(latitude, longitude, other.latitude, other.longitude);
+
   Map<String, dynamic> toMap() => {
         'geopoint': {'latitude': latitude, 'longitude': longitude},
         'address': address,
-        'geohash': geohash,
+        'geohash': effectiveGeohash,
+      };
+
+  /// Formats location metadata for Firestore document payloads.
+  Map<String, dynamic> toGeotagMap() => {
+        'geopoint': {'latitude': latitude, 'longitude': longitude},
+        'address': address,
+        'geohash': effectiveGeohash,
       };
 
   factory LocationPoint.fromMap(Map<String, dynamic> map) {
@@ -57,11 +96,16 @@ class LocationPoint {
       throw const FormatException('LocationPoint is missing coordinates');
     }
 
+    final rawGeohash = map['geohash']?.toString();
+    final geohash = (rawGeohash != null && rawGeohash.isNotEmpty)
+        ? rawGeohash
+        : GeohashUtil.encode(lat.toDouble(), lng.toDouble(), 7);
+
     return LocationPoint(
       latitude: lat.toDouble(),
       longitude: lng.toDouble(),
       address: map['address']?.toString() ?? '',
-      geohash: map['geohash']?.toString() ?? '',
+      geohash: geohash,
     );
   }
 }

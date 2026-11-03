@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swiftride/core/provider/custom_provider.dart';
-import 'package:swiftride/domain/models/driver_khata_model.dart';
 import 'package:swiftride/domain/models/driver_profile_model.dart';
 import 'package:swiftride/domain/models/user_model.dart';
 import 'package:swiftride/domain/models/user_role.dart';
@@ -10,7 +9,6 @@ import 'package:swiftride/presentation/driver/widgets/driver_analytics_drawer.da
 import 'package:swiftride/presentation/driver/widgets/driver_name_dialog.dart';
 import 'package:swiftride/providers/auth_provider.dart';
 import 'package:swiftride/providers/driver_provider.dart';
-import 'package:swiftride/services/driver_khata_service.dart';
 
 void main() {
   group('Driver Name Validation Tests', () {

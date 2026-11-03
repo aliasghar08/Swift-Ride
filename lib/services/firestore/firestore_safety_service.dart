@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/utils/geohash_util.dart';
 import '../../domain/models/safety_event_model.dart';
 import '../../domain/models/safety_event_type.dart';
 
@@ -116,6 +117,7 @@ class FirestoreSafetyService {
         'rideId': event.rideId,
         'type': event.type.name.toUpperCase(),
         'geopoint': GeoPoint(event.latitude, event.longitude),
+        'geohash': GeohashUtil.encode(event.latitude, event.longitude, 7),
         'metadata': event.metadata,
         'resolvedAt': null,
         'createdAt': FieldValue.serverTimestamp(),

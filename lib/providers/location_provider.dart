@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:swiftride/services/location_service.dart';
 import '../core/constants/app_constants.dart';
+import '../core/utils/geohash_util.dart';
+import '../domain/models/location_point_model.dart';
 
 /// Streams live driver coordinates, calculates heading rotations, and drives
 /// map animations. Also exposes [hasRealFix] so the UI can distinguish "still
@@ -54,6 +56,16 @@ class LocationProvider extends ChangeNotifier {
   double get speed => _speed;
   bool get isBroadcasting => _isBroadcasting;
   bool get hasRealFix => _hasRealFix;
+
+  /// Current location encoded as a precision-7 geohash.
+  String get geohash => GeohashUtil.encode(_latitude, _longitude, 7);
+
+  /// Current location formatted as a geotagged [LocationPoint].
+  LocationPoint get locationPoint => LocationPoint.withGeotag(
+        latitude: _latitude,
+        longitude: _longitude,
+        address: '',
+      );
 
   /// Waits for the first genuine GPS fix (or times out). Returns null on
   /// timeout / denied permission. Callers should not fall back to invented

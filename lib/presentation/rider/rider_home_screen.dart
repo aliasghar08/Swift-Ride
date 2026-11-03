@@ -2759,15 +2759,28 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             safetyProv: safetyProv,
                             rideProv: rideProv,
                           );
+                          if (url != null) {
+                            await Clipboard.setData(ClipboardData(text: url));
+                          }
                           if (!mounted || !context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                url != null ? 'Trip share link ready: $url' : 'We could not create a share link. Check your connection and try again.',
+                                url != null
+                                    ? 'Trip share link copied to clipboard:\n$url'
+                                    : 'We could not create a share link. Check your connection and try again.',
                               ),
                               backgroundColor: url != null
                                   ? AppTheme.primaryBlue
                                   : AppTheme.sunsetCoral,
+                              duration: const Duration(seconds: 4),
+                              action: url != null
+                                  ? SnackBarAction(
+                                      label: 'COPIED',
+                                      textColor: AppTheme.accentCyan,
+                                      onPressed: () {},
+                                    )
+                                  : null,
                             ),
                           );
                         },

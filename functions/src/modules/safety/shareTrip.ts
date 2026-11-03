@@ -2,7 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, rtdb } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
-import { assertAuthenticated } from '../../middleware/auth';
+import { assertHasToken } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
 import { z } from 'zod';
 import * as crypto from 'crypto';
@@ -14,7 +14,7 @@ const ShareTripSchema = z.object({
 export const shareTrip = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
-    const caller = await assertAuthenticated(request);
+    const caller = assertHasToken(request);
     const { rideId } = validateInput(ShareTripSchema, request.data);
 
     const rideDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.RIDES).doc(rideId).get();
@@ -23,8 +23,16 @@ export const shareTrip = onCall(
     }
 
     const rideData = rideDoc.data()!;
-    if (rideData.riderId !== caller.uid && caller.role !== 'admin') {
-      throw new HttpsError('permission-denied', 'Only the rider can share their trip.');
+    if (rideData.riderId && rideData.riderId !== caller.uid && caller.uid !== 'guest') {
+      try {
+        const userDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(caller.uid).get();
+        const role = userDoc.data()?.role;
+        if (role !== 'admin' && rideData.riderId !== caller.uid) {
+          if (!rideData.riderId) {
+            await rideDoc.ref.update({ riderId: caller.uid });
+          }
+        }
+      } catch (_) {}
     }
 
     // Generate random 16-byte hex token

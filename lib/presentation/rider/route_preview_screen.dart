@@ -33,6 +33,8 @@ class RoutePreviewScreen extends StatefulWidget {
 
 class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
   GoogleMapController? _mapController;
+  late final DraggableScrollableController _sheetController;
+  ScrollController? _activeScrollController;
   late int _selectedRouteIndex;
   int? _selectedStepIndex;
 
@@ -46,9 +48,16 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
   @override
   void initState() {
     super.initState();
+    _sheetController = DraggableScrollableController();
     MapMarkers.ensureOriginDot();
     _selectedRouteIndex =
         widget.viewModel?.selectedRouteIndex ?? widget.initialRouteIndex;
+  }
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
   }
 
   void _selectRoute(int index) {
@@ -90,11 +99,30 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
     );
   }
 
-  void _focusStep(int stepIndex, RouteOption route) {
+  void _focusStep(int stepIndex, RouteOption route, {bool minimize = true}) {
     if (stepIndex < 0 || stepIndex >= route.steps.length) return;
     setState(() {
       _selectedStepIndex = stepIndex;
     });
+
+    // Minimize directions sheet so both direction text and map turn are simultaneously visible
+    if (minimize && _sheetController.isAttached) {
+      _sheetController.animateTo(
+        0.22,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    if (minimize &&
+        _activeScrollController != null &&
+        _activeScrollController!.hasClients) {
+      _activeScrollController!.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    }
 
     final step = route.steps[stepIndex];
     LatLng? targetLoc = step.startLocation;
@@ -114,10 +142,30 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
         CameraUpdate.newCameraPosition(
           CameraPosition(
             target: targetLoc,
-            zoom: 16.5,
-            tilt: 30,
+            zoom: 17.0,
+            tilt: 25,
           ),
         ),
+      );
+    }
+  }
+
+  void _clearFocusedStep(RouteOption? route) {
+    setState(() {
+      _selectedStepIndex = null;
+    });
+    if (route != null) {
+      _fitRoute(route);
+    }
+    _expandSheet(0.60);
+  }
+
+  void _expandSheet([double size = 0.60]) {
+    if (_sheetController.isAttached) {
+      _sheetController.animateTo(
+        size,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -387,10 +435,14 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
 
           // 2. Draggable Google Maps Fidelity Directions Sheet
           DraggableScrollableSheet(
+            controller: _sheetController,
             initialChildSize: 0.60,
-            minChildSize: 0.22,
+            minChildSize: 0.20,
             maxChildSize: 0.92,
+            snap: true,
+            snapSizes: const [0.22, 0.60, 0.92],
             builder: (context, scrollController) {
+              _activeScrollController = scrollController;
               return Container(
                 decoration: BoxDecoration(
                   color: AppTheme.primaryNavy.withValues(alpha: 0.97),
@@ -409,18 +461,41 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                   controller: scrollController,
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   children: [
-                    // Handle Bar
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white38,
-                          borderRadius: BorderRadius.circular(2),
+                    // Handle Bar with tap to toggle expand/minimize
+                    InkWell(
+                      onTap: () {
+                        if (_selectedStepIndex != null) {
+                          _expandSheet(0.60);
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Center(
+                          child: Container(
+                            width: 44,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.white38,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 10),
+
+                    // Active Step Card shown when a direction is clicked
+                    if (selected != null &&
+                        _selectedStepIndex != null &&
+                        _selectedStepIndex! < selected.steps.length) ...[
+                      _buildActiveStepCard(
+                        step: selected.steps[_selectedStepIndex!],
+                        stepIndex: _selectedStepIndex!,
+                        totalSteps: selected.steps.length,
+                        selected: selected,
+                      ),
+                      const SizedBox(height: 14),
+                    ],
 
                     // Top Route Overview & ETA
                     if (selected != null) ...[
@@ -734,7 +809,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                               final nextIdx = (_selectedStepIndex == null)
                                   ? 0
                                   : (_selectedStepIndex! + 1) % selected.steps.length;
-                              _focusStep(nextIdx, selected);
+                              _focusStep(nextIdx, selected, minimize: false);
                             },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
@@ -792,6 +867,202 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                   ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveStepCard({
+    required RouteStep step,
+    required int stepIndex,
+    required int totalSteps,
+    required RouteOption selected,
+  }) {
+    return Container(
+      key: const ValueKey('active_step_card'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.accentCyan.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.accentCyan.withValues(alpha: 0.15),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top metadata bar: Turn indicator + All Turns / Close action
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentCyan.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'TURN ${stepIndex + 1} OF $totalSteps',
+                  style: const TextStyle(
+                    color: AppTheme.accentCyan,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  InkWell(
+                    onTap: () => _expandSheet(0.60),
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      child: Row(
+                        children: [
+                          Icon(Icons.list_alt_rounded, size: 14, color: Colors.white70),
+                          SizedBox(width: 4),
+                          Text(
+                            'All Turns',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          SizedBox(width: 2),
+                          Icon(Icons.keyboard_arrow_up_rounded, size: 16, color: Colors.white70),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  InkWell(
+                    onTap: () => _clearFocusedStep(selected),
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close_rounded, size: 16, color: Colors.white54),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Maneuver Icon + Instruction Content + Step Prev/Next Arrows
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppTheme.accentCyan,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.accentCyan.withValues(alpha: 0.4),
+                      blurRadius: 8,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  _maneuverIcon(step.maneuver),
+                  color: AppTheme.primaryNavy,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.primaryInstruction,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          step.distanceText,
+                          style: const TextStyle(
+                            color: AppTheme.accentCyan,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (step.secondaryInstruction != null &&
+                            step.secondaryInstruction!.isNotEmpty)
+                          Text(
+                            '· ${step.secondaryInstruction}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11.5,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                    icon: Icon(
+                      Icons.chevron_left_rounded,
+                      color: stepIndex > 0 ? Colors.white : Colors.white24,
+                      size: 26,
+                    ),
+                    onPressed: stepIndex > 0
+                        ? () => _focusStep(stepIndex - 1, selected)
+                        : null,
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+                    icon: Icon(
+                      Icons.chevron_right_rounded,
+                      color: stepIndex < totalSteps - 1
+                          ? Colors.white
+                          : Colors.white24,
+                      size: 26,
+                    ),
+                    onPressed: stepIndex < totalSteps - 1
+                        ? () => _focusStep(stepIndex + 1, selected)
+                        : null,
+                  ),
+                ],
+              ),
+            ],
           ),
         ],
       ),

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'native_map_service.dart';
 import '../core/utils/distance_calculator.dart';
 import '../domain/models/ride_model.dart';
+import '../domain/models/vehicle_type.dart';
 
 /// Represents a candidate ride along an active driver's route corridor.
 class EnRouteMatch {
@@ -119,6 +120,12 @@ class RouteCorridorService {
     double fuelPricePkr = defaultFuelPricePkr,
     double kmPerLiter = defaultKmPerLiter,
   }) {
+    // 0. Shared ride corridor is strictly for cars
+    if (VehicleTypeX.fromString(activeRide.vehicleType) != VehicleType.car ||
+        VehicleTypeX.fromString(candidateRide.vehicleType) != VehicleType.car) {
+      return null;
+    }
+
     // 1. Must have empty seats remaining
     if (candidateRide.bookedSeats > activeRide.emptySeats) {
       return null;
@@ -197,7 +204,10 @@ class RouteCorridorService {
     double fuelPricePkr = defaultFuelPricePkr,
     double kmPerLiter = defaultKmPerLiter,
   }) {
-    if (!activeRide.hasEmptySeats || activeRide.emptySeats <= 0) {
+    // Shared ride corridor is strictly for cars
+    if (VehicleTypeX.fromString(activeRide.vehicleType) != VehicleType.car ||
+        !activeRide.hasEmptySeats ||
+        activeRide.emptySeats <= 0) {
       return const [];
     }
 

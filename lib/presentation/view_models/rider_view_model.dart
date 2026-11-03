@@ -141,8 +141,9 @@ class RiderViewModel extends ChangeNotifier {
   }
 
   /// Toggles selection of a specific seat position, allowing multi-seat selection
-  /// up to [_bookedSeats] when multiple seats are booked.
+  /// up to [_bookedSeats] when multiple seats are booked (Cars only).
   void toggleSeatPosition(String position) {
+    if (_selectedVehicleType != VehicleType.car) return;
     if (_bookedSeats == 4) return;
 
     final updated = List<String>.from(_selectedSeatPositions);
@@ -182,7 +183,10 @@ class RiderViewModel extends ChangeNotifier {
     if (_bookedSeats != clamped) {
       _bookedSeats = clamped;
 
-      if (_bookedSeats == 4) {
+      if (_selectedVehicleType != VehicleType.car) {
+        _selectedSeatPositions = const ['Any Seat'];
+        _seatPreference = 'Any Seat';
+      } else if (_bookedSeats == 4) {
         _selectedSeatPositions = const ['Entire Car (All 4 Seats)'];
         _seatPreference = 'Entire Car (All 4 Seats)';
       } else {
@@ -259,6 +263,10 @@ class RiderViewModel extends ChangeNotifier {
   void selectVehicleType(VehicleType type) {
     _selectedVehicleType = type;
     _bookedSeats = _bookedSeats.clamp(1, type.seats);
+    if (type != VehicleType.car) {
+      _selectedSeatPositions = const ['Any Seat'];
+      _seatPreference = 'Any Seat';
+    }
     final fare = _vehicleFares[type] ?? type.calculateFare(suggestedFare);
     fareController.text = fare.round().toString();
     _fareTouchedByUser = false;

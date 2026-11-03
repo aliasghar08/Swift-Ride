@@ -1430,31 +1430,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 4),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.people_alt_rounded, size: 10, color: AppTheme.emeraldGreen),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        request.bookedSeats > 1
-                                            ? '${request.bookedSeats} Passengers Along'
-                                            : '1 Seat',
-                                        style: TextStyle(
-                                          fontSize: layout.fontSize(9.5),
-                                          fontWeight: FontWeight.w800,
-                                          color: AppTheme.emeraldGreen,
+                                if (VehicleTypeX.fromString(request.vehicleType) == VehicleType.car) ...[
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.people_alt_rounded, size: 10, color: AppTheme.emeraldGreen),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          request.bookedSeats > 1
+                                              ? '${request.bookedSeats} Passengers Along'
+                                              : '1 Seat',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(9.5),
+                                            fontWeight: FontWeight.w800,
+                                            color: AppTheme.emeraldGreen,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ],
@@ -2036,48 +2038,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.emeraldGreen),
-                      const SizedBox(width: 4),
-                      Text(
-                        ride.bookedSeats > 1
-                            ? '${ride.bookedSeats} Passengers Along'
-                            : '1 Seat',
-                        style: TextStyle(
-                          color: AppTheme.emeraldGreen,
-                          fontWeight: FontWeight.w700,
-                          fontSize: layout.fontSize(11),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (ride.emptySeats > 0) ...[
+                if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.airline_seat_recline_extra_rounded, size: 12, color: AppTheme.accentCyan),
+                        const Icon(Icons.people_alt_rounded, size: 12, color: AppTheme.emeraldGreen),
                         const SizedBox(width: 4),
                         Text(
-                          '${ride.emptySeats} Empty',
+                          ride.bookedSeats > 1
+                              ? '${ride.bookedSeats} Passengers Along'
+                              : '1 Seat',
                           style: TextStyle(
-                            color: AppTheme.accentCyan,
+                            color: AppTheme.emeraldGreen,
                             fontWeight: FontWeight.w700,
                             fontSize: layout.fontSize(11),
                           ),
@@ -2085,6 +2064,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ],
                     ),
                   ),
+                  if (ride.emptySeats > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentCyan.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.airline_seat_recline_extra_rounded, size: 12, color: AppTheme.accentCyan),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${ride.emptySeats} Empty',
+                            style: TextStyle(
+                              color: AppTheme.accentCyan,
+                              fontWeight: FontWeight.w700,
+                              fontSize: layout.fontSize(11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -2195,8 +2199,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             );
           },
         ),
-        // En-Route Co-Riders (Carpool Corridor with Empty Seats)
-        if (ride.emptySeats > 0)
+        // En-Route Co-Riders (Carpool Corridor with Empty Seats - Cars Only)
+        if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car && ride.emptySeats > 0)
           Builder(
             builder: (ctx) {
               final cachedPlan = _viewModel.getCachedRoutePlan(ride.id);

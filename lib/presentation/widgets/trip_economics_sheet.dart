@@ -415,16 +415,16 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                   const SizedBox(height: 8),
                   Text(
                     vType == VehicleType.bike
-                        ? '1 Passenger Seat (Solo Rider • Fastest in traffic)'
+                        ? '1 Passenger Seat (Solo Rider • Direct Trip)'
                         : vType == VehicleType.rikshaw
-                            ? 'Up to 2 Passenger Seats (Economical Local Ride)'
-                            : 'Up to 4 Passenger Seats (Air Conditioned Comfort)',
+                            ? 'Private Auto Rikshaw (Direct Trip)'
+                            : 'Shared Carpool (1-3 Seats) or Entire Car (4 Seats)',
                     style: TextStyle(
                       fontSize: layout.fontSize(11),
                       color: AppTheme.slateMuted,
                     ),
                   ),
-                  if (widget.onSeatCountChanged != null && vType.seats > 1) ...[
+                  if (widget.onSeatCountChanged != null && vType == VehicleType.car) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: List.generate(vType.seats, (idx) {

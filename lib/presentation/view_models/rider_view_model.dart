@@ -281,26 +281,32 @@ class RiderViewModel extends ChangeNotifier {
   /// invented coordinates — if the caller couldn't get a fix, it should not
   /// call this at all.
   Future<void> initializeFromCoordinates(double lat, double lng) async {
-    // Accept the coordinates verbatim. Previously this rewrote anything that
-    // matched a Cupertino/SF bounding box to Islamabad, which broke for any
-    // real user actually in that region.
+    // Accept the coordinates verbatim.
     _pickupLocation = LocationPoint(
       latitude: lat,
       longitude: lng,
       address: 'Current Location',
     );
     _hasPickupFromGps = true;
+
+    // Immediately populate the pickup input text so the user never sees a blank bar
+    // while waiting for background geocoding.
+    if (pickupController.text.trim().isEmpty ||
+        pickupController.text == 'Current Location') {
+      pickupController.text = 'Current Location';
+    }
+
+    // Trigger route calculation immediately without waiting for reverse-geocoding
+    _recalculateRouteIfPossible();
     notifyListeners();
 
-    // Reverse geocode in the background; if it fails, leave the generic
-    // "Current Location" string alone rather than inventing a place name.
+    // Reverse geocode in the background; when it resolves, update the text to the precise address.
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
       if (_isDisposed) return;
-      if (realAddress.isNotEmpty) {
+      if (realAddress.isNotEmpty && !realAddress.startsWith('Location (')) {
         pickupController.text = realAddress;
         _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
-        _recalculateRouteIfPossible();
         notifyListeners();
       }
     } catch (e) {

@@ -126,8 +126,8 @@ class NativeLocationService(
     }
 
     /**
-     * Obtains the highest-accuracy fresh location using FusedLocationProviderClient,
-     * falling back to LocationManager if Play Services is unavailable.
+     * Obtains location using FusedLocationProviderClient with fast-path on-device cache,
+     * tight timeouts, and immediate fallback to LocationManager to prevent hangs on slow networks.
      */
     private fun fetchCurrentLocation(result: MethodChannel.Result) {
         if (!hasLocationPermission()) {
@@ -135,56 +135,101 @@ class NativeLocationService(
             return
         }
 
+        var completed = false
+        val handler = Handler(Looper.getMainLooper())
+
+        val sendSuccess: (Location) -> Unit = { loc ->
+            if (!completed) {
+                completed = true
+                result.success(serializeLocation(loc))
+            }
+        }
+
+        // 1. FAST-PATH: Return immediate valid cached location (< 15 min old, accuracy <= 1000m) instantly (0-5ms)
+        // This avoids blocking or hanging when mobile data is on 2G/3G/spotty network.
+        try {
+            fusedClient.lastLocation.addOnSuccessListener { lastLoc: Location? ->
+                if (lastLoc != null && !completed) {
+                    val age = System.currentTimeMillis() - lastLoc.time
+                    if (age < 15 * 60_000L && lastLoc.accuracy in 0f..1000f) {
+                        sendSuccess(lastLoc)
+                        // Trigger background fresh fix silently to refine accuracy
+                        try {
+                            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                        } catch (_: Exception) {}
+                        return@addOnSuccessListener
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        // 2. FRESH FIX with responsive 4-second timeout
         try {
             val cancellationTokenSource = CancellationTokenSource()
+            val fusedTimeoutRunnable = Runnable {
+                if (!completed) {
+                    cancellationTokenSource.cancel()
+                    fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
+                }
+            }
+            handler.postDelayed(fusedTimeoutRunnable, 4_000L)
+
             fusedClient.getCurrentLocation(
                 Priority.PRIORITY_HIGH_ACCURACY,
                 cancellationTokenSource.token
             ).addOnSuccessListener { location: Location? ->
-                if (location != null) {
-                    result.success(serializeLocation(location))
-                } else {
-                    fallbackToLocationManager(result)
+                handler.removeCallbacks(fusedTimeoutRunnable)
+                if (location != null && !completed) {
+                    sendSuccess(location)
+                } else if (!completed) {
+                    fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
                 }
             }.addOnFailureListener {
-                fallbackToLocationManager(result)
+                handler.removeCallbacks(fusedTimeoutRunnable)
+                if (!completed) {
+                    fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
+                }
             }
-
-            // Safety timeout after 10 seconds
-            Handler(Looper.getMainLooper()).postDelayed({
-                cancellationTokenSource.cancel()
-            }, 10_000L)
         } catch (_: SecurityException) {
-            fallbackToLocationManager(result)
+            fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
         } catch (_: Exception) {
-            fallbackToLocationManager(result)
+            fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
         }
     }
 
-    private fun fallbackToLocationManager(result: MethodChannel.Result) {
+    private fun fallbackToLocationManager(
+        result: MethodChannel.Result,
+        onCompleted: () -> Boolean = { false },
+        onFinish: () -> Unit = {}
+    ) {
+        if (onCompleted()) return
+
         val lm = activity.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
         if (lm == null) {
+            onFinish()
             result.error("NO_LOCATION_SERVICE", "LocationManager unavailable", null)
             return
         }
 
-        // Try cached location first
+        // Try cached location first - if any reasonable cached fix is available, return immediately!
         val cached = bestLastKnownLocation(lm)
-        if (cached != null &&
-            System.currentTimeMillis() - cached.time < 15 * 60_000L &&
-            cached.accuracy in 0f..500f
-        ) {
-            result.success(serializeLocation(cached))
-            return
+        if (cached != null) {
+            val age = System.currentTimeMillis() - cached.time
+            if (age < 30 * 60_000L && cached.accuracy in 0f..1500f) {
+                onFinish()
+                result.success(serializeLocation(cached))
+                return
+            }
         }
 
-        // Request single update
-        var completed = false
+        // Request single update with tight 4-second timeout
+        var updateReceived = false
         val handler = Handler(Looper.getMainLooper())
         val listener = object : android.location.LocationListener {
             override fun onLocationChanged(loc: Location) {
-                if (!completed) {
-                    completed = true
+                if (!updateReceived && !onCompleted()) {
+                    updateReceived = true
+                    onFinish()
                     try { lm.removeUpdates(this) } catch (_: Exception) {}
                     result.success(serializeLocation(loc))
                 }
@@ -205,18 +250,21 @@ class NativeLocationService(
                 lm.requestSingleUpdate(LocationManager.NETWORK_PROVIDER, listener, Looper.getMainLooper())
             }
         } catch (_: Exception) {
-            val best = bestLastKnownLocation(lm)
-            if (best != null) {
+            val best = bestLastKnownLocation(lm) ?: cached
+            if (best != null && !onCompleted()) {
+                onFinish()
                 result.success(serializeLocation(best))
-            } else {
+            } else if (!onCompleted()) {
+                onFinish()
                 result.error("LOCATION_UNAVAILABLE", "Cannot obtain location fix", null)
             }
             return
         }
 
         handler.postDelayed({
-            if (!completed) {
-                completed = true
+            if (!updateReceived && !onCompleted()) {
+                updateReceived = true
+                onFinish()
                 try { lm.removeUpdates(listener) } catch (_: Exception) {}
                 val fallback = bestLastKnownLocation(lm) ?: cached
                 if (fallback != null) {
@@ -225,7 +273,7 @@ class NativeLocationService(
                     result.error("LOCATION_TIMEOUT", "No GPS fix within timeout", null)
                 }
             }
-        }, 12_000L)
+        }, 4_000L)
     }
 
     private fun bestLastKnownLocation(lm: LocationManager): Location? {

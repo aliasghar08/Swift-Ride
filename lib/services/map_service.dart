@@ -8,6 +8,7 @@ import 'native_map_service.dart';
 import 'package:swiftride/services/location_service.dart';
 
 import '../core/constants/app_constants.dart';
+import '../core/utils/distance_calculator.dart';
 import 'coordinate_parser.dart';
 import 'polyline_service.dart';
 
@@ -390,6 +391,9 @@ class MapService {
   static MapService get instance => _instance;
   MapService._internal();
 
+  /// In-memory cache for reverse-geocoded addresses keyed by lat/lng rounded to 4 decimals (~11m).
+  static final Map<String, String> _reverseGeocodeCache = <String, String>{};
+
 
 
   Future<LatLng?> getCurrentPosition() async {
@@ -581,11 +585,12 @@ class MapService {
   }
 
   Future<String?> _fetchPlacesNearbyReverseGeocode(double lat, double lng) async {
+    HttpClient? client;
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places:searchNearby');
-      final req = await client.postUrl(url);
+      final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
       const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
@@ -609,9 +614,9 @@ class MapService {
         'maxResultCount': 5,
       });
       req.write(body);
-      final resp = await req.close();
+      final resp = await req.close().timeout(const Duration(milliseconds: 2500));
       if (resp.statusCode == 200) {
-        final respBody = await resp.transform(utf8.decoder).join();
+        final respBody = await resp.transform(utf8.decoder).join().timeout(const Duration(milliseconds: 2500));
         final data = jsonDecode(respBody) as Map<String, dynamic>;
         final places = data['places'] as List?;
         if (places != null && places.isNotEmpty) {
@@ -627,6 +632,8 @@ class MapService {
       }
     } catch (e) {
       debugPrint('[MapService] Places API New searchNearby error: $e');
+    } finally {
+      client?.close();
     }
     return null;
   }
@@ -636,11 +643,12 @@ class MapService {
     double? lat,
     double? lng,
   }) async {
+    HttpClient? client;
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places:searchText');
-      final req = await client.postUrl(url);
+      final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
       const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
@@ -667,9 +675,9 @@ class MapService {
       }
 
       req.write(jsonEncode(reqData));
-      final resp = await req.close();
+      final resp = await req.close().timeout(const Duration(milliseconds: 2500));
       if (resp.statusCode == 200) {
-        final respBody = await resp.transform(utf8.decoder).join();
+        final respBody = await resp.transform(utf8.decoder).join().timeout(const Duration(milliseconds: 2500));
         final data = jsonDecode(respBody) as Map<String, dynamic>;
         final places = data['places'] as List?;
         if (places != null && places.isNotEmpty) {
@@ -696,27 +704,30 @@ class MapService {
       }
     } catch (e) {
       debugPrint('[MapService] Places API New searchText error: $e');
+    } finally {
+      client?.close();
     }
     return null;
   }
 
   Future<String?> _fetchGoogleReverseGeocode(double lat, double lng) async {
+    HttpClient? client;
     try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2500);
       const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
       final url = Uri.parse(
         'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$apiKey',
       );
-      final req = await client.getUrl(url);
+      final req = await client.getUrl(url).timeout(const Duration(milliseconds: 2500));
       if (Platform.isIOS) {
         req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
       } else if (Platform.isAndroid) {
         req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
       }
-      final resp = await req.close();
+      final resp = await req.close().timeout(const Duration(milliseconds: 2500));
       if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
+        final body = await resp.transform(utf8.decoder).join().timeout(const Duration(milliseconds: 2500));
         final data = jsonDecode(body) as Map<String, dynamic>;
         if (data['status'] == 'OK' && data['results'] is List) {
           final results = data['results'] as List;
@@ -726,6 +737,8 @@ class MapService {
       }
     } catch (e) {
       debugPrint('[MapService] Direct Google reverse geocode error: $e');
+    } finally {
+      client?.close();
     }
     return null;
   }
@@ -829,28 +842,60 @@ class MapService {
   }
 
   Future<String> reverseGeocode(double lat, double lng) async {
-    // 1. Google Places API (New) Nearby Search with rich building/shop/house precision
-    final nearby = await _fetchPlacesNearbyReverseGeocode(lat, lng);
-    if (nearby != null &&
-        nearby.trim().isNotEmpty &&
-        !nearby.startsWith('Location (')) {
-      return nearby;
+    final cacheKey = '${lat.toStringAsFixed(4)},${lng.toStringAsFixed(4)}';
+    final cached = _reverseGeocodeCache[cacheKey];
+    if (cached != null && cached.isNotEmpty) {
+      return cached;
     }
 
-    // 2. Direct Google Geocoding API with rooftop & property/house precision
-    final directGoogle = await _fetchGoogleReverseGeocode(lat, lng);
-    if (directGoogle != null && directGoogle.trim().isNotEmpty && !directGoogle.startsWith('Location (')) {
-      return directGoogle;
-    }
-
-    // 3. Firebase Functions (with server-side buildPrecisePropertyAddress)
-    if (Firebase.apps.isNotEmpty) {
-      if (FirebaseAuth.instance.currentUser == null) {
-        try {
-          await FirebaseAuth.instance.signInAnonymously();
-        } catch (_) {}
+    // 1. FAST-PATH: Native OS Geocoder (Android Geocoder / iOS CLGeocoder)
+    // Runs locally or via system location daemon; fastest & immune to HTTP stack stalls.
+    try {
+      final nativeAddr = await NativeMapService.instance
+          .reverseGeocode(lat, lng)
+          .timeout(const Duration(milliseconds: 1800));
+      if (nativeAddr != null &&
+          nativeAddr.trim().isNotEmpty &&
+          !nativeAddr.startsWith('Location (')) {
+        _reverseGeocodeCache[cacheKey] = nativeAddr.trim();
+        return nativeAddr.trim();
       }
+    } catch (_) {}
+
+    // 2. Google Places API (New) Nearby Search with rich building/shop/house precision
+    try {
+      final nearby = await _fetchPlacesNearbyReverseGeocode(lat, lng)
+          .timeout(const Duration(milliseconds: 2500));
+      if (nearby != null &&
+          nearby.trim().isNotEmpty &&
+          !nearby.startsWith('Location (')) {
+        _reverseGeocodeCache[cacheKey] = nearby.trim();
+        return nearby.trim();
+      }
+    } catch (_) {}
+
+    // 3. Direct Google Geocoding API with rooftop & property/house precision
+    try {
+      final directGoogle = await _fetchGoogleReverseGeocode(lat, lng)
+          .timeout(const Duration(milliseconds: 2500));
+      if (directGoogle != null &&
+          directGoogle.trim().isNotEmpty &&
+          !directGoogle.startsWith('Location (')) {
+        _reverseGeocodeCache[cacheKey] = directGoogle.trim();
+        return directGoogle.trim();
+      }
+    } catch (_) {}
+
+    // 4. Firebase Functions (with server-side buildPrecisePropertyAddress)
+    if (Firebase.apps.isNotEmpty) {
       try {
+        if (FirebaseAuth.instance.currentUser == null) {
+          try {
+            await FirebaseAuth.instance
+                .signInAnonymously()
+                .timeout(const Duration(seconds: 2));
+          } catch (_) {}
+        }
         final res = await FirebaseFunctions.instance
             .httpsCallable('reverseGeocode')
             .call(<String, dynamic>{
@@ -858,74 +903,91 @@ class MapService {
               'longitude': lng,
               'lat': lat,
               'lng': lng,
-            });
+            })
+            .timeout(const Duration(milliseconds: 2500));
         final address = (res.data['address'] as String?) ??
             (res.data['formattedAddress'] as String?);
         if (address != null &&
             address.trim().isNotEmpty &&
             !address.startsWith('Pinned Spot') &&
             !address.startsWith('Location (')) {
-          return address;
+          _reverseGeocodeCache[cacheKey] = address.trim();
+          return address.trim();
         }
       } catch (e) {
-        debugPrint('[MapService] reverseGeocode failed: $e');
+        debugPrint('[MapService] Firebase Functions reverseGeocode error: $e');
       }
     }
 
-    // 4. Native OS Geocoder fallback (Android Geocoder / iOS CLGeocoder with plot & street details)
+    // 5. OpenStreetMap Nominatim reverse geocode with 2s strict timeout
+    HttpClient? client;
     try {
-      final nativeAddr = await NativeMapService.instance.reverseGeocode(lat, lng);
-      if (nativeAddr != null &&
-          nativeAddr.trim().isNotEmpty &&
-          !nativeAddr.startsWith('Location (')) {
-        return nativeAddr;
-      }
-    } catch (_) {}
-
-    // 5. OpenStreetMap Nominatim reverse geocode for rich plot, house, street and neighborhood details
-    try {
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 4);
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 2);
       final url = Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=$lat&lon=$lng&zoom=18&addressdetails=1',
       );
-      final req = await client.getUrl(url);
+      final req = await client.getUrl(url).timeout(const Duration(seconds: 2));
       req.headers.set('User-Agent', 'SwiftRideApp/1.0 (RideHailing)');
-      final resp = await req.close();
+      final resp = await req.close().timeout(const Duration(seconds: 2));
       if (resp.statusCode == 200) {
-        final body = await resp.transform(utf8.decoder).join();
+        final body = await resp
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 2));
         final data = jsonDecode(body) as Map<String, dynamic>;
         final addr = data['address'] as Map<String, dynamic>?;
         if (addr != null) {
-          final houseNumber = (addr['house_number'] ?? addr['house_name'] ?? '') as String;
-          final road = (addr['road'] ?? addr['street'] ?? addr['pedestrian'] ?? '') as String;
-          final neighbourhood = (addr['neighbourhood'] ?? addr['suburb'] ?? addr['residential'] ?? '') as String;
-          final city = (addr['city'] ?? addr['town'] ?? addr['village'] ?? '') as String;
+          final houseNumber =
+              (addr['house_number'] ?? addr['house_name'] ?? '') as String;
+          final road = (addr['road'] ??
+              addr['street'] ??
+              addr['pedestrian'] ??
+              '') as String;
+          final neighbourhood = (addr['neighbourhood'] ??
+              addr['suburb'] ??
+              addr['residential'] ??
+              '') as String;
+          final city =
+              (addr['city'] ?? addr['town'] ?? addr['village'] ?? '') as String;
 
           final parts = <String>[];
           if (houseNumber.isNotEmpty) {
-            final isPureNum = RegExp(r'^\d+[A-Za-z]?$').hasMatch(houseNumber.trim());
-            parts.add(isPureNum ? 'House ${houseNumber.trim()}' : houseNumber.trim());
+            final isPureNum =
+                RegExp(r'^\d+[A-Za-z]?$').hasMatch(houseNumber.trim());
+            parts.add(
+              isPureNum ? 'House ${houseNumber.trim()}' : houseNumber.trim(),
+            );
           }
           if (road.isNotEmpty) parts.add(road);
           if (neighbourhood.isNotEmpty) parts.add(neighbourhood);
           if (city.isNotEmpty && !parts.contains(city)) parts.add(city);
 
           if (parts.isNotEmpty) {
-            return parts.join(', ');
+            final formatted = parts.join(', ');
+            _reverseGeocodeCache[cacheKey] = formatted;
+            return formatted;
           }
         }
         final displayName = data['display_name'] as String?;
         if (displayName != null && displayName.isNotEmpty) {
-          final segments = displayName.split(',').map((s) => s.trim()).take(3).join(', ');
-          if (segments.isNotEmpty) return segments;
+          final segments =
+              displayName.split(',').map((s) => s.trim()).take(3).join(', ');
+          if (segments.isNotEmpty) {
+            _reverseGeocodeCache[cacheKey] = segments;
+            return segments;
+          }
         }
       }
     } catch (e) {
       debugPrint('[MapService] Nominatim reverseGeocode fallback error: $e');
+    } finally {
+      client?.close();
     }
 
-    return 'Location (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
+    final fallback = 'Location (${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)})';
+    _reverseGeocodeCache[cacheKey] = fallback;
+    return fallback;
   }
 
   Future<List<PlaceSuggestion>> searchPlaces(
@@ -942,8 +1004,6 @@ class MapService {
       referenceLat: near?.latitude,
       referenceLng: near?.longitude,
     );
-
-    final remote = await _fetchAutocomplete(trimmed, near);
 
     if (parsed != null) {
       // Asynchronously resolve exact property address using Google Places API (New)
@@ -969,11 +1029,11 @@ class MapService {
         coordinates: coords,
       );
 
-      // Prepend pinned result so it appears as the immediate #1 suggestion
+      final remote = await _fetchAutocomplete(trimmed, near);
       return [pinnedItem, ...remote];
     }
 
-    return remote;
+    return await _fetchAutocomplete(trimmed, near);
   }
 
   Future<List<PlaceSuggestion>> _fetchAutocomplete(
@@ -984,7 +1044,9 @@ class MapService {
       if (Firebase.apps.isNotEmpty) {
         if (FirebaseAuth.instance.currentUser == null) {
           try {
-            await FirebaseAuth.instance.signInAnonymously();
+            await FirebaseAuth.instance
+                .signInAnonymously()
+                .timeout(const Duration(seconds: 2));
           } catch (authErr) {
             debugPrint('[MapService] signInAnonymously failed: $authErr');
           }
@@ -999,7 +1061,8 @@ class MapService {
                   'latitude': near.latitude,
                   'longitude': near.longitude,
                 },
-            });
+            })
+            .timeout(const Duration(seconds: 3));
 
         final predictions = res.data['predictions'];
         if (predictions is List) {
@@ -1017,9 +1080,8 @@ class MapService {
         }
       }
     } catch (e) {
-      debugPrint('[MapService] Remote autocomplete failed: $e');
+      debugPrint('[MapService] _fetchAutocomplete error: $e');
     }
-
     return const [];
   }
 
@@ -1057,35 +1119,109 @@ class MapService {
   }
 
   Future<RoutePlan?> fetchRoute(LatLng origin, LatLng destination) async {
-    // 1. First try Cloud Function
-    RoutePlan? plan = await _fetchRouteFromCloudFunction(origin, destination);
-    if (plan != null &&
-        plan.routes.isNotEmpty &&
-        plan.routes.first.steps.isNotEmpty) {
-      return RoutePlan(
-        routes: _enrichRoutes(plan.routes),
-        defaultIndex: plan.defaultIndex,
-      );
+    // 1. First try Cloud Function with responsive 4s timeout
+    try {
+      final plan = await _fetchRouteFromCloudFunction(origin, destination)
+          .timeout(const Duration(seconds: 4));
+      if (plan != null &&
+          plan.routes.isNotEmpty &&
+          plan.routes.first.steps.isNotEmpty) {
+        return RoutePlan(
+          routes: _enrichRoutes(plan.routes),
+          defaultIndex: plan.defaultIndex,
+        );
+      }
+    } catch (e) {
+      debugPrint('[MapService] Cloud Function route fetch error/timeout: $e');
     }
 
-    // 2. Direct Google Routes API v2 fallback (ensures 100% full detail always)
-    debugPrint('[MapService] Querying direct Google Routes API v2 for detailed directions');
-    final directPlan = await _fetchRouteDirect(origin, destination);
-    if (directPlan != null && directPlan.routes.isNotEmpty) {
-      return RoutePlan(
-        routes: _enrichRoutes(directPlan.routes),
-        defaultIndex: directPlan.defaultIndex,
-      );
+    // 2. Direct Google Routes API v2 fallback with responsive 4s timeout
+    try {
+      debugPrint('[MapService] Querying direct Google Routes API v2 for detailed directions');
+      final directPlan = await _fetchRouteDirect(origin, destination)
+          .timeout(const Duration(seconds: 4));
+      if (directPlan != null && directPlan.routes.isNotEmpty) {
+        return RoutePlan(
+          routes: _enrichRoutes(directPlan.routes),
+          defaultIndex: directPlan.defaultIndex,
+        );
+      }
+    } catch (e) {
+      debugPrint('[MapService] Direct Google Routes API v2 error/timeout: $e');
     }
 
-    if (plan != null && plan.routes.isNotEmpty) {
-      return RoutePlan(
-        routes: _enrichRoutes(plan.routes),
-        defaultIndex: plan.defaultIndex,
-      );
-    }
+    // 3. OFFLINE / POOR NETWORK FALLBACK: Return estimated route immediately
+    // so the app NEVER hangs, freezes, or fails to calculate fare & display directions.
+    return _generateOfflineFallbackRoute(origin, destination);
+  }
 
-    return null;
+  RoutePlan _generateOfflineFallbackRoute(LatLng origin, LatLng destination) {
+    final distKm = DistanceCalculator.estimatedDrivingDistance(
+      origin.latitude,
+      origin.longitude,
+      destination.latitude,
+      destination.longitude,
+    );
+    final durMin = DistanceCalculator.estimatedDurationMinutes(distKm);
+
+    const baseFare = 210.0;
+    const kmRate = 62.0;
+    const minRate = 6.0;
+    const fuelRate = 22.0;
+    const maintRate = 4.0;
+    final fuel = (distKm * fuelRate * 10).round() / 10.0;
+    final maint = (distKm * maintRate * 10).round() / 10.0;
+    const tollCost = 0.0;
+    final driverCost = (fuel + maint + tollCost).round() / 1.0;
+    final rawFare = baseFare + distKm * kmRate + durMin * minRate;
+    final riderFare = ((rawFare / 5.0).round() * 5.0).toDouble();
+    final commission = ((riderFare * 0.02) * 10).round() / 10.0;
+    final driverProfit =
+        (riderFare - driverCost - commission).clamp(0.0, 999999.0);
+    final profitPerMin =
+        (driverProfit / durMin.clamp(1.0, 99999.0) * 10).round() / 10.0;
+
+    final economics = RouteEconomics(
+      fuelCost: fuel,
+      maintenanceCost: maint,
+      tollCost: tollCost,
+      driverCost: driverCost,
+      riderFare: riderFare,
+      commission: commission,
+      driverProfit: driverProfit,
+      profitPerMin: profitPerMin,
+    );
+
+    final route = RouteOption(
+      id: 'offline_fallback_route',
+      polylinePoints: [origin, destination],
+      distanceKm: distKm,
+      durationMin: durMin,
+      staticDurationMin: durMin,
+      summary: 'Direct estimated route',
+      labels: ['ESTIMATED'],
+      trafficLevel: 'NORMAL',
+      trafficIntervals: const [],
+      steps: [
+        RouteStep(
+          maneuver: 'STRAIGHT',
+          instruction: 'Proceed toward destination',
+          primaryInstruction: 'Proceed toward destination',
+          secondaryInstruction: 'Estimated ${distKm.toStringAsFixed(1)} km',
+          distanceKm: distKm,
+          distanceMeters: (distKm * 1000).round(),
+          distanceText: '${distKm.toStringAsFixed(1)} km',
+          durationMin: durMin,
+          durationText: '${durMin.round()} mins',
+          startLocation: origin,
+          isToll: false,
+        ),
+      ],
+      economics: economics,
+      isEstimated: true,
+    );
+
+    return RoutePlan(routes: [route], defaultIndex: 0);
   }
 
   Future<RoutePlan?> _fetchRouteFromCloudFunction(
@@ -1116,7 +1252,8 @@ class MapService {
             },
             'vehicleType': 'CAR',
             'commissionRate': AppConstants.commissionRateYear1,
-          });
+          })
+          .timeout(const Duration(seconds: 4));
 
       final data = res.data as Map<dynamic, dynamic>;
       final rawRoutes = data['routes'];
@@ -1157,11 +1294,11 @@ class MapService {
     HttpClient? client;
     try {
       client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
+      client.connectionTimeout = const Duration(seconds: 4);
       final url = Uri.parse(
         'https://routes.googleapis.com/directions/v2:computeRoutes',
       );
-      final req = await client.postUrl(url);
+      final req = await client.postUrl(url).timeout(const Duration(seconds: 4));
 
       const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
       req.headers.set('Content-Type', 'application/json');
@@ -1212,14 +1349,14 @@ class MapService {
       });
 
       req.write(body);
-      final resp = await req.close();
+      final resp = await req.close().timeout(const Duration(seconds: 4));
       if (resp.statusCode != 200) {
-        final errText = await resp.transform(utf8.decoder).join();
+        final errText = await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 3));
         debugPrint('[MapService._fetchRouteDirect] status=${resp.statusCode}: $errText');
         return null;
       }
 
-      final jsonStr = await resp.transform(utf8.decoder).join();
+      final jsonStr = await resp.transform(utf8.decoder).join().timeout(const Duration(seconds: 4));
       final data = jsonDecode(jsonStr) as Map<String, dynamic>;
       final rawRoutes = data['routes'];
       if (rawRoutes is! List || rawRoutes.isEmpty) return null;

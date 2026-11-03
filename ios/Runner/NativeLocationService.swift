@@ -74,10 +74,10 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 return
             }
 
-            // 1. FAST-PATH: Return immediate valid cached location (< 10 minutes old) instantly
+            // 1. FAST-PATH: Return immediate valid cached location (< 15 minutes old) instantly
             if let loc = lastKnownLocation ?? locationManager.location, loc.horizontalAccuracy >= 0 {
                 let age = abs(loc.timestamp.timeIntervalSinceNow)
-                if age < 600.0 {
+                if age < 900.0 && loc.horizontalAccuracy <= 1000.0 {
                     lastKnownLocation = loc
                     result(Self.serialize(loc))
                     // Trigger a background single-shot location request to refine accuracy silently
@@ -88,7 +88,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 }
             }
 
-            // 2. COLD START: Wait for GPS acquisition with a generous 12-second deadline
+            // 2. COLD START: Wait for GPS acquisition with a responsive 4-second deadline
             let id = UUID()
             pendingLocationRequests.append((id: id, result: result))
 
@@ -100,7 +100,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 locationManager.requestLocation()
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
                 guard let self = self else { return }
                 if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
                     let req = self.pendingLocationRequests.remove(at: idx)

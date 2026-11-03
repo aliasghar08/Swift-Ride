@@ -129,8 +129,23 @@ class LocationService {
     return res ?? false;
   }
 
-  /// Single-shot fetch with explicit status. Never invents coordinates.
+  Future<LocationFetchResult>? _inFlightFetch;
+
+  /// Single-shot fetch with explicit status and deduplication. Never invents coordinates.
   Future<LocationFetchResult> fetchCurrentPositionDetailed() async {
+    if (_inFlightFetch != null) {
+      return _inFlightFetch!;
+    }
+    final future = _doFetchCurrentPositionDetailed();
+    _inFlightFetch = future;
+    try {
+      return await future;
+    } finally {
+      _inFlightFetch = null;
+    }
+  }
+
+  Future<LocationFetchResult> _doFetchCurrentPositionDetailed() async {
     var hasPermission = await checkPermission();
     if (!hasPermission) {
       hasPermission = await requestPermission();

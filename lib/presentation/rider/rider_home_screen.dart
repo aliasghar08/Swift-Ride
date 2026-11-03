@@ -56,6 +56,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   VoidCallback? _locProvListener;
   LocationProvider? _attachedLocProv;
   Timer? _gpsFallbackTimer;
+  Timer? _locDebounceTimer;
 
   // Choose on Map & Camera Pinning State
   bool _isPinningOnMap = false;
@@ -155,14 +156,18 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         if (!mounted || _userCustomPickup) return;
         if (locProv.hasRealFix) {
           final cur = _viewModel.pickupLocation;
-          // Update pickup if unset or if user position changed significantly (> 20 meters)
+          // Update pickup if unset or if user position changed significantly (> 50 meters)
           if (cur == null ||
-              (cur.latitude - locProv.latitude).abs() > 0.0002 ||
-              (cur.longitude - locProv.longitude).abs() > 0.0002) {
-            _viewModel.initializeFromCoordinates(
-              locProv.latitude,
-              locProv.longitude,
-            );
+              (cur.latitude - locProv.latitude).abs() > 0.0005 ||
+              (cur.longitude - locProv.longitude).abs() > 0.0005) {
+            _locDebounceTimer?.cancel();
+            _locDebounceTimer = Timer(const Duration(milliseconds: 500), () {
+              if (!mounted || _userCustomPickup) return;
+              _viewModel.initializeFromCoordinates(
+                locProv.latitude,
+                locProv.longitude,
+              );
+            });
             if (!_userMovedMap && _mapController != null && _viewModel.dropoffLocation == null) {
               _mapController!.animateCamera(
                 CameraUpdate.newLatLng(
@@ -400,6 +405,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   @override
   void dispose() {
     _gpsFallbackTimer?.cancel();
+    _locDebounceTimer?.cancel();
     _cameraIdleDebounce?.cancel();
     if (_locProvListener != null && _attachedLocProv != null) {
       _attachedLocProv!.removeListener(_locProvListener!);

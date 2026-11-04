@@ -43,15 +43,15 @@ class RideOffer {
         : map['vehicleSummary'] ?? 'Toyota Camry (Silver)';
 
     return RideOffer(
-      id: docId ?? map['id'] ?? '',
-      rideId: map['rideId'] ?? '',
-      driverId: map['driverId'] ?? '',
-      driverName: map['driverName'] ?? 'Driver Partner',
+      id: docId ?? map['id']?.toString() ?? '',
+      rideId: map['rideId']?.toString() ?? '',
+      driverId: map['driverId']?.toString() ?? '',
+      driverName: map['driverName']?.toString() ?? 'Driver Partner',
       counterFare: (map['counterFare'] as num?)?.toDouble() ?? 10.0,
       etaMinutes: (map['etaMinutes'] as num?)?.toInt() ?? 5,
       vehicleSummary: summary,
       driverRating: (map['driverRating'] as num?)?.toDouble() ?? 4.9,
-      status: map['status'] ?? 'PENDING',
+      status: map['status']?.toString() ?? 'PENDING',
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

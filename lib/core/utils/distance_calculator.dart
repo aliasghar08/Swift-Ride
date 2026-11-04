@@ -40,16 +40,23 @@ class DistanceCalculator {
   }
 
   /// Computes suggested fare based on SwiftRide PKR formula, rounded to nearest 10 PKR.
+  /// Defensive against NaN, infinite, or negative inputs with a minimum floor of [AppConstants.baseFare].
   static double calculateSuggestedFare(double distanceKm, double durationMin) {
+    final safeDist = (distanceKm.isNaN || distanceKm.isInfinite || distanceKm < 0) ? 0.0 : distanceKm;
+    final safeDur = (durationMin.isNaN || durationMin.isInfinite || durationMin < 0) ? 0.0 : durationMin;
     final rawFare = AppConstants.baseFare +
-        (distanceKm * AppConstants.perKmFare) +
-        (durationMin * AppConstants.perMinFare);
-    return ((rawFare / 10).round() * 10).toDouble();
+        (safeDist * AppConstants.perKmFare) +
+        (safeDur * AppConstants.perMinFare);
+    final roundedFare = ((rawFare / 10).round() * 10).toDouble();
+    return max(AppConstants.baseFare, roundedFare);
   }
 
-  /// Computes money saved by driver due to SwiftRide 2% commission vs 13% incumbent commission (11% savings).
+  /// Computes money saved by driver due to SwiftRide permanent 2% commission vs 13% incumbent commission (11% savings).
   static double calculateZeroCommissionSavings(double totalFares) {
-    final savings = totalFares * (AppConstants.standardIndustryCommission - AppConstants.commissionRateYear1);
+    if (totalFares.isNaN || totalFares.isInfinite || totalFares <= 0) {
+      return 0.0;
+    }
+    final savings = totalFares * (AppConstants.standardIndustryCommission - AppConstants.commissionRate);
     return (savings * 100).round() / 100.0;
   }
 }

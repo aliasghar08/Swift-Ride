@@ -23,7 +23,7 @@
 
 **Swift Ride** is an autonomous, full-stack, production-grade ride-hailing ecosystem built with **Flutter 3.x** and **Firebase Gen 2 (Cloud Functions, Firestore, Realtime Database)**, supercharged with an integrated **Gemini AI** layer (`gemini-3.8-flash`) via **Firebase AI Logic**.
 
-Unlike traditional high-commission transportation networks that deduct 15–30% platform cuts, Swift Ride operates on an ultra-low 2% platform fee model for riders and drivers in Year 1. Drivers keep 98% of their negotiated fares, riders enjoy fair pricing, and both parties benefit from proactive AI-powered safety and earnings advisory intelligence.
+Unlike traditional high-commission transportation networks that deduct 15–30% platform cuts, Swift Ride operates on an ultra-low 2% platform fee model for riders and drivers permanently. Drivers keep 98% of their negotiated fares always, riders enjoy fair pricing, and both parties benefit from proactive AI-powered safety and earnings advisory intelligence.
 
 ---
 
@@ -79,7 +79,7 @@ Unlike traditional high-commission transportation networks that deduct 15–30% 
 ## 💎 Core Differentiators & Features
 
 ### 1. Ultra-Low 2% Commission & Fair Price Negotiation
-- **Driver-First 98% Retained**: In Year 1, drivers keep 98% of trip fares (only 2% platform fee).
+- **Driver-First 98% Retained**: Drivers keep 98% of trip fares always (only permanent 2% platform fee).
 - **Dynamic Bidding Mechanism**: Riders propose fares; nearby drivers counter-bid with instant `+Rs 50`, `+Rs 100`, or custom offers.
 - **Suggested Fare Formula**: `Base (PKR 150) + (PKR 45/km) + (PKR 5/min)`.
 

@@ -217,6 +217,33 @@ class RideModel {
         if (driverLocation != null) 'driverLocation': driverLocation!.toMap(),
       };
 
+  static double _parseDouble(dynamic val, [double fallback = 0.0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toDouble();
+    if (val is String) {
+      return double.tryParse(val) ?? fallback;
+    }
+    return fallback;
+  }
+
+  static double? _parseNullableDouble(dynamic val) {
+    if (val == null) return null;
+    if (val is num) return val.toDouble();
+    if (val is String) {
+      return double.tryParse(val);
+    }
+    return null;
+  }
+
+  static int _parseInt(dynamic val, [int fallback = 0]) {
+    if (val == null) return fallback;
+    if (val is num) return val.toInt();
+    if (val is String) {
+      return int.tryParse(val) ?? (double.tryParse(val)?.toInt() ?? fallback);
+    }
+    return fallback;
+  }
+
   static DateTime? _parseNullableDateTime(dynamic val) {
     if (val == null) return null;
     if (val is DateTime) return val;
@@ -236,28 +263,38 @@ class RideModel {
 
   factory RideModel.fromMap(Map<String, dynamic> map, {String? docId}) {
     return RideModel(
-      id: docId ?? map['id'] ?? '',
-      riderId: map['riderId'] ?? '',
-      driverId: map['driverId'],
+      id: docId ?? map['id']?.toString() ?? '',
+      riderId: map['riderId']?.toString() ?? '',
+      driverId: map['driverId']?.toString(),
       status: RideStatus.fromString(map['status']),
-      pickup: LocationPoint.fromMap(
-        map['pickup'] is Map ? Map<String, dynamic>.from(map['pickup'] as Map) : {},
-      ),
-      dropoff: LocationPoint.fromMap(
-        map['dropoff'] is Map ? Map<String, dynamic>.from(map['dropoff'] as Map) : {},
-      ),
-      offeredFare: (map['offeredFare'] as num?)?.toDouble() ?? 0.0,
-      acceptedFare: (map['acceptedFare'] as num?)?.toDouble(),
-      suggestedFare: (map['suggestedFare'] as num?)?.toDouble() ?? 0.0,
-      distanceKm: (map['distanceKm'] as num?)?.toDouble() ?? 0.0,
-      durationMin: (map['durationMin'] as num?)?.toDouble() ?? 0.0,
-      commissionAmount: (map['commissionAmount'] as num?)?.toDouble() ?? 0.0,
-      paymentIntentId: map['paymentIntentId'],
-      paymentStatus: map['paymentStatus'] ?? 'pending',
-      paymentMethod: map['paymentMethod'] as String?,
+      pickup: () {
+        try {
+          if (map['pickup'] is Map) {
+            return LocationPoint.fromMap(Map<String, dynamic>.from(map['pickup'] as Map));
+          }
+        } catch (_) {}
+        return const LocationPoint(latitude: 0.0, longitude: 0.0, address: '');
+      }(),
+      dropoff: () {
+        try {
+          if (map['dropoff'] is Map) {
+            return LocationPoint.fromMap(Map<String, dynamic>.from(map['dropoff'] as Map));
+          }
+        } catch (_) {}
+        return const LocationPoint(latitude: 0.0, longitude: 0.0, address: '');
+      }(),
+      offeredFare: _parseDouble(map['offeredFare']),
+      acceptedFare: _parseNullableDouble(map['acceptedFare']),
+      suggestedFare: _parseDouble(map['suggestedFare']),
+      distanceKm: _parseDouble(map['distanceKm']),
+      durationMin: _parseDouble(map['durationMin']),
+      commissionAmount: _parseDouble(map['commissionAmount']),
+      paymentIntentId: map['paymentIntentId']?.toString(),
+      paymentStatus: map['paymentStatus']?.toString() ?? 'pending',
+      paymentMethod: map['paymentMethod']?.toString(),
       safetyFlags: (map['safetyFlags'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
-      shareToken: map['shareToken'],
-      pin: map['pin'] ?? '1234',
+      shareToken: map['shareToken']?.toString(),
+      pin: map['pin']?.toString() ?? '1234',
       createdAt: _parseDateTime(map['createdAt']),
       completedAt: _parseNullableDateTime(map['completedAt']),
       driverLocation: DriverTelemetry.fromMap(
@@ -265,13 +302,13 @@ class RideModel {
             ? Map<String, dynamic>.from(map['driverLocation'] as Map)
             : null,
       ),
-      vehicleType: map['vehicleType'] ?? 'car',
-      bookedSeats: (map['bookedSeats'] as num?)?.toInt() ?? 1,
+      vehicleType: map['vehicleType']?.toString() ?? 'car',
+      bookedSeats: _parseInt(map['bookedSeats'], 1),
       seatPreference: map['seatPreference'] as String?,
-      maxAutoAcceptFare: (map['maxAutoAcceptFare'] as num?)?.toDouble(),
+      maxAutoAcceptFare: _parseNullableDouble(map['maxAutoAcceptFare']),
       isAutoNegotiateEnabled: map['isAutoNegotiateEnabled'] == true,
-      cashReceived: (map['cashReceived'] as num?)?.toDouble(),
-      changeDue: (map['changeDue'] as num?)?.toDouble(),
+      cashReceived: _parseNullableDouble(map['cashReceived']),
+      changeDue: _parseNullableDouble(map['changeDue']),
     );
   }
 }

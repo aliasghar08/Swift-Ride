@@ -1394,7 +1394,7 @@ class MapService {
           }
         }
 
-        // Economics calibrated to realistic inDrive Pakistan rates & 2% platform commission
+        // Economics calibrated to realistic local market rates & 2% platform commission
         const baseFare = 210.0;
         const kmRate = 62.0;
         const minRate = 6.0;

@@ -5,7 +5,7 @@ import '../domain/models/trip_economics_model.dart';
 import '../domain/models/vehicle_type.dart';
 
 /// Service running on-device TensorFlow Lite neural network inference
-/// to compute the optimal inDrive-calibrated passenger fare and multi-target
+/// to compute the optimal open-market calibrated passenger fare and multi-target
 /// trip economics (Fuel Liters, Maintenance Wear, Fare, Net Profit), explicitly
 /// taking into account the vehicle/car model, fuel average (km/L), and road traffic condition.
 class PricingMLService {
@@ -105,7 +105,7 @@ class PricingMLService {
     }
   }
 
-  /// Predicts the optimal inDrive market sweet-spot bid in PKR,
+  /// Predicts the optimal regional market sweet-spot bid in PKR,
   /// factoring in distance, time of day, rain, traffic congestion,
   /// vehicle/car tier, and car fuel economy.
   Future<double> predictSuggestedBid({
@@ -121,11 +121,17 @@ class PricingMLService {
       await initialize();
     }
 
-    final double validDist = distanceKm.clamp(0.5, 80.0);
-    final double curTime = timeOfDayHours ?? (DateTime.now().hour + (DateTime.now().minute / 60.0));
+    final double safeDist = (distanceKm.isNaN || distanceKm.isInfinite || distanceKm <= 0)
+        ? 1.0
+        : distanceKm.clamp(0.5, 80.0);
+    final double curTime = (timeOfDayHours == null || timeOfDayHours.isNaN || timeOfDayHours.isInfinite)
+        ? (DateTime.now().hour + (DateTime.now().minute / 60.0))
+        : timeOfDayHours;
     final double validTime = curTime.clamp(0.01, 24.0);
-    final double validRain = isRaining.clamp(0.0, 1.0);
-    final double validTraffic = trafficMultiplier.clamp(1.0, 1.75);
+    final double validRain = (isRaining.isNaN || isRaining.isInfinite) ? 0.0 : isRaining.clamp(0.0, 1.0);
+    final double validTraffic = (trafficMultiplier.isNaN || trafficMultiplier.isInfinite)
+        ? 1.15
+        : trafficMultiplier.clamp(1.0, 1.75);
 
     // Resolve vehicle tier and baseline km/L based on car model
     double resolvedTier = 2.0; // Economy Car default (Alto / Cultus)
@@ -164,7 +170,7 @@ class PricingMLService {
     }
 
     // Min-Max normalize using the exact bounds from model training
-    final double normDist = ((validDist - _distMin) / (_distMax - _distMin)).clamp(0.0, 1.0);
+    final double normDist = ((safeDist - _distMin) / (_distMax - _distMin)).clamp(0.0, 1.0);
     final double normTime = ((validTime - _timeMin) / (_timeMax - _timeMin)).clamp(0.0, 1.0);
     final double normRain = ((validRain - _rainMin) / (_rainMax - _rainMin)).clamp(0.0, 1.0);
     final double normTraffic = ((validTraffic - _trafficMin) / (_trafficMax - _trafficMin)).clamp(0.0, 1.0);
@@ -190,7 +196,7 @@ class PricingMLService {
       }
     }
 
-    // Calibrated algorithmic fallback modeled after real Pakistan inDrive market dynamics
+    // Calibrated algorithmic fallback modeled after real Pakistan peer-to-peer ride market dynamics
     final baseFare = resolvedTier == 0.0
         ? 75.0
         : (resolvedTier == 1.0 ? 130.0 : (resolvedTier == 2.0 ? 210.0 : 280.0));
@@ -198,7 +204,7 @@ class PricingMLService {
         ? 28.0
         : (resolvedTier == 1.0 ? 45.0 : (resolvedTier == 2.0 ? 62.0 : 82.0));
     final fuelFactor = resolvedTier >= 2.0 ? math.pow(14.0 / resolvedKmL, 0.35).clamp(0.9, 1.3) : 1.0;
-    final rawCalc = (baseFare + (validDist * kmRate * fuelFactor)) * validTraffic;
+    final rawCalc = (baseFare + (safeDist * kmRate * fuelFactor)) * validTraffic;
     final rainAdjustment = validRain > 0.5 ? 25.0 : 0.0;
     final rounded = ((rawCalc + rainAdjustment) / 5.0).round() * 5.0;
     final minFloor = resolvedTier == 0.0 ? 70.0 : (resolvedTier == 1.0 ? 120.0 : 210.0);
@@ -225,10 +231,16 @@ class PricingMLService {
       await initializeEconomics();
     }
 
-    final double validDist = distanceKm.clamp(0.5, 80.0);
-    final double validDur = durationMin > 0 ? durationMin.toDouble() : math.max(3.0, validDist * 2.0);
+    final double validDist = (distanceKm.isNaN || distanceKm.isInfinite || distanceKm <= 0)
+        ? 1.0
+        : distanceKm.clamp(0.5, 80.0);
+    final double validDur = (durationMin <= 0)
+        ? math.max(3.0, validDist * 2.0)
+        : durationMin.toDouble();
     final int clampedSeats = bookedSeats.clamp(1, vehicleType.seats);
-    final double validFuelPrice = fuelPrice.clamp(200.0, 500.0);
+    final double validFuelPrice = (fuelPrice.isNaN || fuelPrice.isInfinite || fuelPrice <= 0)
+        ? 280.0
+        : fuelPrice.clamp(200.0, 500.0);
 
     // Compute Congestion Index: actual duration / static free-flow duration
     double congestionRatio = 1.0;

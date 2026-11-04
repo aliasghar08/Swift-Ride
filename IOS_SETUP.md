@@ -263,7 +263,7 @@ In App Store Connect under **App Review Information**, provide the following not
   - Phone: `+1 555-010-0002`
   - SMS OTP: `123456`
 - **Notes for Reviewer:**
-  > "SwiftRide is an ultra-low 2% commission ride-hailing app. During Year 1, 98% of the negotiated fare goes directly to the driver with only a 2% platform fee. 
+  > "SwiftRide is an ultra-low 2% commission ride-hailing app. 98% of the negotiated fare goes directly to the driver with only a permanent 2% platform fee. 
   > 
   > To test the flow:
   > 1. Sign in with Rider credentials to view nearby simulated drivers and request a trip.

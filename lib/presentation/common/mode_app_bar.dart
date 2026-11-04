@@ -10,6 +10,7 @@ import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
 import 'trusted_contacts_screen.dart';
+import 'legal_terms_modal.dart';
 import '../auth/phone_auth_screen.dart';
 import '../driver/widgets/driver_name_dialog.dart';
 
@@ -417,6 +418,42 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                       );
                     },
                   ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.gavel_rounded,
+                    color: AppTheme.primaryBlue,
+                  ),
+                  title: const Text(
+                    'Terms of Service & Legal',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Non-carrier status & permanent 2% fee policy',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    LegalTermsModal.showTerms(context);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
+                    Icons.privacy_tip_outlined,
+                    color: AppTheme.accentTeal,
+                  ),
+                  title: const Text(
+                    'Privacy & Data Policy',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'PECA 2016 compliance & GPS tracking consent',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    LegalTermsModal.showPrivacy(context);
+                  },
+                ),
                 if (isUserSignedIn)
                   ListTile(
                     leading: const Icon(

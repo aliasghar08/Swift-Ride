@@ -59,7 +59,7 @@ base_wear_per_km = np.where(
 maintenance_pkr = (distance_km * base_wear_per_km * (1.0 + (congestion_ratio - 1.0) * 0.55)) + np.random.normal(0, 1.5, n_samples)
 maintenance_pkr = np.clip(maintenance_pkr, 2.0, 800.0)
 
-# 3. Target inDrive Pakistan Market Clearing Fare (PKR):
+# 3. Target Pakistan Regional Market Clearing Fare (PKR):
 base_fare = np.where(
     car_tier == 0, 75.0,
     np.where(
@@ -107,6 +107,6 @@ df = pd.DataFrame({
 out_dir = os.path.dirname(__file__)
 out_path = os.path.join(out_dir, 'economics_data.csv')
 df.to_csv(out_path, index=False)
-print(f"✅ Generated {len(df)} multi-target ride records calibrated for inDrive Pakistan at {out_path}.")
+print(f"✅ Generated {len(df)} multi-target ride records calibrated for Pakistan regional market at {out_path}.")
 print("\nSample records:")
 print(df.head(6))

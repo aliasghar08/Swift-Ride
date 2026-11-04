@@ -69,7 +69,7 @@ export const getEarnings = onCall(
       availablePayoutBalance,
       committedPayouts: Math.round(committedPayouts * 100) / 100,
       paidOut: Math.round(paidOut * 100) / 100,
-      subscriptionStatus: 'TRIAL', // Year 1 2% rate
+      subscriptionStatus: 'ACTIVE', // Permanent 2% rate
     };
   }
 );

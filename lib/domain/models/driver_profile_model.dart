@@ -138,8 +138,14 @@ class DriverProfile {
       rating: (map['rating'] as num?)?.toDouble() ?? 4.9,
       totalRides: (map['totalRides'] as num?)?.toInt() ?? 0,
       totalEarnings: (map['totalEarnings'] as num?)?.toDouble() ?? 0.0,
-      latitude: (loc?['lat'] as num?)?.toDouble() ?? 33.6844,
-      longitude: (loc?['lng'] as num?)?.toDouble() ?? 73.0479,
+      latitude: (loc?['lat'] as num?)?.toDouble() ??
+          (map['latitude'] as num?)?.toDouble() ??
+          (map['lat'] as num?)?.toDouble() ??
+          0.0,
+      longitude: (loc?['lng'] as num?)?.toDouble() ??
+          (map['longitude'] as num?)?.toDouble() ??
+          (map['lng'] as num?)?.toDouble() ??
+          0.0,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

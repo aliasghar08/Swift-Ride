@@ -29,7 +29,7 @@ This document records the architectural decisions, trade-offs, and operational a
 ## 2. Business Model & Ultra-Low 2% Commission Structure
 
 ### Decision
-- **Year 1 (Launch Phase)**: Free for riders and ultra-low for drivers. **2.0% platform commission** is charged on rides (drivers retain 98%).
+- **Platform Model**: Free for riders and ultra-low for drivers. **Permanent 2.0% platform commission** is charged on rides (drivers retain 98% always).
 - **Year 2+ (Sustainability Phase)**: Flat driver subscription model ($1.00/day, $15.00/month, or $150.00/year for unlimited rides at low commission).
 - **Target Market**: Regional cities where major incumbents charge 13–25% commission.
 - **Cancellation Policy**:

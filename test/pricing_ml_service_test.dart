@@ -5,10 +5,10 @@ import 'package:swiftride/services/pricing_ml_service.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  group('PricingMLService Tests (inDrive Pakistan Calibrated)', () {
+  group('PricingMLService Tests (Regional Pakistan Market Calibrated)', () {
     final service = PricingMLService();
 
-    test('1. Short distance calculation returns realistic inDrive Pakistan bid', () async {
+    test('1. Short distance calculation returns realistic market bid', () async {
       final bid = await service.predictSuggestedBid(
         distanceKm: 3.5,
         timeOfDayHours: 10.0,

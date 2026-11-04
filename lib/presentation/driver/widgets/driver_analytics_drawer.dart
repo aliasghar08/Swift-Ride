@@ -6,6 +6,7 @@ import '../../../domain/models/vehicle_info_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/driver_provider.dart';
 import '../../../services/driver_khata_service.dart';
+import '../../common/legal_terms_modal.dart';
 import 'driver_khata_sheet.dart';
 import 'driver_name_dialog.dart';
 
@@ -533,6 +534,28 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                         currentName: user.fullName,
                         barrierDismissible: true,
                       );
+                    },
+                  ),
+                  _buildDrawerActionTile(
+                    title: 'Legal Terms & 2% Guarantee',
+                    subtitle: 'Independent partner terms & permanent 2% fee',
+                    icon: Icons.gavel_rounded,
+                    iconColor: AppTheme.primaryBlue,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      LegalTermsModal.show(context);
+                    },
+                  ),
+                  _buildDrawerActionTile(
+                    title: 'Privacy & PECA Compliance',
+                    subtitle: 'Driver GPS privacy & data security',
+                    icon: Icons.security_rounded,
+                    iconColor: AppTheme.accentTeal,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      LegalTermsModal.showPrivacy(context);
                     },
                   ),
                 ],

@@ -50,7 +50,7 @@ def generate_synthetic_ride_data(num_samples: int = 12000, seed: int = 42) -> pd
     traffic_mileage_penalty = (traffic_multiplier - 1.0) * 0.25
     fuel_average_km_l = np.clip(base_mileage * (1.0 - traffic_mileage_penalty), 6.0, 48.0)
 
-    # --- Ground Truth inDrive Pakistan Calibrated Fare Structure ---
+    # --- Ground Truth Pakistan Regional Market Calibrated Fare Structure ---
     # Current market rates in Punjab & Sindh (Lahore, Karachi, Faisalabad, Rawalpindi)
     base_fare = np.where(
         car_tier == 0, 75.0,
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(__file__)
     output_path = os.path.join(current_dir, "ride_data.csv")
     df.to_csv(output_path, index=False)
-    print(f"✅ Generated {len(df)} realistic inDrive-calibrated ride records at {output_path}")
+    print(f"✅ Generated {len(df)} realistic market-calibrated ride records at {output_path}")
     print("\nSample records:")
     print(df.head(10))
     print("\nPrice statistics by Vehicle/Car Tier:")

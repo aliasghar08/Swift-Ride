@@ -38,7 +38,7 @@ SwiftRide implements defense-in-depth across the Flutter mobile applications and
 
 ### 2.4 Financial & Payment Security
 - **PCI-DSS Level 1 Compliance**: All payment processing is delegated to **Stripe Connect**. Cardholder data never touches SwiftRide servers or client memory.
-- **Zero Platform Fee Auditing**: Year 1 driver earnings are calculated directly from verified trip distances and deposited via Stripe Express accounts.
+- **Platform Fee Auditing**: Permanent 2% platform fee and driver earnings are calculated directly from verified trip distances and deposited via Stripe Express accounts.
 
 ---
 

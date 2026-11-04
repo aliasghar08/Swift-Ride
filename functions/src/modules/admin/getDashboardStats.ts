@@ -27,7 +27,7 @@ export const getDashboardStats = onCall(
       }
     });
 
-    // Low-commission 2% year 1 savings calculation (vs 13% incumbent)
+    // Low-commission 2% permanent savings calculation (vs 13% incumbent)
     const zeroCommissionDriverSavings = Math.round(grossBookingVolume * (0.13 - 0.02) * 100) / 100;
 
     return {

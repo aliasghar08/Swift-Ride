@@ -147,7 +147,7 @@ interface RideDocument {
   suggestedFare: number;        // Benchmark fare in PKR
   distanceKm: number;           // Road distance in km
   durationMin: number;          // Estimated duration in minutes
-  commissionAmount: number;     // PKR (2% commission in Year 1)
+  commissionAmount: number;     // PKR (Permanent 2% commission always)
   paymentIntentId: string | null;
   paymentStatus: "pending" | "paid" | "failed";
   safetyFlags: string[];

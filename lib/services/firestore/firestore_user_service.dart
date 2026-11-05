@@ -137,10 +137,13 @@ class FirestoreUserService {
     }
 
     try {
-      await fs.collection(AppConstants.usersCollection).doc(userId).update({
-        'trustedContacts': normalised,
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+      await fs.collection(AppConstants.usersCollection).doc(userId).set(
+        {
+          'trustedContacts': normalised,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
 
       final cached = _memoryCache[userId];
       if (cached != null) {

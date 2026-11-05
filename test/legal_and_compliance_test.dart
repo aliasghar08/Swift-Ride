@@ -7,6 +7,7 @@ import 'package:swiftride/domain/models/ride_model.dart';
 import 'package:swiftride/domain/models/ride_offer_model.dart';
 import 'package:swiftride/domain/models/vehicle_type.dart';
 import 'package:swiftride/presentation/common/legal_terms_modal.dart';
+import 'package:swiftride/services/auth_service.dart';
 import 'package:swiftride/services/pricing_ml_service.dart';
 
 void main() {
@@ -65,6 +66,27 @@ void main() {
       expect(find.text('Data Protection & PECA 2016 Compliance'), findsOneWidget);
       expect(find.text('1. Geolocation Tracking Scope'), findsOneWidget);
       expect(find.text('3. Data Retention & One-Tap Account Deletion'), findsOneWidget);
+
+      await tester.scrollUntilVisible(
+        find.text('4. AI Assistant & Third-Party Processing Disclosure'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('4. AI Assistant & Third-Party Processing Disclosure'), findsOneWidget);
+      expect(find.textContaining('Google Play'), findsNothing);
+    });
+
+    test('AuthService.isReviewerDemoNumber recognizes all designated App Store Review demo accounts', () {
+      expect(AuthService.isReviewerDemoNumber('+15550100001'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('+15550100002'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('15550100001'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('5550100001'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('+923000000000'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('+923000000001'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('+923000000002'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('3000000001'), isTrue);
+      expect(AuthService.isReviewerDemoNumber('+923087502250'), isFalse);
+      expect(AuthService.isReviewerDemoNumber(''), isFalse);
     });
   });
 

@@ -4,11 +4,16 @@ import PassKit
 import UserNotifications
 import GoogleMaps
 import AVFoundation
+import Speech
 import Network
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private let speechSynthesizer = AVSpeechSynthesizer()
+  private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+  private let audioEngine = AVAudioEngine()
+  private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+  private var recognitionTask: SFSpeechRecognitionTask?
   private let networkMonitor = NWPathMonitor()
   private var currentNetworkStatus: String = "wifi"
   private var locationService: NativeLocationService?
@@ -250,7 +255,7 @@ import Network
       }
     }
 
-    // 8. Audio
+    // 8. Audio & Speech Recognition
     audioChannel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       guard let self = self else { return }
       switch call.method {
@@ -269,9 +274,94 @@ import Network
       case "stopAudio":
         self.speechSynthesizer.stopSpeaking(at: .immediate)
         result(true)
+      case "startSpeechListening":
+        self.startSpeechRecognition(result: result)
+      case "stopSpeechListening":
+        self.stopSpeechRecognition()
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  private func startSpeechRecognition(result: @escaping FlutterResult) {
+    stopSpeechRecognition()
+    SFSpeechRecognizer.requestAuthorization { [weak self] authStatus in
+      DispatchQueue.main.async {
+        guard let self = self else { return }
+        guard authStatus == .authorized,
+              let recognizer = self.speechRecognizer,
+              recognizer.isAvailable else {
+          result(nil)
+          return
+        }
+
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+          try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
+          try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+          result(nil)
+          return
+        }
+
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        self.recognitionRequest = req
+
+        let inputNode = self.audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.removeTap(onBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { buffer, _ in
+          req.append(buffer)
+        }
+
+        self.audioEngine.prepare()
+        do {
+          try self.audioEngine.start()
+        } catch {
+          self.stopSpeechRecognition()
+          result(nil)
+          return
+        }
+
+        var latestTranscript = ""
+        var completed = false
+        let finish: (String?) -> Void = { [weak self] text in
+          guard !completed else { return }
+          completed = true
+          self?.stopSpeechRecognition()
+          result(text)
+        }
+
+        self.recognitionTask = recognizer.recognitionTask(with: req) { res, error in
+          if let res = res {
+            latestTranscript = res.bestTranscription.formattedString
+            if res.isFinal {
+              finish(latestTranscript)
+            }
+          }
+          if error != nil {
+            finish(latestTranscript.isEmpty ? nil : latestTranscript)
+          }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+          finish(latestTranscript.isEmpty ? nil : latestTranscript)
+        }
+      }
+    }
+  }
+
+  private func stopSpeechRecognition() {
+    if audioEngine.isRunning {
+      audioEngine.stop()
+      audioEngine.inputNode.removeTap(onBus: 0)
+    }
+    recognitionRequest?.endAudio()
+    recognitionRequest = nil
+    recognitionTask?.cancel()
+    recognitionTask = nil
   }
 }

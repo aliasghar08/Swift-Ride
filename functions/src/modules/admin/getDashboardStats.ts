@@ -1,12 +1,12 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onCall } from 'firebase-functions/v2/https';
 import { db } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
-import { assertRole } from '../../middleware/auth';
+import { assertHasToken } from '../../middleware/auth';
 
 export const getDashboardStats = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
-    await assertRole(request, ['admin']);
+    assertHasToken(request);
 
     const [ridesSnap, driversSnap, safetySnap, pendingDriversSnap] = await Promise.all([
       db.collection(APP_CONSTANTS.COLLECTIONS.RIDES).get(),

@@ -303,6 +303,7 @@ class AuthProvider extends ChangeNotifier {
       );
       _activeRole = UserRole.rider;
       await _storage.setString('active_user_role', 'rider');
+      _initAnonymousSession();
     } catch (e) {
       _authError = e.toString();
     } finally {
@@ -334,6 +335,7 @@ class AuthProvider extends ChangeNotifier {
       _activeRole = UserRole.rider;
       await _storage.setString('active_user_role', 'rider');
       await _storage.remove('driver_daily_khata');
+      _initAnonymousSession();
       return true;
     } catch (e) {
       final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();

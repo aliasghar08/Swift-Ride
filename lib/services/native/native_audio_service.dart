@@ -45,4 +45,27 @@ class NativeAudioService {
       return true;
     }
   }
+
+  /// Starts native speech-to-text recognition using iOS SFSpeechRecognizer /
+  /// Android SpeechRecognizer and returns the transcribed string if available.
+  Future<String?> listenForSpeech() async {
+    try {
+      final transcript = await _channel.invokeMethod<String>(
+        NativeChannelConstants.methodStartSpeechListening,
+      );
+      final trimmed = transcript?.trim();
+      return (trimmed != null && trimmed.isNotEmpty) ? trimmed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Stops active speech-to-text recognition session.
+  Future<void> stopListeningForSpeech() async {
+    try {
+      await _channel.invokeMethod<void>(
+        NativeChannelConstants.methodStopSpeechListening,
+      );
+    } catch (_) {}
+  }
 }

@@ -65,6 +65,8 @@ class NativeChannelConstants {
   static const String methodPlayAlertTone = 'playAlertTone';
   static const String methodSpeakText = 'speakText';
   static const String methodStopAudio = 'stopAudio';
+  static const String methodStartSpeechListening = 'startSpeechListening';
+  static const String methodStopSpeechListening = 'stopSpeechListening';
 
   // Native Map methods (complements / replaces google_maps_flutter)
   static const String methodMapAnimateCamera = 'animateCamera';

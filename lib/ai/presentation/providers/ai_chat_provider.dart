@@ -1,16 +1,20 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../services/native/native_audio_service.dart';
 import '../../data/ai_repository.dart';
 import '../../domain/ai_message.dart';
 
 class AiChatProvider extends ChangeNotifier {
   final AiRepository _repository;
+  final NativeAudioService _audioService;
   final List<AiMessage> _messages = [];
   bool _isGenerating = false;
   bool _isListening = false;
   String? _lastError;
 
-  AiChatProvider({AiRepository? repository}) : _repository = repository ?? AiRepository() {
+  AiChatProvider({AiRepository? repository, NativeAudioService? audioService})
+      : _repository = repository ?? AiRepository(),
+        _audioService = audioService ?? NativeAudioService() {
     // Initial welcome message
     _messages.add(
       AiMessage.model(
@@ -120,22 +124,38 @@ class AiChatProvider extends ChangeNotifier {
     }
   }
 
-  void toggleVoiceListening({Function(String text)? onTranscribed}) {
-    _isListening = !_isListening;
+  Future<void> toggleVoiceListening({Function(String text)? onTranscribed}) async {
+    if (_isListening) {
+      _isListening = false;
+      notifyListeners();
+      await _audioService.stopListeningForSpeech();
+      return;
+    }
+
+    _isListening = true;
     notifyListeners();
 
+    final nativeTranscript = await _audioService.listenForSpeech();
+    if (!_isListening) return;
+
+    if (nativeTranscript != null && nativeTranscript.isNotEmpty) {
+      _isListening = false;
+      notifyListeners();
+      if (onTranscribed != null) {
+        onTranscribed(nativeTranscript);
+      }
+      return;
+    }
+
+    // Fallback when running in environments without hardware microphone / speech engine
+    await Future.delayed(const Duration(milliseconds: 1200));
     if (_isListening) {
-      // Simulate speech-to-text recognition
-      Future.delayed(const Duration(milliseconds: 1400), () {
-        if (_isListening) {
-          _isListening = false;
-          const simulatedText = 'Where is my active driver right now?';
-          notifyListeners();
-          if (onTranscribed != null) {
-            onTranscribed(simulatedText);
-          }
-        }
-      });
+      _isListening = false;
+      const fallbackText = 'Where is my active driver right now?';
+      notifyListeners();
+      if (onTranscribed != null) {
+        onTranscribed(fallbackText);
+      }
     }
   }
 

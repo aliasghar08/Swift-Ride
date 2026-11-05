@@ -255,12 +255,12 @@ Push a git tag `v1.0.0` to trigger the GitHub Actions workflow in `.github/workf
 
 In App Store Connect under **App Review Information**, provide the following notes for Apple's review team:
 
-- **Sign-in Required:** Yes
+- **Sign-in Required:** Optional (Guest mode works immediately; Phone Auth available for full profile)
 - **Rider Demo Credentials:**
-  - Phone: `+1 555-010-0001`
+  - Phone: `3000000001` (`+92 300 0000001`) or `15550100001` (`+1 555-010-0001`)
   - SMS OTP: `123456`
 - **Driver Demo Credentials:**
-  - Phone: `+1 555-010-0002`
+  - Phone: `3000000002` (`+92 300 0000002`) or `15550100002` (`+1 555-010-0002`)
   - SMS OTP: `123456`
 - **Notes for Reviewer:**
   > "SwiftRide is an ultra-low 2% commission ride-hailing app. 98% of the negotiated fare goes directly to the driver with only a permanent 2% platform fee. 

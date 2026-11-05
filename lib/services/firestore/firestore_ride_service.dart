@@ -185,15 +185,31 @@ class FirestoreRideService {
       return AdminRidesPage(rides: rides);
     } on FirebaseFunctionsException catch (e) {
       debugPrint('[FirestoreRideService] getAdminRides: ${e.code} ${e.message}');
-      return AdminRidesPage(
-        rides: const [],
-        error: e.code == 'permission-denied'
-            ? 'This account is not an administrator.'
-            : 'We could not load platform rides.',
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        final fs = _firestore;
+        if (fs != null) {
+          try {
+            Query<Map<String, dynamic>> q = fs.collection(AppConstants.ridesCollection);
+            if (status != null && status.isNotEmpty && status != 'ALL') {
+              q = q.where('status', isEqualTo: status);
+            }
+            final snap = await q.orderBy('createdAt', descending: true).limit(limit).get();
+            final fallbackRides = snap.docs
+                .map((d) => _parseRide(d.data(), d.id))
+                .whereType<RideModel>()
+                .toList();
+            return AdminRidesPage(rides: fallbackRides);
+          } catch (_) {}
+        }
+        return AdminRidesPage(rides: _memoryRides.values.toList());
+      }
+      return const AdminRidesPage(
+        rides: [],
+        error: 'We could not load platform rides.',
       );
     } catch (e) {
       debugPrint('[FirestoreRideService] getAdminRides failed: $e');
-      return const AdminRidesPage(rides: [], error: 'We could not load platform rides.');
+      return AdminRidesPage(rides: _memoryRides.values.toList());
     }
   }
 

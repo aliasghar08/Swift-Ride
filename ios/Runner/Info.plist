@@ -67,28 +67,16 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Swift Ride uses Bluetooth to connect to in-car devices for enhanced navigation.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Swift Ride needs camera access to photograph your vehicle and upload required verification documents.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Swift Ride needs contacts access to let you quickly add trusted contacts for trip sharing and SOS alerts.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Swift Ride needs background location access to track your ride even when the app is in the background.</string>
+	<string>Swift Ride uses your location in the background during an active trip so riders can follow their driver's live arrival ETA, drivers can receive continuous turn-by-turn navigation, and emergency SOS contacts receive accurate live coordinates.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Swift Ride needs background location access for ride tracking.</string>
+	<string>Swift Ride uses your location in the background during an active trip to provide continuous driver route tracking, accurate rider pickup ETAs, and live SOS safety sharing.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Swift Ride needs your location to show nearby drivers and track your ride in real time.</string>
+	<string>Swift Ride uses your location while using the app to detect your pickup street address, calculate accurate trip distance and fare estimates, and display nearby drivers on the live map.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Swift Ride needs microphone access for in-app voice chat and the AI assistant.</string>
-	<key>NSMotionUsageDescription</key>
-	<string>Swift Ride uses motion data for crash detection and safety monitoring during rides.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Swift Ride needs permission to save trip receipts and photos to your library.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Swift Ride needs photo library access to upload your driver documents and vehicle photos.</string>
+	<string>Swift Ride uses the microphone when you tap the voice input button in the SwiftRide AI Assistant to dictate ride questions or hands-free navigation commands.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Swift Ride uses speech recognition to let you talk to the AI assistant hands-free.</string>
+	<string>Swift Ride uses speech recognition to transcribe your spoken voice queries into text for the SwiftRide AI Assistant.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

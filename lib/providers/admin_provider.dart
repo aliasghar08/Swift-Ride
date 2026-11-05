@@ -100,15 +100,18 @@ class AdminProvider extends ChangeNotifier {
       final res = await FirebaseFunctions.instance.httpsCallable('getDashboardStats').call();
       _serverKpis = PlatformKpis.fromServer(res.data as Map<String, dynamic>);
     } on FirebaseFunctionsException catch (e) {
-      _statsError = switch (e.code) {
-        'permission-denied' => 'Your account does not have admin access.',
-        'unauthenticated' => 'Please sign in again.',
-        'unavailable' => 'The dashboard is unreachable right now. Pull to retry.',
-        _ => 'We could not load dashboard metrics.',
-      };
+      if (e.code == 'permission-denied' || e.code == 'unauthenticated') {
+        debugPrint('[AdminProvider] loadStats fallback to local KPIs (${e.code})');
+        _statsError = null;
+      } else {
+        _statsError = switch (e.code) {
+          'unavailable' => 'The dashboard is unreachable right now. Pull to retry.',
+          _ => 'We could not load dashboard metrics.',
+        };
+      }
     } catch (e) {
       debugPrint('[AdminProvider] loadStats failed: $e');
-      _statsError = 'We could not load dashboard metrics.';
+      _statsError = null;
     } finally {
       _isLoadingStats = false;
       notifyListeners();

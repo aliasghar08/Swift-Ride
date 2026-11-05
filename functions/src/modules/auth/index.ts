@@ -120,8 +120,12 @@ export const deleteUserAccount = onCall(
     const caller = await assertAuthenticated(request);
     const targetUid = caller.uid;
 
-    // 1. Delete Firestore user document
-    await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(targetUid).delete();
+    // 1. Delete Firestore user, driver, and AI preferences documents
+    await Promise.allSettled([
+      db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(targetUid).delete(),
+      db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(targetUid).delete(),
+      db.collection('ai_preferences').doc(targetUid).delete(),
+    ]);
 
     // 2. Delete Firebase Auth user record
     try {

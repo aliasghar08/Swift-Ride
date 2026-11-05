@@ -113,6 +113,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (cleaned.startsWith('00')) {
       return '+${cleaned.substring(2)}';
     }
+    // Support US Reviewer Demo numbers (+1 555-010-0001 / +1 555-010-0002)
+    if (cleaned == '15550100001' || cleaned == '15550100002') {
+      return '+$cleaned';
+    }
+    if (cleaned == '5550100001' || cleaned == '5550100002') {
+      return '+1$cleaned';
+    }
     if (cleaned.startsWith('0')) {
       cleaned = cleaned.substring(1);
     }

@@ -327,13 +327,21 @@ class LegalTermsModal extends StatelessWidget {
           borderColor: borderColor,
           title: '3. Data Retention & One-Tap Account Deletion',
           body:
-              'Users hold the unrestricted right to permanently delete their account and associated profile records at any time directly through the in-app Account menu. In accordance with Apple and Google Play Privacy Guidelines, all personal identifiers and cloud data are permanently purged upon deletion.',
+              'Users hold the unrestricted right to permanently delete their account and associated profile records at any time directly through the in-app Account menu. In accordance with App Store Privacy Guidelines and international data protection standards, all personal identifiers and cloud data are permanently purged upon deletion.',
         ),
         _buildClauseCard(
           isDark: isDark,
           cardColor: cardColor,
           borderColor: borderColor,
-          title: '4. Security Operations & Contact',
+          title: '4. AI Assistant & Third-Party Processing Disclosure',
+          body:
+              'When you interact with the optional SwiftRide AI Assistant or AI Earnings Advisor, your text/voice prompt and non-identifying trip or route context are securely transmitted over TLS 1.3 to Google Gemini AI solely to generate your real-time response. Personal identifiers, phone numbers, and exact home addresses are never sold or used to train third-party AI models.',
+        ),
+        _buildClauseCard(
+          isDark: isDark,
+          cardColor: cardColor,
+          borderColor: borderColor,
+          title: '5. Security Operations & Contact',
           body:
               'All telemetry is transmitted over TLS 1.3 encryption. For privacy inquiries, compliance verification, or statutory disclosures, contact DartNexusLab Security & Compliance at legal@dartnexuslab.com.',
         ),
@@ -429,3 +437,4 @@ class LegalTermsModal extends StatelessWidget {
     );
   }
 }
+

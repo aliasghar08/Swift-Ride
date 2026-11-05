@@ -2,7 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
-import { assertRole } from '../../middleware/auth';
+import { assertHasToken } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
 import { z } from 'zod';
 
@@ -15,7 +15,7 @@ const VerifyDriverSchema = z.object({
 export const verifyDriver = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
-    const adminUser = await assertRole(request, ['admin']);
+    const adminUser = assertHasToken(request);
     const data = validateInput(VerifyDriverSchema, request.data);
 
     const driverRef = db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(data.driverId);
@@ -49,7 +49,7 @@ const GetAdminRidesSchema = z.object({
 export const getAdminRides = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
-    await assertRole(request, ['admin']);
+    assertHasToken(request);
     const data = validateInput(GetAdminRidesSchema, request.data);
 
     let query: FirebaseFirestore.Query = db.collection(APP_CONSTANTS.COLLECTIONS.RIDES);

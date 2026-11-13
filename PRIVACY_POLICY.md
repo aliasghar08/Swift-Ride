@@ -92,7 +92,7 @@ We may disclose information if required to do so by applicable law, regulation, 
 Users have the right to request the complete deletion of their account and all associated personal data at any time.
 
 * **In-App Deletion:** Navigate to **Settings > Account > Delete Account** and confirm your request.
-* **Web & Email Deletion Request:** If you are unable to access the app or prefer to request deletion via the web, you can submit a deletion request by emailing **privacy@dartnexuslab.com** with your registered phone number and the subject line *"Account Deletion Request"*.
+* **Web & Email Deletion Request:** If you are unable to access the app or prefer to request deletion via the web, you can submit a deletion request by emailing **aliasgharinnocent@yahoo.com** with your registered phone number and the subject line *"Account Deletion Request"*.
 * **Data Permanently Deleted:** Upon verification of your identity, your user profile information, authentication credentials, phone number mapping, vehicle verification records, and trip history will be permanently deleted from our active Firebase databases within 30 days.
 * **Data Retained:** Transaction logs or records required to comply with statutory tax, fraud-prevention, regulatory requirements, or unresolved dispute records will be retained for the minimum period legally required by applicable law, after which they are irreversibly destroyed.
 

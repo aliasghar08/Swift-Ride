@@ -6,8 +6,9 @@ import '../../../domain/models/user_role.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/ride_provider.dart';
 import '../../../providers/safety_provider.dart';
-import '../../presentation/../../presentation/common/glass_container.dart';
-import '../../presentation/../../presentation/common/staggered_animation.dart';
+import '../dialogs/ai_consent_dialog.dart';
+import '../../../presentation/common/glass_container.dart';
+import '../../../presentation/common/staggered_animation.dart';
 import '../providers/ai_chat_provider.dart';
 import '../widgets/ai_message_bubble.dart';
 
@@ -43,7 +44,28 @@ class _AiChatScreenState extends State<AiChatScreen> {
     });
   }
 
-  void _handleIntent(BuildContext context, String intent) {
+  Future<void> _sendPromptWithConsent(
+    BuildContext context,
+    AiChatProvider chatProv,
+    String text,
+    String userRole,
+  ) async {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty || chatProv.isGenerating) return;
+
+    final allowed = await AiConsentDialog.ensureConsent(context);
+    if (!allowed || !context.mounted) return;
+
+    _textController.clear();
+    await chatProv.sendMessage(
+      trimmed,
+      role: userRole,
+      onIntentDetected: (intent) => _handleIntent(context, intent),
+    );
+    _scrollToBottom();
+  }
+
+  Future<void> _handleIntent(BuildContext context, String intent) async {
     switch (intent) {
       case 'track_ride':
         final rideProv = CustomChangeNotifierProvider.read<RideProvider>(
@@ -61,6 +83,8 @@ class _AiChatScreenState extends State<AiChatScreen> {
         }
         break;
       case 'show_earnings':
+        final allowed = await AiConsentDialog.ensureConsent(context);
+        if (!allowed || !context.mounted) return;
         Navigator.of(context).pushNamed('/earnings-advisor');
         break;
       case 'trigger_sos':
@@ -172,15 +196,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       onPressed: () {
-                        _textController.text = prompt;
-                        chatProv.sendMessage(
+                        _sendPromptWithConsent(
+                          context,
+                          chatProv,
                           prompt,
-                          role: userRole,
-                          onIntentDetected: (intent) =>
-                              _handleIntent(context, intent),
+                          userRole,
                         );
-                        _textController.clear();
-                        _scrollToBottom();
                       },
                     );
                   },
@@ -254,18 +275,17 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     color: isDark ? Colors.white60 : Colors.black54,
                   ),
                   tooltip: 'Speech to text',
-                  onPressed: () {
+                  onPressed: () async {
+                    final allowed = await AiConsentDialog.ensureConsent(context);
+                    if (!allowed || !context.mounted) return;
                     chatProv.toggleVoiceListening(
                       onTranscribed: (text) {
-                        _textController.text = text;
-                        chatProv.sendMessage(
+                        _sendPromptWithConsent(
+                          context,
+                          chatProv,
                           text,
-                          role: userRole,
-                          onIntentDetected: (intent) =>
-                              _handleIntent(context, intent),
+                          userRole,
                         );
-                        _textController.clear();
-                        _scrollToBottom();
                       },
                     );
                   },
@@ -296,14 +316,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                   ),
                   onSubmitted: (text) {
                     if (text.trim().isNotEmpty) {
-                      chatProv.sendMessage(
+                      _sendPromptWithConsent(
+                        context,
+                        chatProv,
                         text,
-                        role: userRole,
-                        onIntentDetected: (intent) =>
-                            _handleIntent(context, intent),
+                        userRole,
                       );
-                      _textController.clear();
-                      _scrollToBottom();
                     }
                   },
                 ),
@@ -329,14 +347,12 @@ class _AiChatScreenState extends State<AiChatScreen> {
                     : () {
                         final text = _textController.text;
                         if (text.trim().isNotEmpty) {
-                          chatProv.sendMessage(
+                          _sendPromptWithConsent(
+                            context,
+                            chatProv,
                             text,
-                            role: userRole,
-                            onIntentDetected: (intent) =>
-                                _handleIntent(context, intent),
+                            userRole,
                           );
-                          _textController.clear();
-                          _scrollToBottom();
                         }
                       },
               ),

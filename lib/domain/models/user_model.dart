@@ -17,10 +17,12 @@ class AppUser {
   /// unreachable rather than silently counted as notified.
   final List<String> trustedContacts;
   final DateTime createdAt;
+  final String? photoUrl;
+  final String? authProvider;
 
   const AppUser({
     required this.id,
-    required this.phone,
+    this.phone = '',
     this.email,
     required this.fullName,
     required this.role,
@@ -29,6 +31,8 @@ class AppUser {
     this.fcmTokens = const [],
     this.trustedContacts = const [],
     required this.createdAt,
+    this.photoUrl,
+    this.authProvider,
   });
 
   /// An empty signed-out user.
@@ -71,6 +75,8 @@ class AppUser {
     List<String>? fcmTokens,
     List<String>? trustedContacts,
     DateTime? createdAt,
+    String? photoUrl,
+    String? authProvider,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -83,6 +89,8 @@ class AppUser {
       fcmTokens: fcmTokens ?? this.fcmTokens,
       trustedContacts: trustedContacts ?? this.trustedContacts,
       createdAt: createdAt ?? this.createdAt,
+      photoUrl: photoUrl ?? this.photoUrl,
+      authProvider: authProvider ?? this.authProvider,
     );
   }
 
@@ -98,6 +106,8 @@ class AppUser {
       'fcmTokens': fcmTokens,
       'trustedContacts': trustedContacts,
       'createdAt': createdAt.toIso8601String(),
+      if (photoUrl != null) 'photoUrl': photoUrl,
+      if (authProvider != null) 'authProvider': authProvider,
     };
   }
 
@@ -116,6 +126,8 @@ class AppUser {
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      photoUrl: map['photoUrl'] as String?,
+      authProvider: map['authProvider'] as String?,
     );
   }
 }

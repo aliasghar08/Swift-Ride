@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../domain/models/user_model.dart';
 import '../domain/models/user_role.dart';
 import 'firestore/firestore_user_service.dart';
@@ -39,8 +40,14 @@ class AuthService {
   User? get currentFirebaseUser => _auth?.currentUser;
   User? get currentUser => currentFirebaseUser;
 
-  /// Whether a real Firebase user is currently authenticated.
-  bool get isAuthenticated => currentFirebaseUser != null;
+  /// Whether a real phone-verified Firebase user is currently authenticated.
+  /// Anonymous guest sessions (minted for Cloud Function callables) return false.
+  bool get isAuthenticated {
+    final user = currentFirebaseUser;
+    if (user == null) return false;
+    if (!user.isAnonymous) return true;
+    return user.phoneNumber != null && user.phoneNumber!.isNotEmpty;
+  }
 
   /// Signs in anonymously so unauthenticated guests can mint valid tokens
   /// for Cloud Functions callables (maps, routes, fare estimates).
@@ -133,10 +140,32 @@ class AuthService {
         },
         verificationFailed: (FirebaseAuthException e) {
           debugPrint('[AuthService] Phone verification failed: [${e.code}] ${e.message}');
+          if (e.code == 'invalid-phone-number' || e.code == 'missing-phone-number') {
+            onError(
+              'The phone number format is invalid. Please enter a valid 10-digit number (e.g. 300 1234567).',
+            );
+            return;
+          }
+          if (e.code == 'unknown' ||
+              (e.message?.contains('39') == true) ||
+              (e.message?.contains('17499') == true)) {
+            onError(
+              'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.',
+            );
+            return;
+          }
+          if (!kReleaseMode) {
+            debugPrint(
+              '[AuthService] Emulator/debug fallback activated for $phoneNumber after [${e.code}]',
+            );
+            onCodeSent(
+              'sim_otp_${DateTime.now().millisecondsSinceEpoch}',
+              123456,
+            );
+            return;
+          }
           String message = '[${e.code}] ${e.message ?? 'Phone verification failed.'}';
-          if (e.code == 'invalid-phone-number') {
-            message = 'The phone number format is invalid. Please use standard format (e.g. 0300 1234567 or +923001234567).';
-          } else if (e.code == 'too-many-requests') {
+          if (e.code == 'too-many-requests') {
             message = 'Too many requests sent. Please wait a minute before requesting a new code.';
           } else if (e.code == 'quota-exceeded') {
             message = 'SMS quota temporarily exceeded. Please try again later.';
@@ -160,10 +189,16 @@ class AuthService {
       );
     } catch (e) {
       debugPrint('[AuthService] Caught verifyPhoneNumber exception: $e');
-      if (isReviewerDemoNumber(phoneNumber) ||
-          (!kReleaseMode && (phoneNumber == '+923000000000' || phoneNumber.startsWith('+92300000')))) {
+      final errStr = e.toString();
+      if (errStr.contains('39') || errStr.contains('17499') || errStr.contains('Error code:39')) {
+        onError(
+          'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.',
+        );
+        return;
+      }
+      if (isReviewerDemoNumber(phoneNumber) || !kReleaseMode) {
         debugPrint('[AuthService] Fallback activated for demo/test number: $phoneNumber');
-        onCodeSent('reviewer_demo_${DateTime.now().millisecondsSinceEpoch}', null);
+        onCodeSent('sim_otp_${DateTime.now().millisecondsSinceEpoch}', 123456);
         return;
       }
       onError('Verification error: $e');
@@ -178,10 +213,11 @@ class AuthService {
   }) async {
     final auth = _auth;
     if (auth == null) {
-      if (verificationId.startsWith('reviewer_demo_') && smsCode.trim() != '123456') {
+      if ((verificationId.startsWith('reviewer_demo_') && smsCode.trim() != '123456') ||
+          smsCode.trim() == '000000') {
         throw FirebaseAuthException(
           code: 'invalid-verification-code',
-          message: 'Invalid verification code. For demo accounts, enter 123456.',
+          message: 'Incorrect 6-digit verification code. Please check your SMS and try again.',
         );
       }
       debugPrint('[AuthService] Firebase uninitialized: Mocking successful sign-in');
@@ -277,49 +313,268 @@ class AuthService {
     );
   }
 
+  /// Authenticates using Google Sign-In and links/persists the profile in Firestore.
+  /// Returns null if the user cancelled the dialog or flow.
+  Future<AppUser?> signInWithGoogle({
+    required String selectedRole,
+    String? fullName,
+  }) async {
+    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.rider;
+    final auth = _auth;
+
+    if (auth == null) {
+      debugPrint('[AuthService] Firebase uninitialized: Simulating Google sign-in');
+      final mockUser = AppUser(
+        id: 'google_user_${DateTime.now().millisecondsSinceEpoch}',
+        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Google Rider',
+        email: 'rider.google@swiftride.pk',
+        phone: '',
+        role: role,
+        rating: 5.0,
+        totalRides: 0,
+        createdAt: DateTime.now(),
+        authProvider: 'google',
+      );
+      await _userService.saveUser(mockUser);
+      return mockUser;
+    }
+
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn(
+        clientId: kIsWeb
+            ? '113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com'
+            : (defaultTargetPlatform == TargetPlatform.iOS
+                ? '113634488038-s869tr34nd75rv4j18s6fv514bk94khd.apps.googleusercontent.com'
+                : null),
+        serverClientId: '113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com',
+        scopes: ['email', 'profile'],
+      );
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        debugPrint('[AuthService] Google Sign-In cancelled by user');
+        return null;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await auth.signInWithCredential(credential);
+      final firebaseUser = userCredential.user;
+      if (firebaseUser == null) return null;
+
+      final resolvedName = (fullName != null && fullName.trim().isNotEmpty)
+          ? fullName.trim()
+          : (firebaseUser.displayName != null && firebaseUser.displayName!.isNotEmpty
+              ? firebaseUser.displayName!
+              : (googleUser.displayName != null && googleUser.displayName!.isNotEmpty
+                  ? googleUser.displayName!
+                  : (firebaseUser.email != null && firebaseUser.email!.contains('@')
+                      ? firebaseUser.email!.split('@').first
+                      : 'Google User')));
+
+      return await syncUserProfile(
+        uid: firebaseUser.uid,
+        phone: firebaseUser.phoneNumber ?? '',
+        fullName: resolvedName,
+        email: firebaseUser.email ?? googleUser.email,
+        photoUrl: firebaseUser.photoURL ?? googleUser.photoUrl,
+        authProvider: 'google',
+        defaultRole: role,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'canceled' || e.code == 'popup-closed-by-user' || e.code.contains('cancel')) {
+        debugPrint('[AuthService] Google Sign-In dismissed/canceled: [${e.code}]');
+        return null;
+      }
+      rethrow;
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('canceled') || errStr.contains('cancelled') || errStr.contains('sign_in_canceled')) {
+        debugPrint('[AuthService] Google Sign-In user cancelled');
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  /// Authenticates using Apple Sign-In and links/persists the profile in Firestore.
+  /// Works natively on iOS and via OAuth web flow on Android.
+  /// Returns null if the user cancelled the dialog or flow.
+  Future<AppUser?> signInWithApple({
+    required String selectedRole,
+    String? fullName,
+  }) async {
+    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.rider;
+    final auth = _auth;
+
+    if (auth == null) {
+      debugPrint('[AuthService] Firebase uninitialized: Simulating Apple sign-in');
+      final mockUser = AppUser(
+        id: 'apple_user_${DateTime.now().millisecondsSinceEpoch}',
+        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Apple Rider',
+        email: 'rider.apple@swiftride.pk',
+        phone: '',
+        role: role,
+        rating: 5.0,
+        totalRides: 0,
+        createdAt: DateTime.now(),
+        authProvider: 'apple',
+      );
+      await _userService.saveUser(mockUser);
+      return mockUser;
+    }
+
+    try {
+      final appleProvider = AppleAuthProvider()
+        ..addScope('email')
+        ..addScope('name');
+
+      final userCredential = await auth.signInWithProvider(appleProvider);
+      final firebaseUser = userCredential.user;
+      if (firebaseUser == null) return null;
+
+      final resolvedName = (fullName != null && fullName.trim().isNotEmpty)
+          ? fullName.trim()
+          : (firebaseUser.displayName != null && firebaseUser.displayName!.isNotEmpty
+              ? firebaseUser.displayName!
+              : (firebaseUser.email != null && firebaseUser.email!.contains('@')
+                  ? firebaseUser.email!.split('@').first
+                  : 'Apple User'));
+
+      return await syncUserProfile(
+        uid: firebaseUser.uid,
+        phone: firebaseUser.phoneNumber ?? '',
+        fullName: resolvedName,
+        email: firebaseUser.email,
+        photoUrl: firebaseUser.photoURL,
+        authProvider: 'apple',
+        defaultRole: role,
+      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'canceled' ||
+          e.code == 'web-context-canceled' ||
+          e.code.contains('cancel')) {
+        debugPrint('[AuthService] Apple Sign-In canceled: [${e.code}]');
+        return null;
+      }
+      rethrow;
+    } catch (e) {
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('canceled') || errStr.contains('cancelled')) {
+        debugPrint('[AuthService] Apple Sign-In user cancelled');
+        return null;
+      }
+      rethrow;
+    }
+  }
+
   Future<AppUser> syncUserProfile({
     required String uid,
     required String phone,
     String? fullName,
     String? email,
+    String? photoUrl,
+    String? authProvider,
     UserRole defaultRole = UserRole.rider,
   }) async {
-    // 1. Check if user already exists in Firestore
-    final existingUser = await _userService.getUser(uid);
+    final trimmedName = fullName?.trim();
+    final hasExplicitName = trimmedName != null &&
+        trimmedName.isNotEmpty &&
+        trimmedName != 'Guest User' &&
+        trimmedName != 'SwiftRide User';
+    final trimmedEmail = email?.trim();
+    final hasExplicitEmail = trimmedEmail != null && trimmedEmail.isNotEmpty;
+    final normalizedPhone = AppUser.normalizePhone(phone) ?? phone.trim();
+
+    // 1. Check if user already exists in Firestore by UID or by Phone Number
+    AppUser? existingUser = await _userService.getUser(uid);
+    if (existingUser == null && normalizedPhone.isNotEmpty) {
+      existingUser = await _userService.getUserByPhone(normalizedPhone);
+    }
+
     if (existingUser != null) {
-      // Ensure custom claims are up to date
+      final resolvedName = hasExplicitName
+          ? trimmedName
+          : (existingUser.fullName.isNotEmpty &&
+                  existingUser.fullName != 'Guest User'
+              ? existingUser.fullName
+              : (trimmedName != null && trimmedName.isNotEmpty
+                  ? trimmedName
+                  : 'SwiftRide User'));
+      final resolvedPhone =
+          normalizedPhone.isNotEmpty ? normalizedPhone : existingUser.phone;
+      final resolvedEmail =
+          hasExplicitEmail ? trimmedEmail : existingUser.email;
+      final resolvedRole = defaultRole != UserRole.rider ||
+              existingUser.role == UserRole.rider
+          ? defaultRole
+          : existingUser.role;
+
+      final updatedExisting = existingUser.copyWith(
+        id: uid.isNotEmpty ? uid : existingUser.id,
+        fullName: resolvedName,
+        phone: resolvedPhone,
+        email: resolvedEmail,
+        role: resolvedRole,
+        photoUrl: photoUrl ?? existingUser.photoUrl,
+        authProvider: authProvider ?? existingUser.authProvider,
+      );
+
+      await _userService.saveUser(updatedExisting);
+
       try {
+        if (_auth?.currentUser != null && resolvedName.isNotEmpty) {
+          await _auth?.currentUser?.updateDisplayName(resolvedName);
+        }
+        if (photoUrl != null && _auth?.currentUser != null) {
+          await _auth?.currentUser?.updatePhotoURL(photoUrl);
+        }
         await _auth?.currentUser?.getIdToken(true);
       } catch (_) {}
-      return existingUser;
+
+      return updatedExisting;
     }
 
     // 2. Create new user profile document
     final newUser = AppUser(
       id: uid,
-      phone: phone,
-      email: email,
-      fullName: (fullName != null && fullName.trim().isNotEmpty)
-          ? fullName.trim()
+      phone: normalizedPhone,
+      email: hasExplicitEmail ? trimmedEmail : null,
+      fullName: (trimmedName != null && trimmedName.isNotEmpty)
+          ? trimmedName
           : 'SwiftRide User',
       role: defaultRole,
       rating: 5.0,
       totalRides: 0,
       createdAt: DateTime.now(),
+      photoUrl: photoUrl,
+      authProvider: authProvider,
     );
 
     await _userService.saveUser(newUser);
 
     // 3. Mint custom claims via Cloud Functions & refresh ID token
     try {
+      if (_auth?.currentUser != null && newUser.fullName.isNotEmpty) {
+        await _auth?.currentUser?.updateDisplayName(newUser.fullName);
+      }
+      if (photoUrl != null && _auth?.currentUser != null) {
+        await _auth?.currentUser?.updatePhotoURL(photoUrl);
+      }
       if (Firebase.apps.isNotEmpty) {
         await FirebaseFunctions.instance
             .httpsCallable('registerUser')
             .call(<String, dynamic>{
               'fullName': newUser.fullName,
               'phone': newUser.phone,
-              if (email != null && email.isNotEmpty) 'email': email,
+              if (newUser.email != null && newUser.email!.isNotEmpty)
+                'email': newUser.email,
               'role': defaultRole.name,
+              if (authProvider != null && authProvider.isNotEmpty)
+                'authProvider': authProvider,
             });
         await _auth?.currentUser?.getIdToken(true);
         debugPrint('[AuthService] User profile and signed claims synchronized');
@@ -345,9 +600,22 @@ class AuthService {
     }
   }
 
-  /// Signs out the active user session.
+  /// Signs out the active user session and disconnects Google Sign-In if active.
   Future<void> signOut() async {
     try {
+      final user = currentFirebaseUser;
+      if (user != null) {
+        final isGoogleUser = user.providerData
+            .any((p) => p.providerId == 'google.com');
+        if (isGoogleUser) {
+          try {
+            await GoogleSignIn().signOut().timeout(
+              const Duration(milliseconds: 150),
+              onTimeout: () => null,
+            );
+          } catch (_) {}
+        }
+      }
       await _auth?.signOut();
     } catch (e) {
       debugPrint('[AuthService] Error signing out: $e');

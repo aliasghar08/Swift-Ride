@@ -88,7 +88,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 }
             }
 
-            // 2. COLD START: Wait for GPS acquisition with a responsive 4-second deadline
+            // 2. COLD START: Wait for GPS acquisition with an 8-second deadline
             let id = UUID()
             pendingLocationRequests.append((id: id, result: result))
 
@@ -100,11 +100,13 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 locationManager.requestLocation()
             }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) { [weak self] in
                 guard let self = self else { return }
                 if let idx = self.pendingLocationRequests.firstIndex(where: { $0.id == id }) {
                     let req = self.pendingLocationRequests.remove(at: idx)
                     if let fallback = self.lastKnownLocation ?? self.locationManager.location, fallback.horizontalAccuracy >= 0 {
+                        req.result(Self.serialize(fallback))
+                    } else if let fallback = self.lastKnownLocation ?? self.locationManager.location {
                         req.result(Self.serialize(fallback))
                     } else {
                         req.result(FlutterError(code: "LOCATION_TIMEOUT", message: "No GPS fix within timeout.", details: nil))
@@ -157,6 +159,7 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                     let streetNumber = pm.subThoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     let streetName = pm.thoroughfare?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                     let name = pm.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let aoi = pm.areasOfInterest?.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
                     var plotOrStreet = ""
                     if !streetNumber.isEmpty && !streetName.isEmpty {
@@ -167,13 +170,14 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                         plotOrStreet = streetName
                     }
 
-                    if !plotOrStreet.isEmpty {
-                        parts.append(plotOrStreet)
-                        if !name.isEmpty && name != streetNumber && name != streetName && !parts.contains(name) {
-                            parts.insert(name, at: 0)
-                        }
-                    } else if !name.isEmpty {
+                    if !aoi.isEmpty && aoi != streetNumber && aoi != streetName {
+                        parts.append(aoi)
+                    }
+                    if !name.isEmpty && name != streetNumber && name != streetName && name != pm.subLocality && name != pm.locality && !parts.contains(name) {
                         parts.append(name)
+                    }
+                    if !plotOrStreet.isEmpty && !parts.contains(plotOrStreet) {
+                        parts.append(plotOrStreet)
                     }
 
                     if let subLoc = pm.subLocality, !subLoc.isEmpty, !parts.contains(subLoc) {

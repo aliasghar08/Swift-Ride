@@ -25,61 +25,137 @@ interface GeocodeResult {
 
 /**
  * Extracts and synthesizes exact property-level address details
- * (such as "House 145", "Plot 145", building name, street, and sector/locality).
+ * (such as "Plot 145", "House 145", subpremise, premise/building name, route, and sector/locality).
  */
-function buildPrecisePropertyAddress(results: GeocodeResult[]): { address: string; components: AddressComponent[] } {
+export function buildPrecisePropertyAddress(results: GeocodeResult[]): {
+  address: string;
+  components: AddressComponent[];
+  extracted: {
+    streetNumber: string;
+    subpremise: string;
+    premise: string;
+    route: string;
+    sublocality: string;
+    locality: string;
+  };
+} {
   if (!results || results.length === 0) {
-    return { address: '', components: [] };
+    return {
+      address: '',
+      components: [],
+      extracted: {
+        streetNumber: '',
+        subpremise: '',
+        premise: '',
+        route: '',
+        sublocality: '',
+        locality: '',
+      },
+    };
   }
 
   // 1. Prioritize ROOFTOP and granular premises over broad locality/city entries
-  const best = results.find(
-    (r) =>
-      r.geometry?.location_type === 'ROOFTOP' &&
-      r.types.some((t) => ['street_address', 'premise', 'subpremise'].includes(t)),
-  ) ||
-  results.find((r) => r.types.some((t) => ['premise', 'subpremise', 'street_address'].includes(t))) ||
-  results.find((r) => r.types.some((t) => ['establishment', 'point_of_interest'].includes(t))) ||
-  results[0];
+  const best =
+    results.find(
+      (r) =>
+        r.geometry?.location_type === 'ROOFTOP' &&
+        r.types.some((t) => ['street_address', 'premise', 'subpremise'].includes(t)),
+    ) ||
+    results.find((r) => r.types.some((t) => ['premise', 'subpremise', 'street_address'].includes(t))) ||
+    results.find((r) => r.types.some((t) => ['establishment', 'point_of_interest', 'route'].includes(t))) ||
+    results[0];
 
   const comps = best.address_components || [];
-  const getComp = (type: string) => comps.find((c) => c.types.includes(type))?.long_name || '';
+
+  // Look up a component type first in `best`, then across secondary results if missing
+  const getComp = (type: string): string => {
+    const inBest = comps.find((c) => c.types.includes(type))?.long_name;
+    if (inBest && inBest.trim().length > 0) return inBest.trim();
+    for (const r of results) {
+      const found = (r.address_components || []).find((c) => c.types.includes(type))?.long_name;
+      if (found && found.trim().length > 0) return found.trim();
+    }
+    return '';
+  };
 
   const streetNumber = getComp('street_number');
-  const premise = getComp('premise') || getComp('subpremise');
-  const poi = getComp('point_of_interest') || getComp('establishment');
+  const subpremise = getComp('subpremise');
+  const premise = getComp('premise');
+  const poi = getComp('point_of_interest') || getComp('establishment') || getComp('landmark');
   const route = getComp('route');
-  const sublocality = getComp('sublocality_level_1') || getComp('sublocality') || getComp('neighborhood');
+  const sublocality2 = getComp('sublocality_level_2');
+  const sublocality1 =
+    getComp('sublocality_level_1') || getComp('sublocality') || getComp('neighborhood');
   const locality = getComp('locality') || getComp('administrative_area_level_2');
 
-  const rawFormatted = (best.formatted_address || '').replace(/,\s*Pakistan$/i, '').trim();
+  const rawFormatted = (best.formatted_address || '')
+    .replace(/,\s*Pakistan$/i, '')
+    .replace(/^[23456789CFGHJMPQRVWX]{4,8}\+[23456789CFGHJMPQRVWX]{2,4}\s*,?\s*/i, '')
+    .trim();
 
-  // 2. Synthesize exact property identifier (House/Plot Number)
-  if (streetNumber || premise || poi) {
-    let propertyPrefix = poi || premise;
-    if (!propertyPrefix && streetNumber) {
-      // If purely numeric like "145", prefix with "House" or "Plot"
-      propertyPrefix = /^\d+[A-Za-z]?$/.test(streetNumber.trim())
-        ? `House ${streetNumber.trim()}`
-        : streetNumber.trim();
+  // 2. Synthesize granular plot / house / premise / route parts
+  const parts: string[] = [];
+  const addUniquePart = (part: string) => {
+    const clean = part.trim();
+    if (!clean) return;
+    if (!parts.some((p) => p.toLowerCase().includes(clean.toLowerCase()) || clean.toLowerCase().includes(p.toLowerCase()))) {
+      parts.push(clean);
     }
+  };
 
-    if (propertyPrefix && !rawFormatted.toLowerCase().includes(propertyPrefix.toLowerCase())) {
-      const parts: string[] = [propertyPrefix];
-      if (route && !parts.some((p) => p.toLowerCase().includes(route.toLowerCase()))) {
-        parts.push(route);
-      }
-      if (sublocality && !parts.some((p) => p.toLowerCase().includes(sublocality.toLowerCase()))) {
-        parts.push(sublocality);
-      }
-      if (locality && !parts.some((p) => p.toLowerCase().includes(locality.toLowerCase()))) {
-        parts.push(locality);
-      }
-      return { address: parts.join(', '), components: comps };
-    }
+  if (streetNumber) {
+    const formattedNumber = /^\d+[A-Za-z-]?$/.test(streetNumber)
+      ? `Plot ${streetNumber}`
+      : streetNumber;
+    addUniquePart(formattedNumber);
+  }
+  if (subpremise) {
+    addUniquePart(subpremise);
+  }
+  if (premise) {
+    addUniquePart(premise);
+  }
+  if (poi && poi.toLowerCase() !== locality.toLowerCase()) {
+    addUniquePart(poi);
   }
 
-  return { address: rawFormatted || best.formatted_address, components: comps };
+  const hasGranularPrefix = parts.length > 0;
+
+  if (route) {
+    addUniquePart(route);
+  }
+  if (sublocality2) {
+    addUniquePart(sublocality2);
+  }
+  if (sublocality1) {
+    addUniquePart(sublocality1);
+  }
+  if (locality) {
+    addUniquePart(locality);
+  }
+
+  const extracted = {
+    streetNumber,
+    subpremise,
+    premise: premise || poi,
+    route,
+    sublocality: sublocality2 ? `${sublocality2}, ${sublocality1}`.replace(/,\s*$/, '') : sublocality1,
+    locality,
+  };
+
+  if (hasGranularPrefix && parts.length > 0) {
+    return {
+      address: parts.join(', '),
+      components: comps,
+      extracted,
+    };
+  }
+
+  return {
+    address: rawFormatted || parts.join(', ') || best.formatted_address,
+    components: comps,
+    extracted,
+  };
 }
 
 export const reverseGeocode = onCall(
@@ -117,14 +193,15 @@ export const reverseGeocode = onCall(
         const { data: resData } = await axios.get(url, { params });
 
         if (resData.status === 'OK' && resData.results && resData.results.length > 0) {
-          const { address, components } = buildPrecisePropertyAddress(resData.results);
+          const { address, components, extracted } = buildPrecisePropertyAddress(resData.results);
           const resolvedLat = resData.results[0].geometry?.location?.lat ?? Number(lat ?? 0.0);
           const resolvedLng = resData.results[0].geometry?.location?.lng ?? Number(lng ?? 0.0);
 
           return {
             address: address || resData.results[0].formatted_address,
-            formattedAddress: resData.results[0].formatted_address,
+            formattedAddress: address || resData.results[0].formatted_address,
             components,
+            extracted,
             latitude: resolvedLat,
             longitude: resolvedLng,
           };

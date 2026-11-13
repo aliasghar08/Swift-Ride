@@ -134,6 +134,32 @@ void main() {
       expect(p8!.latitude, closeTo(31.2631, 0.005));
       expect(p8.longitude, closeTo(72.3518, 0.005));
       expect(p8.label, contains('7972+7PF'));
+
+      // 6i. 11-digit building-entrance subgrid round-trip accuracy (~2.8m x 3.5m)
+      const buildingLat = 31.263185;
+      const buildingLng = 72.351812;
+      final encoded11 = CoordinateParser.encodePlusCode(
+        buildingLat,
+        buildingLng,
+        codeLength: 11,
+      );
+      expect(encoded11.length, equals(12)); // 11 digits + '+'
+      final decoded11 = CoordinateParser.tryParse(encoded11);
+      expect(decoded11, isNotNull);
+      expect(decoded11!.latitude, closeTo(buildingLat, 0.00003));
+      expect(decoded11.longitude, closeTo(buildingLng, 0.00004));
+
+      // 6j. recoverNearest across 1-degree grid boundary (e.g. code at 30.999 near ref 31.001)
+      final nearBoundaryCode = CoordinateParser.encodePlusCode(30.9992, 72.3181, codeLength: 11);
+      final shortBoundaryCode = nearBoundaryCode.substring(4); // strip 4-char prefix
+      final recovered = CoordinateParser.tryParse(
+        shortBoundaryCode,
+        referenceLat: 31.0010,
+        referenceLng: 72.3181,
+      );
+      expect(recovered, isNotNull);
+      expect(recovered!.latitude, closeTo(30.9992, 0.0001));
+      expect(recovered.longitude, closeTo(72.3181, 0.0001));
     });
 
     test('Validation and non-coordinate inputs return null', () {

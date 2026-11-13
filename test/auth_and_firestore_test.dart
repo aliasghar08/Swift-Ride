@@ -13,7 +13,9 @@ import 'package:swiftride/domain/models/user_model.dart';
 import 'package:swiftride/domain/models/user_role.dart';
 import 'package:swiftride/domain/models/vehicle_info_model.dart';
 import 'package:swiftride/presentation/auth/phone_auth_screen.dart';
+import 'package:swiftride/presentation/view_models/rider_view_model.dart';
 import 'package:swiftride/providers/auth_provider.dart';
+import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/services/auth_service.dart';
 import 'package:swiftride/services/firestore/firestore_driver_service.dart';
 import 'package:swiftride/services/firestore/firestore_ride_service.dart';
@@ -263,7 +265,8 @@ void main() {
       expect(find.text('Enter Your Mobile Number'), findsOneWidget);
       expect(find.text('+92'), findsOneWidget);
       expect(find.text('Continue with Phone'), findsOneWidget);
-      expect(find.text('Continue as AI Guest / Passenger'), findsOneWidget);
+      // Verify AI Guest button has been removed
+      expect(find.text('Continue as AI Guest / Passenger'), findsNothing);
       // Ensure visible test button is NOT present (secret/hidden for App Store & Play Store)
       expect(find.text('Fill Demo / Test Number (+92 300 0000000)'), findsNothing);
 
@@ -290,9 +293,155 @@ void main() {
 
       // Verify Profile Setup step UI
       expect(find.text('Select Account Role'), findsOneWidget);
-      expect(find.text('Rider (Book Rides)'), findsOneWidget);
-      expect(find.text('Driver (Earn 98%)'), findsOneWidget);
+      expect(find.text('Rider'), findsOneWidget);
+      expect(find.text('Driver'), findsOneWidget);
       expect(find.textContaining('Region: Jhang (31.2785, 72.3317) · AI Bidding Ready'), findsOneWidget);
     });
+
+    testWidgets(
+      'Main login page auto-fetches user profile by phone, autofills name & optional email, and allows editing before proceeding',
+      (WidgetTester tester) async {
+        final auth = AuthProvider();
+        final userService = FirestoreUserService();
+
+        // Seed an existing user profile for +923015556677
+        await userService.saveUser(
+          AppUser(
+            id: 'user_923015556677',
+            phone: '+923015556677',
+            email: 'ali.jhang@example.com',
+            fullName: 'Ali Asghar',
+            role: UserRole.rider,
+            rating: 4.95,
+            totalRides: 12,
+            createdAt: DateTime.now(),
+          ),
+        );
+
+        bool authCompleted = false;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: CustomChangeNotifierProvider<AuthProvider>(
+              notifier: auth,
+              child: PhoneAuthScreen(
+                onAuthSuccess: () {
+                  authCompleted = true;
+                },
+              ),
+            ),
+          ),
+        );
+
+        // Enter phone number on main page -> should auto-fetch and autofill name & email
+        await tester.enterText(
+          find.byKey(const Key('auth_phone_field')),
+          '3015556677',
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Ali Asghar'), findsOneWidget);
+        expect(find.text('ali.jhang@example.com'), findsOneWidget);
+        expect(
+          find.textContaining('Profile fetched from phone & autofilled'),
+          findsOneWidget,
+        );
+
+        // User modifies their autofilled name and optional email before proceeding
+        await tester.enterText(
+          find.byKey(const Key('auth_name_field')),
+          'Ali Asghar Updated',
+        );
+        await tester.enterText(
+          find.byKey(const Key('auth_email_field')),
+          'ali.updated@example.com',
+        );
+        await tester.pump();
+
+        // Tap Continue with Phone
+        await tester.tap(find.text('Continue with Phone'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        // Enter 6-digit OTP -> auto-triggers verification and navigates directly
+        // without showing the profile setup screen since name was provided on main page
+        await tester.enterText(find.byType(TextField).first, '123456');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        expect(authCompleted, isTrue);
+        expect(auth.currentUser.fullName, equals('Ali Asghar Updated'));
+        expect(auth.currentUser.email, equals('ali.updated@example.com'));
+        expect(auth.currentUser.phone, equals('+923015556677'));
+      },
+    );
+
+    test(
+      'Ride cancellation records reason, clears currentRide, and preserves route state in RiderViewModel',
+      () async {
+        const pickup = LocationPoint(
+          latitude: 31.2785,
+          longitude: 72.3317,
+          address: 'Plot 14, Ayub Chowk, Jhang Sadar',
+        );
+        const dropoff = LocationPoint(
+          latitude: 31.2690,
+          longitude: 72.3180,
+          address: 'House 22, Satellite Town, Jhang',
+        );
+
+        final initialRide = RideModel(
+          id: 'ride_cancel_test_1',
+          riderId: 'rider_cancel_test_1',
+          status: RideStatus.requested,
+          pickup: pickup,
+          dropoff: dropoff,
+          offeredFare: 280.0,
+          suggestedFare: 280.0,
+          distanceKm: 3.4,
+          durationMin: 8.0,
+          commissionAmount: 5.6,
+          pin: '4821',
+          createdAt: DateTime.now(),
+        );
+        await FirestoreRideService().createRide(initialRide);
+
+        final rideProv = RideProvider(initialRide: initialRide);
+        final viewModel = RiderViewModel();
+
+        expect(rideProv.currentRide, isNotNull);
+
+        final activeRide = rideProv.currentRide!;
+        await viewModel.restoreFromCancelledRide(activeRide);
+        rideProv.cancelRide('Need to edit pickup or destination');
+
+        // Active ride is cleared so UI exits the active ride sheet
+        expect(rideProv.currentRide, isNull);
+        expect(
+          rideProv.lastCancellationReason,
+          equals('Need to edit pickup or destination'),
+        );
+        expect(
+          rideProv.rideHistory.any(
+            (r) =>
+                r.id == 'ride_cancel_test_1' &&
+                r.status == RideStatus.cancelled,
+          ),
+          isTrue,
+        );
+
+        // RiderViewModel preserves pickup, dropoff, and fare (1 step back, not blank home)
+        expect(
+          viewModel.pickupLocation?.address,
+          equals('Plot 14, Ayub Chowk, Jhang Sadar'),
+        );
+        expect(
+          viewModel.dropoffLocation?.address,
+          equals('House 22, Satellite Town, Jhang'),
+        );
+        expect(viewModel.fareController.text, equals('280'));
+        viewModel.dispose();
+        rideProv.dispose();
+      },
+    );
   });
 }

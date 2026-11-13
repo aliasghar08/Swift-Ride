@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
+import '../../domain/models/trip_economics_model.dart';
+import '../../domain/models/vehicle_type.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../services/fuel_price_service.dart';
 import '../../services/native/native_audio_service.dart';
 import '../../services/native/native_device_service.dart';
 import '../../services/native/native_launcher_service.dart';
@@ -112,7 +115,11 @@ class DriverViewModel extends ChangeNotifier {
   double? getCachedAiValuation(String rideId) => _aiMarketValuations[rideId];
 
   /// Asynchronously evaluates or returns cached AI market valuation for a ride.
-  Future<double> getOrCalculateAiValuation(RideModel ride) async {
+  Future<double> getOrCalculateAiValuation(
+    RideModel ride, {
+    String? vehicleModel,
+    CarEngineTier? carEngineTier,
+  }) async {
     if (_aiMarketValuations.containsKey(ride.id)) {
       return _aiMarketValuations[ride.id]!;
     }
@@ -120,6 +127,7 @@ class DriverViewModel extends ChangeNotifier {
     final distance = ride.distanceKm > 0.1 ? ride.distanceKm : 5.0;
     final fare = await _pricingMLService.predictSuggestedBid(
       distanceKm: distance,
+      carModel: vehicleModel,
     );
 
     _aiMarketValuations[ride.id] = fare;
@@ -127,6 +135,37 @@ class DriverViewModel extends ChangeNotifier {
       notifyListeners();
     }
     return fare;
+  }
+
+  /// Predicts comprehensive multi-output trip economics (fuel liters, maintenance wear, fair fare)
+  /// using the driver's vehicle engine tier, AC status, and real-time fuel prices.
+  Future<TripEconomics> predictTripEconomics({
+    required RideModel ride,
+    String? vehicleModel,
+    CarEngineTier? carEngineTier,
+    bool? acEnabled,
+    double? fuelPrice,
+    int roadCondition = 1,
+  }) async {
+    final vType = VehicleTypeX.fromString(ride.vehicleType);
+    final tier = carEngineTier ??
+        (vType == VehicleType.car ? CarEngineTierX.fromCarModel(vehicleModel) : null);
+    final effectiveAc = acEnabled ?? (vType == VehicleType.car);
+    final distance = ride.distanceKm > 0.1 ? ride.distanceKm : 5.0;
+    final duration = ride.durationMin > 0 ? ride.durationMin.round() : (distance * 2.0).round();
+    final price = fuelPrice ?? FuelPriceService().currentPrice.petrolPricePerL;
+
+    return await _pricingMLService.predictTripEconomics(
+      distanceKm: distance,
+      durationMin: duration,
+      vehicleType: vType,
+      bookedSeats: ride.bookedSeats,
+      fuelPrice: price,
+      carModel: vehicleModel,
+      carEngineTier: tier,
+      roadCondition: roadCondition,
+      acEnabled: effectiveAc,
+    );
   }
 
   final Map<String, RoutePlan> _cachedRoutePlans = {};
@@ -366,7 +405,7 @@ class DriverViewModel extends ChangeNotifier {
       _notificationService.showNotification(
         id: 303,
         title: 'Trip Started',
-        body: 'Navigating to destination. 2% commission active.',
+        body: 'Navigating to destination. 2% platform fee active (98% to driver).',
       );
       _audioService.speak('PIN verified. Starting trip to destination.');
       notifyListeners();

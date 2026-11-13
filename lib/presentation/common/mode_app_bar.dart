@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../core/provider/custom_provider.dart';
+import '../../core/routing/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
@@ -11,8 +12,8 @@ import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
 import 'trusted_contacts_screen.dart';
 import 'legal_terms_modal.dart';
+import 'ai_consent_dialog.dart';
 import '../auth/phone_auth_screen.dart';
-import '../driver/widgets/driver_name_dialog.dart';
 
 class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -20,7 +21,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ModeAppBar({super.key, required this.title});
 
   @override
-  Size get preferredSize => const Size.fromHeight(60);
+  Size get preferredSize => const Size.fromHeight(62);
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +34,9 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     final c = AppColors.of(context);
 
     return AppBar(
+      automaticallyImplyLeading: false,
+      toolbarHeight: 62,
+      titleSpacing: 0,
       backgroundColor: Colors.transparent,
       elevation: 0,
       flexibleSpace: ClipRect(
@@ -58,151 +62,188 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
       ),
-      title: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
+      title: LayoutBuilder(
+        builder: (context, constraints) {
+          final maxW = constraints.maxWidth;
+          final isWide = maxW >= 500;
+          final isCompact = maxW < 370;
+
+          final brandPill = Container(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCompact ? 7 : 9,
+              vertical: isWide ? 5 : 3.5,
+            ),
+            decoration: BoxDecoration(
+              gradient: AppTheme.brandGradient,
+              borderRadius: BorderRadius.circular(9),
+              boxShadow: AppTheme.glowShadow(
+                AppTheme.primaryBlue,
+                opacity: 0.3,
+                blur: 10,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.directions_car,
+                  color: Colors.white,
+                  size: isCompact ? 13 : 15,
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  'SwiftRide',
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: isCompact ? 12.5 : 14,
+                    letterSpacing: -0.4,
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          final feeBadge = PulsingGlowWidget(
+            glowColor: AppTheme.emeraldGreen,
+            minSpread: 1.0,
+            maxSpread: 3.5,
+            child: Container(
               padding: EdgeInsets.symmetric(
-                horizontal: layout.scale(9),
-                vertical: 5,
+                horizontal: isCompact ? 5 : 7,
+                vertical: isWide ? 3 : 1.5,
               ),
               decoration: BoxDecoration(
-                gradient: AppTheme.brandGradient,
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: AppTheme.glowShadow(
-                  AppTheme.primaryBlue,
-                  opacity: 0.3,
-                  blur: 12,
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
                 ),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.directions_car,
-                    color: Colors.white,
-                    size: layout.scale(16),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'SwiftRide',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: layout.fontSize(15),
-                      letterSpacing: -0.5,
+              child: Text(
+                '2% Fee (Always)',
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  color: AppTheme.emeraldGreen,
+                  fontWeight: FontWeight.w700,
+                  fontSize: isCompact ? 8.5 : 9.5,
+                ),
+              ),
+            ),
+          );
+
+          return Padding(
+            padding: EdgeInsets.symmetric(horizontal: isCompact ? 6 : 10),
+            child: Row(
+              children: [
+                // Adaptive Brand + 2% Fee Header Block (never clipped)
+                Flexible(
+                  fit: FlexFit.tight,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: isWide
+                          ? Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                brandPill,
+                                const SizedBox(width: 8),
+                                feeBadge,
+                              ],
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                brandPill,
+                                const SizedBox(height: 2.5),
+                                feeBadge,
+                              ],
+                            ),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            // 2% commission Badge with pulsing glow
-            PulsingGlowWidget(
-              glowColor: AppTheme.emeraldGreen,
-              minSpread: 1.0,
-              maxSpread: 4.0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppTheme.emeraldGreen.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                ),
+                SizedBox(width: isCompact ? 4 : 6),
+                // Role Switcher Segmented Control
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.05),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildRoleButton(
+                        layout: layout,
+                        label: 'Rider',
+                        icon: Icons.person,
+                        isSelected: auth.activeRole == UserRole.rider,
+                        isCompact: isCompact,
+                        onTap: () => auth.switchRole(UserRole.rider),
+                      ),
+                      _buildRoleButton(
+                        layout: layout,
+                        label: 'Driver',
+                        icon: Icons.drive_eta,
+                        isSelected: auth.activeRole == UserRole.driver,
+                        isCompact: isCompact,
+                        onTap: () => auth.switchRole(UserRole.driver),
+                      ),
+                      _buildRoleButton(
+                        layout: layout,
+                        label: 'Admin',
+                        icon: Icons.dashboard,
+                        isSelected: auth.activeRole == UserRole.admin,
+                        isCompact: isCompact,
+                        onTap: () => auth.switchRole(UserRole.admin),
+                      ),
+                    ],
                   ),
                 ),
-                child: Text(
-                  '2% Fee (Always)',
-                  style: TextStyle(
-                    color: AppTheme.emeraldGreen,
-                    fontWeight: FontWeight.w700,
-                    fontSize: layout.fontSize(10),
+                SizedBox(width: isCompact ? 4 : 6),
+                // Auth / User Profile Icon Button
+                InkWell(
+                  onTap: () => _showUserSessionModal(context, auth, isDark, layout),
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: EdgeInsets.all(isCompact ? 5.5 : 7),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: c.surfaceRaised,
+                      border: Border.all(
+                        color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
+                            ? AppTheme.emeraldGreen
+                            : c.border,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: Icon(
+                      (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
+                          ? Icons.account_circle
+                          : Icons.login,
+                      size: isCompact ? 16 : 18,
+                      color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
+                          ? AppTheme.emeraldGreen
+                          : (isDark ? Colors.white70 : AppTheme.darkNavy),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
-      actions: [
-        // Role Switcher Dropdown / Segmented control
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            decoration: BoxDecoration(
-              color: c.surfaceRaised.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.04),
-              ),
-            ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildRoleButton(
-                    layout: layout,
-                    label: 'Rider',
-                    icon: Icons.person,
-                    isSelected: auth.activeRole == UserRole.rider,
-                    onTap: () => auth.switchRole(UserRole.rider),
-                  ),
-                  _buildRoleButton(
-                    layout: layout,
-                    label: 'Driver',
-                    icon: Icons.drive_eta,
-                    isSelected: auth.activeRole == UserRole.driver,
-                    onTap: () => auth.switchRole(UserRole.driver),
-                  ),
-                  _buildRoleButton(
-                    layout: layout,
-                    label: 'Admin',
-                    icon: Icons.dashboard,
-                    isSelected: auth.activeRole == UserRole.admin,
-                    onTap: () => auth.switchRole(UserRole.admin),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        // Auth / User Profile Icon Button
-        Padding(
-          padding: const EdgeInsets.only(right: 12),
-          child: InkWell(
-            onTap: () => _showUserSessionModal(context, auth, isDark, layout),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.all(7),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: c.surfaceRaised,
-                border: Border.all(
-                  color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
-                      ? AppTheme.emeraldGreen
-                      : c.border,
-                  width: 1.5,
-                ),
-              ),
-              child: Icon(
-                (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
-                    ? Icons.account_circle
-                    : Icons.login,
-                size: layout.scale(18),
-                color: (auth.isAuthenticated || auth.currentUser.phone.isNotEmpty)
-                    ? AppTheme.emeraldGreen
-                    : (isDark ? Colors.white70 : AppTheme.darkNavy),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 
@@ -284,11 +325,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                               InkWell(
                                 onTap: () {
                                   Navigator.of(ctx).pop();
-                                  DriverNameDialog.show(
-                                    context,
-                                    currentName: user.fullName,
-                                    barrierDismissible: true,
-                                  );
+                                  _showEditProfileDialog(context, auth);
                                 },
                                 borderRadius: BorderRadius.circular(12),
                                 child: Padding(
@@ -312,6 +349,17 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                               color: AppTheme.slateMuted,
                             ),
                           ),
+                          if (user.email != null && user.email!.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              user.email!,
+                              style: TextStyle(
+                                fontSize: layout.fontSize(12),
+                                color: AppTheme.slateMuted,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -350,6 +398,24 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 const SizedBox(height: 8),
                 ListTile(
                   leading: const Icon(
+                    Icons.manage_accounts_outlined,
+                    color: AppTheme.primaryBlue,
+                  ),
+                  title: const Text(
+                    'Edit Profile Info',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Update your name, phone number, or optional email',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showEditProfileDialog(context, auth);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(
                     Icons.phone_iphone,
                     color: AppTheme.primaryBlue,
                   ),
@@ -365,12 +431,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.pop(ctx);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const PhoneAuthScreen(),
-                      ),
-                    );
+                    PhoneAuthScreen.navigate(context, replace: true);
                   },
                 ),
                 ListTile(
@@ -454,24 +515,90 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     LegalTermsModal.showPrivacy(context);
                   },
                 ),
-                if (isUserSignedIn)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.logout,
+                ValueListenableBuilder<bool>(
+                  valueListenable: AiConsentDialog.consentNotifier,
+                  builder: (tileCtx, aiConsentGranted, _) {
+                    return SwitchListTile(
+                      key: const Key('profile_ai_consent_switch'),
+                      secondary: const Icon(
+                        Icons.auto_awesome_outlined,
+                        color: AppTheme.primaryBlue,
+                      ),
+                      title: const Text(
+                        'AI Assistant Data Sharing',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        aiConsentGranted
+                            ? 'Allowed: sharing prompts & trip context with Google Gemini AI'
+                            : 'Declined: cloud AI disabled (core on-device pricing active)',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      value: aiConsentGranted,
+                      activeThumbColor: AppTheme.emeraldGreen,
+                      onChanged: (val) async {
+                        if (val) {
+                          await AiConsentDialog.ensureConsent(ctx);
+                        } else {
+                          await AiConsentDialog.setConsent(false);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'AI Assistant Data Sharing revoked. Cloud AI is now disabled.',
+                                ),
+                                behavior: SnackBarBehavior.floating,
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    );
+                  },
+                ),
+                ListTile(
+                  key: const Key('session_sign_out_tile'),
+                  leading: const Icon(
+                    Icons.logout_rounded,
+                    color: AppTheme.sunsetCoral,
+                  ),
+                  title: const Text(
+                    'Sign Out',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
                       color: AppTheme.sunsetCoral,
                     ),
-                    title: const Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: AppTheme.sunsetCoral,
-                      ),
-                    ),
-                    onTap: () async {
-                      Navigator.pop(ctx);
-                      await auth.signOut();
-                    },
                   ),
+                  subtitle: Text(
+                    isUserSignedIn
+                        ? 'Log out of ${user.phone.isNotEmpty ? user.phone : "current session"}'
+                        : 'Return to login / sign up screen',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  onTap: () async {
+                    final navigator = Navigator.of(context, rootNavigator: true);
+                    final messenger = ScaffoldMessenger.maybeOf(context);
+                    Navigator.pop(ctx);
+                    await auth.signOut();
+                    messenger?.clearSnackBars();
+                    messenger?.showSnackBar(
+                      const SnackBar(
+                        content: Text('Signed out successfully.'),
+                        backgroundColor: AppTheme.emeraldGreen,
+                        behavior: SnackBarBehavior.floating,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    navigator.pushAndRemoveUntil(
+                      AppRouter.smoothRoute(
+                        const PhoneAuthScreen(),
+                        settings: const RouteSettings(name: '/login'),
+                      ),
+                      (route) => false,
+                    );
+                  },
+                ),
                 const Divider(),
                 ListTile(
                   leading: const Icon(
@@ -499,6 +626,106 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         ),
       );
+      },
+    );
+  }
+
+  void _showEditProfileDialog(BuildContext context, AuthProvider auth) {
+    final user = auth.currentUser;
+    final nameCtrl = TextEditingController(
+      text: user.fullName == 'Guest User' ? '' : user.fullName,
+    );
+    final phoneCtrl = TextEditingController(text: user.phone);
+    final emailCtrl = TextEditingController(text: user.email ?? '');
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.manage_accounts_rounded, color: AppTheme.primaryBlue, size: 24),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Edit Profile Info',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name',
+                    hintText: 'Enter your full name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone Number',
+                    hintText: '+923001234567',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(
+                    labelText: 'Email (Optional)',
+                    hintText: 'you@example.com',
+                    prefixIcon: Icon(Icons.alternate_email),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryBlue,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                final newName = nameCtrl.text.trim();
+                final newPhone = phoneCtrl.text.trim();
+                final newEmail = emailCtrl.text.trim();
+                Navigator.pop(dialogCtx);
+                await auth.updateUserProfile(
+                  fullName: newName.isNotEmpty ? newName : null,
+                  phone: newPhone.isNotEmpty ? newPhone : null,
+                  email: newEmail,
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Profile updated successfully.'),
+                      backgroundColor: AppTheme.emeraldGreen,
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        );
       },
     );
   }
@@ -547,23 +774,33 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
       },
     ).then((confirmed) async {
       if (confirmed == true && context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final navigator = Navigator.of(context, rootNavigator: true);
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.showSnackBar(
           const SnackBar(
             content: Text('Deleting your account and data...'),
             duration: Duration(seconds: 2),
           ),
         );
         final success = await auth.deleteAccount();
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                success
-                    ? 'Your SwiftRide account has been permanently deleted.'
-                    : (auth.authError ?? 'Failed to delete account. Please re-login and try again.'),
-              ),
-              backgroundColor: success ? AppTheme.emeraldGreen : Colors.redAccent,
+        messenger?.clearSnackBars();
+        messenger?.showSnackBar(
+          SnackBar(
+            content: Text(
+              success
+                  ? 'Your SwiftRide account has been permanently deleted.'
+                  : (auth.authError ?? 'Failed to delete account. Please re-login and try again.'),
             ),
+            backgroundColor: success ? AppTheme.emeraldGreen : Colors.redAccent,
+          ),
+        );
+        if (success) {
+          navigator.pushAndRemoveUntil(
+            AppRouter.smoothRoute(
+              const PhoneAuthScreen(),
+              settings: const RouteSettings(name: '/login'),
+            ),
+            (route) => false,
           );
         }
       }
@@ -576,6 +813,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     required IconData icon,
     required bool isSelected,
     required VoidCallback onTap,
+    bool isCompact = false,
   }) {
     // Semantics.tooltip is used instead of a nested Tooltip widget: the nested
     // tooltip contributes its own semantics node, which replaced this label and
@@ -599,7 +837,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(
-                horizontal: layout.scale(8),
+                horizontal: isCompact ? 5 : 7,
                 vertical: 6,
               ),
               decoration: BoxDecoration(
@@ -614,17 +852,18 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     : null,
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
                     icon,
-                    size: layout.scale(13),
+                    size: isCompact ? 11.5 : 13,
                     color: isSelected ? Colors.white : AppTheme.slateMuted,
                   ),
-                  const SizedBox(width: 4),
+                  SizedBox(width: isCompact ? 2.5 : 4),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: layout.fontSize(11),
+                      fontSize: isCompact ? 10 : 11,
                       fontWeight: isSelected
                           ? FontWeight.w700
                           : FontWeight.w500,

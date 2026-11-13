@@ -1,11 +1,11 @@
 # Privacy Policy for SwiftRide
 
-**Last Updated:** October 17, 2026  
+**Last Updated:** November 13, 2026  
 **Effective Date:** October 17, 2026  
 **Application Name:** SwiftRide (Swift Ride)[cite: 10]  
 **Package / Bundle ID:** `com.dartnexuslab.swiftride`[cite: 10]  
 **Developer / Publisher:** DartNexusLab[cite: 10]  
-**Contact Email:** privacy@dartnexuslab.com  
+**Contact Email:** aliasgharinnocent@yahoo.com  
 
 ---
 
@@ -75,16 +75,28 @@ We may disclose information if required to do so by applicable law, regulation, 
 
 ---
 
-## 5. Data Retention and Security
+## 5. Third-Party Artificial Intelligence Services (Google Gemini AI)
+
+In addition to local on-device TensorFlow Lite fare calculation, SwiftRide offers optional cloud-assisted AI features (In-App Conversational Assistant, Daily Earnings Advisor, Proactive Safety Check-In / SwiftGuard, and Fleet Maintenance Predictor). In compliance with Apple App Store Review Guidelines 5.1.1(i) and 5.1.2(i), we disclose the following regarding third-party AI processing:
+
+- **What Data is Collected & Shared:** Chat prompts (text or transcribed voice queries), user role (`Rider` or `Driver`), trip context (pickup/dropoff area, route distance, estimated duration, and fare metrics), and vehicle telemetry/status.
+- **How It is Collected & Used:** Collected directly from your explicit in-app inputs and active ride session context solely to generate real-time conversational assistance, driver earnings insights, fleet maintenance recommendations, and proactive safety check-ins.
+- **Recipient & Protection:** Transmitted to **Google LLC** via **Firebase AI Logic (Google Gemini AI)** over encrypted TLS 1.3 connections governed by Google Cloud / Firebase Data Processing and Security Terms, ensuring equal or greater protection of your data. Your personal data is never sold or used to train third-party public AI models.
+- **User Permission & Control:** Cloud AI data sharing is **disabled by default** and occurs **only after you grant explicit in-app consent** via the AI Data Sharing Permission dialog (`Agree & Continue`). You may decline consent and continue using all core ride-hailing, navigation, and on-device pricing features without cloud AI, and you can revoke or re-grant consent at any time in **Profile / Settings > AI Assistant Data Sharing**.
+
+---
+
+## 6. Data Retention and Security
 
 - **Security:** All network communications use industry-standard Transport Layer Security (TLS 1.3 / HTTPS). Database records are protected by strict, server-enforced Cloud Firestore Security Rules[cite: 10].
 - **Retention:** We retain personal data for as long as your account remains active or as needed to provide our services, maintain dispute records, and comply with applicable statutory requirements.
 
 ---
 
-## 6. Your Rights and Choices
+## 7. Your Rights and Choices
 
 - **Access & Update:** You can view and edit your profile name, role, and vehicle details anytime inside the app settings.
+- **AI Assistant Data Sharing Controls:** You can grant or revoke permission for Google Gemini AI data sharing at any time via the **AI Assistant Data Sharing** toggle in your Profile / Settings menu.
 - **Location Controls:** You may revoke location access via your Android or iOS device settings at any time.
 - **Push Notifications:** You can opt-out of push notifications through your device settings.
 
@@ -98,24 +110,24 @@ Users have the right to request the complete deletion of their account and all a
 
 ---
 
-## 7. Children's Privacy
+## 8. Children's Privacy
 
 SwiftRide is not directed to children under the age of 13 (or under 18 for driver accounts)[cite: 10]. We do not knowingly collect personal identifiable information from children under 13[cite: 10]. If you become aware that a child has provided us with personal information, please contact us immediately, and we will take prompt steps to remove such data[cite: 10].
 
 ---
 
-## 8. Changes to This Privacy Policy
+## 9. Changes to This Privacy Policy
 
 We may update this Privacy Policy from time to time. Any revisions will be reflected with an updated "Last Updated" date at the top of this document. Continued use of the SwiftRide application following notice of changes constitutes acceptance of the revised policy.
 
 ---
 
-## 9. Contact Us
+## 10. Contact Us
 
 If you have any questions, concerns, or requests regarding this Privacy Policy or your personal data, please contact:
 
 **DartNexusLab**  
-*Email:* privacy@dartnexuslab.com  
-*Support Desk:* support@dartnexuslab.com  
+*Email:* aliasgharinnocent@yahoo.com  
+*Support Desk:* aliasgharinnocent@yahoo.com  
 *Registered Office:* Jhang, Punjab, Pakistan[cite: 10]  
-*Website:* https://swiftride.dartnexuslab.com
+*Website:* https://swift-ride-5ab75.web.app

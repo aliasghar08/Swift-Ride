@@ -13,7 +13,20 @@
           "package_name": "com.dartnexuslab.swiftride"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "113634488038-540i8cqef9gvdvo3o569549v080cg70f.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.dartnexuslab.swiftride",
+            "certificate_hash": "1975d32b379f67d72092b1fef74d1d60df0aa8ee"
+          }
+        },
+        {
+          "client_id": "113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDfJSXerZy1CfKivdmqAeNd1qRt3hIy5d0"
@@ -21,7 +34,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "113634488038-p0bgf26060a6bgpaefeccgrhhilorff3.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.swiftride.swiftride"
+              }
+            }
+          ]
         }
       }
     }

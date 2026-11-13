@@ -26,6 +26,8 @@ class TripEconomics {
   final bool isPredictedFromGoogleMaps;
   final String? trafficConditionNote;
   final bool isAiPredicted;
+  final CarEngineTier? carEngineTier;
+  final bool? acEnabled;
 
   const TripEconomics({
     required this.distanceKm,
@@ -49,6 +51,8 @@ class TripEconomics {
     this.isPredictedFromGoogleMaps = false,
     this.trafficConditionNote,
     this.isAiPredicted = false,
+    this.carEngineTier,
+    this.acEnabled,
   });
 
   double get fuelCostPkr => fuelCost;
@@ -70,6 +74,8 @@ class TripEconomics {
     bool isAiPredicted = false,
     String? carModel,
     double? fuelAverageKmPerL,
+    CarEngineTier? carEngineTier,
+    bool? acEnabled,
   }) {
     final effectiveDuration = durationMin > 0
         ? durationMin
@@ -81,8 +87,13 @@ class TripEconomics {
     final effectiveSource = fuelPriceSource ?? livePrice.source;
     final effectiveIsLive = isFuelPriceLive ?? livePrice.isLive;
 
+    final effectiveCarTier = vehicleType == VehicleType.car
+        ? (carEngineTier ?? CarEngineTierX.fromCarModel(carModel))
+        : null;
+    final effectiveAc = vehicleType == VehicleType.car ? (acEnabled ?? true) : false;
+
     // Predict car mileage dynamically from Google Maps route data (distance, speed, traffic)
-    // taking into account the vehicle's model, engine tier, and fuel economy.
+    // taking into account the vehicle's model, engine tier, AC load, and fuel economy.
     final mileage = vehicleType == VehicleType.car
         ? vehicleType.predictMileage(
             distanceKm: distanceKm,
@@ -91,6 +102,8 @@ class TripEconomics {
             trafficLevel: trafficLevel,
             carModel: carModel,
             customMileage: fuelAverageKmPerL,
+            carEngineTier: effectiveCarTier,
+            acEnabled: effectiveAc,
           )
         : (fuelAverageKmPerL != null && fuelAverageKmPerL > 0
             ? fuelAverageKmPerL
@@ -99,7 +112,9 @@ class TripEconomics {
     final isPredicted = vehicleType == VehicleType.car;
     String? trafficNote;
     if (isPredicted) {
-      final modelPrefix = carModel != null && carModel.isNotEmpty ? '$carModel: ' : '';
+      final modelPrefix = carModel != null && carModel.isNotEmpty
+          ? '$carModel: '
+          : (effectiveCarTier != null ? '${effectiveCarTier.displayName}: ' : '');
       if (mileage < 9.0) {
         trafficNote = '${modelPrefix}Heavy traffic congestion (~${mileage.toStringAsFixed(1)} km/L via Google Maps)';
       } else if (mileage > 11.0) {
@@ -109,7 +124,9 @@ class TripEconomics {
       }
     }
 
-    final maintRate = vehicleType.maintenanceRatePerKm;
+    final maintRate = effectiveCarTier != null
+        ? effectiveCarTier.baseWearPerKm
+        : vehicleType.maintenanceRatePerKm;
     final liters = distanceKm > 0 && mileage > 0 ? (distanceKm / mileage) : 0.0;
     final fuel = (liters * effectiveFuelPrice * 10).round() / 10.0;
     final maint = (distanceKm * maintRate * 10).round() / 10.0;
@@ -142,6 +159,8 @@ class TripEconomics {
       isPredictedFromGoogleMaps: isPredicted,
       trafficConditionNote: trafficNote,
       isAiPredicted: isAiPredicted,
+      carEngineTier: effectiveCarTier,
+      acEnabled: effectiveAc,
     );
   }
 
@@ -167,5 +186,7 @@ class TripEconomics {
         'isPredictedFromGoogleMaps': isPredictedFromGoogleMaps,
         'trafficConditionNote': trafficConditionNote,
         'isAiPredicted': isAiPredicted,
+        'carEngineTier': carEngineTier?.name,
+        'acEnabled': acEnabled,
       };
 }

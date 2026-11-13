@@ -1,4 +1,5 @@
 import '../../core/utils/geohash_util.dart';
+import '../../services/coordinate_parser.dart';
 
 class LocationPoint {
   final double latitude;
@@ -70,24 +71,30 @@ class LocationPoint {
         'geohash': effectiveGeohash,
       };
 
+  static num? _parseNum(dynamic v) {
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v.trim());
+    return null;
+  }
+
   factory LocationPoint.fromMap(Map<String, dynamic> map) {
     num? lat;
     num? lng;
 
     final geo = map['geopoint'];
     if (geo is Map) {
-      lat = (geo['latitude'] ?? geo['lat']) as num?;
-      lng = (geo['longitude'] ?? geo['lng']) as num?;
+      lat = _parseNum(geo['latitude'] ?? geo['lat']);
+      lng = _parseNum(geo['longitude'] ?? geo['lng']);
     } else if (geo != null) {
       // Handles cloud_firestore GeoPoint object dynamically without forcing compile-time dependency
       try {
-        lat = (geo as dynamic).latitude as num?;
-        lng = (geo as dynamic).longitude as num?;
+        lat = _parseNum((geo as dynamic).latitude);
+        lng = _parseNum((geo as dynamic).longitude);
       } catch (_) {}
     }
 
-    lat ??= (map['latitude'] ?? map['lat']) as num?;
-    lng ??= (map['longitude'] ?? map['lng']) as num?;
+    lat ??= _parseNum(map['latitude'] ?? map['lat']);
+    lng ??= _parseNum(map['longitude'] ?? map['lng']);
 
     // No silent fallback. A point without coordinates is corrupt, and
     // substituting a hardcoded city centre silently relocated real users to
@@ -96,15 +103,23 @@ class LocationPoint {
       throw const FormatException('LocationPoint is missing coordinates');
     }
 
+    final double validLat = lat.toDouble();
+    final double validLng = lng.toDouble();
+
     final rawGeohash = map['geohash']?.toString();
     final geohash = (rawGeohash != null && rawGeohash.isNotEmpty)
         ? rawGeohash
-        : GeohashUtil.encode(lat.toDouble(), lng.toDouble(), 7);
+        : GeohashUtil.encode(validLat, validLng, 7);
+
+    final rawAddress = map['address']?.toString().trim() ?? '';
+    final address = (rawAddress.isNotEmpty && !rawAddress.startsWith('Location ('))
+        ? rawAddress
+        : CoordinateParser.formatOfflineGeotag(validLat, validLng);
 
     return LocationPoint(
-      latitude: lat.toDouble(),
-      longitude: lng.toDouble(),
-      address: map['address']?.toString() ?? '',
+      latitude: validLat,
+      longitude: validLng,
+      address: address,
       geohash: geohash,
     );
   }

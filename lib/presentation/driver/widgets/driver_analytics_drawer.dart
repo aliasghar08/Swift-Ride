@@ -6,6 +6,7 @@ import '../../../domain/models/vehicle_info_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../providers/driver_provider.dart';
 import '../../../services/driver_khata_service.dart';
+import '../../common/ai_consent_dialog.dart';
 import '../../common/legal_terms_modal.dart';
 import 'driver_khata_sheet.dart';
 import 'driver_name_dialog.dart';
@@ -306,10 +307,10 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
 
-                  // --- 2% Commission Economics ---
+                  // --- 2% Platform Fee Economics ---
                   _buildSectionHeader(
                     context,
-                    title: 'Earnings & 2% Commission',
+                    title: 'Earnings & 2% Platform Fee',
                     icon: Icons.trending_up_rounded,
                   ),
                   const SizedBox(height: 10),
@@ -506,9 +507,75 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                     icon: Icons.psychology,
                     iconColor: AppTheme.accentTeal,
                     isDark: isDark,
-                    onTap: () {
-                      Navigator.of(context).pop();
-                      Navigator.of(context).pushNamed('/earnings-advisor');
+                    onTap: () async {
+                      final navigator = Navigator.of(context);
+                      final allowed = await AiConsentDialog.ensureConsent(context);
+                      if (!allowed || !context.mounted) return;
+                      navigator.pop();
+                      navigator.pushNamed('/earnings-advisor');
+                    },
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: AiConsentDialog.consentNotifier,
+                    builder: (context, aiConsentGranted, _) {
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.black.withValues(alpha: 0.06),
+                          ),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(14),
+                          child: SwitchListTile(
+                          key: const Key('driver_drawer_ai_consent_switch'),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(9),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentTeal.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(11),
+                            ),
+                            child: const Icon(
+                              Icons.auto_awesome_outlined,
+                              color: AppTheme.accentTeal,
+                              size: 20,
+                            ),
+                          ),
+                          title: Text(
+                            'AI Assistant Data Sharing',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : AppTheme.darkNavy,
+                            ),
+                          ),
+                          subtitle: Text(
+                            aiConsentGranted
+                                ? 'Google Gemini AI enabled (tap to revoke)'
+                                : 'Off — on-device pricing active only',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: isDark ? Colors.white60 : AppTheme.slateMuted,
+                            ),
+                          ),
+                          value: aiConsentGranted,
+                          activeThumbColor: AppTheme.emeraldGreen,
+                          onChanged: (val) async {
+                            if (val) {
+                              await AiConsentDialog.ensureConsent(context);
+                            } else {
+                              await AiConsentDialog.setConsent(false);
+                            }
+                          },
+                        ),
+                      ),
+                    );
                     },
                   ),
                   _buildDrawerActionTile(

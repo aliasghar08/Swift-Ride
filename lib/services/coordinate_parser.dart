@@ -359,83 +359,195 @@ class CoordinateParser {
     }
   }
 
-  /// Recovers a full 10-digit Open Location Code and decodes its center coordinates.
+  /// Encodes geographical coordinates into an Open Location Code (Plus Code).
+  /// Supports 10-digit (~13.9m × 13.9m) and 11-digit (~2.8m × 3.5m building entrance) precision.
+  static String encodePlusCode(
+    double latitude,
+    double longitude, {
+    int codeLength = 11,
+  }) {
+    double lat = (latitude.clamp(-90.0, 90.0) + 90.0).clamp(0.0, 179.9999999);
+    double lng = (longitude.clamp(-180.0, 180.0) + 180.0).clamp(0.0, 359.9999999);
+
+    final buf = StringBuffer();
+    double latPlace = 20.0;
+    double lngPlace = 20.0;
+
+    for (int pair = 0; pair < 5; pair++) {
+      final latDigit = (lat / latPlace).floor().clamp(0, 19);
+      final lngDigit = (lng / lngPlace).floor().clamp(0, 19);
+      buf.write(_olcAlphabet[latDigit]);
+      buf.write(_olcAlphabet[lngDigit]);
+      if (pair == 3) {
+        buf.write('+');
+      }
+      lat -= latDigit * latPlace;
+      lng -= lngDigit * lngPlace;
+      latPlace /= 20.0;
+      lngPlace /= 20.0;
+    }
+
+    if (codeLength > 10) {
+      // 10-digit cell is 0.000125° × 0.000125°; refine with 5-row × 4-col grid
+      double cellLat = 0.000125;
+      double cellLng = 0.000125;
+      final extraChars = min(codeLength - 10, 5);
+      for (int i = 0; i < extraChars; i++) {
+        final rowStep = cellLat / 5.0;
+        final colStep = cellLng / 4.0;
+        final row = (lat / rowStep).floor().clamp(0, 4);
+        final col = (lng / colStep).floor().clamp(0, 3);
+        final gridIndex = row * 4 + col;
+        buf.write(_olcAlphabet[gridIndex]);
+        lat -= row * rowStep;
+        lng -= col * colStep;
+        cellLat = rowStep;
+        cellLng = colStep;
+      }
+    }
+
+    return buf.toString();
+  }
+
+  /// Recovers a full 10/11-digit Open Location Code using the standard OLC
+  /// `recoverNearest` algorithm and decodes its building-entrance center coordinates.
   static ({double lat, double lng, String fullCode}) _recoverNearestAndDecode(
     String code,
     double refLat,
     double refLng,
   ) {
     final plusIdx = code.indexOf('+');
-    String fullCode = code;
+    String fullCode = code.toUpperCase();
 
-    // If prefix is missing (short code e.g. "78G5+48"), recover from reference location
-    if (plusIdx < 8) {
-      final missingDigits = 8 - plusIdx;
-      double latVal = refLat + 90.0;
-      double lngVal = refLng + 180.0;
-      final prefixBuf = StringBuffer();
+    final clampedRefLat = refLat.clamp(-90.0, 90.0);
+    final clampedRefLng = refLng.clamp(-180.0, 180.0);
 
-      double latRes = 20.0;
-      double lngRes = 20.0;
-      final numPairs = missingDigits ~/ 2;
+    // If prefix is missing (short code e.g. "78G5+48" or "78G5+48F"), recover from reference location
+    if (plusIdx >= 0 && plusIdx < 8 && plusIdx % 2 == 0) {
+      final paddingLength = 8 - plusIdx;
+      final resolution = pow(20.0, 2 - (paddingLength ~/ 2)).toDouble();
+      final halfResolution = resolution / 2.0;
 
-      for (int i = 0; i < numPairs; i++) {
-        final latIdx = (latVal / latRes).floor().clamp(0, 19);
-        final lngIdx = (lngVal / lngRes).floor().clamp(0, 19);
-        prefixBuf.write(_olcAlphabet[latIdx]);
-        prefixBuf.write(_olcAlphabet[lngIdx]);
-        latVal -= latIdx * latRes;
-        lngVal -= lngIdx * lngRes;
-        latRes /= 20.0;
-        lngRes /= 20.0;
+      // Pad prefix from the reference coordinate rounded down to the grid resolution
+      final refCode = encodePlusCode(clampedRefLat, clampedRefLng, codeLength: 10);
+      final prefix = refCode.substring(0, paddingLength);
+      final candidateCode = prefix + fullCode;
+
+      var decoded = _decodeFullPlusCode(candidateCode);
+
+      // Adjust by +/- resolution so the recovered code is within halfResolution of reference
+      double adjustedLat = decoded.lat;
+      double adjustedLng = decoded.lng;
+
+      if (clampedRefLat - adjustedLat > halfResolution && adjustedLat + resolution <= 90.0) {
+        adjustedLat += resolution;
+      } else if (adjustedLat - clampedRefLat > halfResolution && adjustedLat - resolution >= -90.0) {
+        adjustedLat -= resolution;
       }
 
-      fullCode = prefixBuf.toString() + code;
+      if (clampedRefLng - adjustedLng > halfResolution) {
+        adjustedLng += resolution;
+        if (adjustedLng > 180.0) adjustedLng -= 360.0;
+      } else if (adjustedLng - clampedRefLng > halfResolution) {
+        adjustedLng -= resolution;
+        if (adjustedLng < -180.0) adjustedLng += 360.0;
+      }
+
+      // Re-encode the recovered prefix from the adjusted coordinates so fullCode matches
+      final adjustedPrefix = encodePlusCode(adjustedLat, adjustedLng, codeLength: 10)
+          .substring(0, paddingLength);
+      fullCode = adjustedPrefix + code.toUpperCase();
+      decoded = _decodeFullPlusCode(fullCode);
+      return (lat: decoded.lat, lng: decoded.lng, fullCode: fullCode);
     }
 
-    // Decode full 10-char code
-    final clean = fullCode.replaceAll('+', '').toUpperCase();
-    double lat = -90.0;
-    double lng = -180.0;
-    double latVal = 20.0;
-    double lngVal = 20.0;
+    final decoded = _decodeFullPlusCode(fullCode);
+    return (lat: decoded.lat, lng: decoded.lng, fullCode: fullCode);
+  }
 
-    final len = min(clean.length, 10);
-    for (int i = 0; i < len; i += 2) {
+  /// Decodes a full (10 to 15 character) Open Location Code into its exact cell center.
+  static ({double lat, double lng}) _decodeFullPlusCode(String fullCode) {
+    final clean = fullCode.replaceAll('+', '').toUpperCase();
+    double southLat = -90.0;
+    double westLng = -180.0;
+    double latPlace = 20.0;
+    double lngPlace = 20.0;
+
+    final pairDigits = min(clean.length, 10);
+    for (int i = 0; i < pairDigits; i += 2) {
+      if (i + 1 >= clean.length) break;
       final latIndex = _olcAlphabet.indexOf(clean[i]);
       final lngIndex = _olcAlphabet.indexOf(clean[i + 1]);
       if (latIndex < 0 || lngIndex < 0) break;
-      lat += latIndex * latVal;
-      lng += lngIndex * lngVal;
-      latVal /= 20.0;
-      lngVal /= 20.0;
-    }
-
-    double centerLat = lat + (latVal * 20.0) / 2.0;
-    double centerLng = lng + (lngVal * 20.0) / 2.0;
-
-    // Optional 11th character: 4x5 subgrid refinement (e.g. 7972+7PF)
-    if (clean.length > 10) {
-      final gridIdx = _olcAlphabet.indexOf(clean[10]);
-      if (gridIdx >= 0) {
-        final row = gridIdx ~/ 4; // 5 rows (0..4)
-        final col = gridIdx % 4; // 4 columns (0..3)
-        centerLat = lat + row * (latVal / 5.0) + (latVal / 10.0);
-        centerLng = lng + col * (lngVal / 4.0) + (lngVal / 8.0);
+      southLat += latIndex * latPlace;
+      westLng += lngIndex * lngPlace;
+      if (i + 2 < pairDigits) {
+        latPlace /= 20.0;
+        lngPlace /= 20.0;
       }
     }
 
-    // Normalize short code nearest recovery around reference coordinates
-    if (plusIdx < 8) {
-      final latDiff = centerLat - refLat;
-      final lngDiff = centerLng - refLng;
-      if (latDiff > 0.5) centerLat -= 1.0;
-      if (latDiff < -0.5) centerLat += 1.0;
-      if (lngDiff > 0.5) centerLng -= 1.0;
-      if (lngDiff < -0.5) centerLng += 1.0;
+    // At 10 digits (5 pairs), latPlace and lngPlace are 0.000125° (~13.9m × 13.9m)
+    double cellHeight = latPlace;
+    double cellWidth = lngPlace;
+
+    // Refine with 5-row × 4-column building-entrance grid for characters 11+
+    if (clean.length > 10) {
+      final extraEnd = min(clean.length, 15);
+      for (int i = 10; i < extraEnd; i++) {
+        final gridIdx = _olcAlphabet.indexOf(clean[i]);
+        if (gridIdx < 0) break;
+        final row = gridIdx ~/ 4; // 5 rows (0..4) from south to north
+        final col = gridIdx % 4; // 4 columns (0..3) from west to east
+        cellHeight /= 5.0;
+        cellWidth /= 4.0;
+        southLat += row * cellHeight;
+        westLng += col * cellWidth;
+      }
     }
 
-    return (lat: centerLat, lng: centerLng, fullCode: fullCode);
+    final centerLat = (southLat + cellHeight / 2.0).clamp(-90.0, 90.0);
+    final centerLng = (westLng + cellWidth / 2.0).clamp(-180.0, 180.0);
+    return (lat: centerLat, lng: centerLng);
+  }
+
+  /// Resolves the nearest Pakistani city or major locality to the given coordinates.
+  static ({String city, double distanceKm}) findNearestCity(double lat, double lng) {
+    String bestCity = 'Jhang';
+    double minDistance = double.infinity;
+    for (final entry in pakistanCities.entries) {
+      // Euclidean approximation in km
+      final dLat = (lat - entry.value.lat) * 111.0;
+      final dLng = (lng - entry.value.lng) * 96.0;
+      final dist = sqrt(dLat * dLat + dLng * dLng);
+      if (dist < minDistance) {
+        minDistance = dist;
+        bestCity = entry.key;
+      }
+    }
+    final capitalized = bestCity.split(' ').map((w) {
+      if (w.isEmpty) return '';
+      return w[0].toUpperCase() + w.substring(1);
+    }).join(' ');
+    return (city: capitalized, distanceKm: minDistance);
+  }
+
+  /// Formats an instant, zero-network, highly-accurate offline geotag for any coordinates.
+  /// Combines Open Location Code (Plus Code) with the nearest recognized locality.
+  static String formatOfflineGeotag(double lat, double lng) {
+    final code = encodePlusCode(lat, lng, codeLength: 10);
+    final shortCode = code.length >= 8 ? code.substring(4) : code;
+    final nearest = findNearestCity(lat, lng);
+
+    if (nearest.distanceKm <= 3.5) {
+      return 'Central ${nearest.city}, Punjab, Pakistan';
+    } else if (nearest.distanceKm <= 20.0) {
+      return '$shortCode, ${nearest.city}, Pakistan';
+    } else if (nearest.distanceKm <= 60.0) {
+      return '$shortCode, Near ${nearest.city}, Pakistan';
+    } else {
+      return '$code, Pakistan';
+    }
   }
 
   static ParsedCoordinates? _validate(

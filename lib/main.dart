@@ -16,6 +16,7 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'providers/safety_provider.dart';
+import 'presentation/auth/phone_auth_screen.dart';
 import 'services/fcm_service.dart';
 import 'services/fuel_price_service.dart';
 import 'services/native/native_storage_service.dart';
@@ -76,9 +77,17 @@ Future<void> main() async {
 
   String startRoute = '/login';
   try {
+    await AiConsentDialog.isConsentGranted();
     final cachedProfile = await NativeStorageService().getString('cached_user_profile');
     if (cachedProfile != null && cachedProfile.isNotEmpty) {
-      startRoute = '/';
+      final hasVerifiedPhone = cachedProfile.contains('"phone":"+') ||
+          cachedProfile.contains('"phone": "+') ||
+          RegExp(r'"phone"\s*:\s*"[0-9+]{7,}').hasMatch(cachedProfile);
+      if (hasVerifiedPhone) {
+        startRoute = '/';
+      } else {
+        await NativeStorageService().remove('cached_user_profile');
+      }
     }
   } catch (storageErr) {
     debugPrint('[Main] Error reading cached session: $storageErr');
@@ -138,14 +147,59 @@ class SwiftRideApp extends StatefulWidget {
   State<SwiftRideApp> createState() => _SwiftRideAppState();
 }
 
-class _SwiftRideAppState extends State<SwiftRideApp> {
+class _SwiftRideAppState extends State<SwiftRideApp> with WidgetsBindingObserver {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  int _handledSignOutGen = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  bool _isAllowedExternalDeepLink(String? routeName) {
+    if (routeName == null || routeName.isEmpty) return false;
+    final uri = Uri.tryParse(routeName);
+    if (uri == null) return false;
+    // Only allow /track deep links from the OS; ignore Firebase Auth reCAPTCHA
+    // callback links (e.g. com.googleusercontent.apps...://firebaseauth/link)
+    // so they never push MainShellScreen on top of the OTP verification screen.
+    return uri.path == '/track';
+  }
+
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation routeInformation) {
+    final uriString = routeInformation.uri.toString();
+    if (!_isAllowedExternalDeepLink(uriString)) {
+      return SynchronousFuture<bool>(true);
+    }
+    return super.didPushRouteInformation(routeInformation);
+  }
 
   @override
   Widget build(BuildContext context) {
     return CustomConsumer<AuthProvider>(
       builder: (context, auth, _) {
         final effectiveRoute = widget.initialRoute ?? AppRouter.initialRoute;
+
+        if (auth.signOutGeneration != _handledSignOutGen) {
+          _handledSignOutGen = auth.signOutGeneration;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _navigatorKey.currentState?.pushAndRemoveUntil(
+              AppRouter.smoothRoute(
+                const PhoneAuthScreen(),
+                settings: const RouteSettings(name: '/login'),
+              ),
+              (route) => false,
+            );
+          });
+        }
 
         return MaterialApp(
           navigatorKey: _navigatorKey,
@@ -155,6 +209,11 @@ class _SwiftRideAppState extends State<SwiftRideApp> {
           darkTheme: AppTheme.darkTheme,
           themeMode: auth.activeRole == UserRole.driver ? ThemeMode.dark : ThemeMode.light,
           initialRoute: effectiveRoute,
+          onGenerateInitialRoutes: (String initialRouteName) {
+            return [
+              AppRouter.onGenerateRoute(RouteSettings(name: initialRouteName)),
+            ];
+          },
           onGenerateRoute: AppRouter.onGenerateRoute,
         );
       },

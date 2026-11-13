@@ -138,7 +138,7 @@ SwiftRide/
 │   ├── presentation/           # Glassy screens, RealMapView, GoogleMapView, animated widgets
 │   ├── providers/              # Pure custom ChangeNotifier providers
 │   └── services/               # Native method channels and business services
-├── test/                       # Flutter Unit & Widget Test Suite (42 tests, 100% passing)
+├── test/                       # Flutter Unit & Widget Test Suite (248 tests, 100% passing)
 ├── AI_SETUP.md                 # Firebase AI Logic & App Check Setup Guide
 ├── BUG_REPORT.md               # Diagnostic & Resolution Bug Report
 ├── DATA_SETUP.md               # Firebase Auth & Firestore Production Setup

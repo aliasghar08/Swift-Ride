@@ -3,6 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { APP_CONSTANTS } from '../../config/constants';
 import { assertHasToken } from '../../middleware/auth';
 import { validateInput, LatLngSchema } from '../../middleware/validation';
+import { buildPrecisePropertyAddress } from './reverseGeocode';
 import { z } from 'zod';
 
 const mapsKey = defineSecret('GOOGLE_MAPS_SERVER_KEY');
@@ -102,11 +103,13 @@ export const getAutocomplete = onCall(
         const geoJson = await geoRes.json();
         if (geoJson.status === 'OK' && geoJson.results?.length > 0) {
           const first = geoJson.results[0];
+          const { address: preciseAddr } = buildPrecisePropertyAddress(geoJson.results);
+          const resolvedText = preciseAddr || first.formatted_address;
           plusPredictions.push({
-            placeId: `plus:${first.geometry.location.lat},${first.geometry.location.lng}:${first.formatted_address}`,
-            description: first.formatted_address,
-            mainText: `Pinned Location (${plusMatch[1].toUpperCase()})`,
-            secondaryText: first.formatted_address,
+            placeId: `plus:${first.geometry.location.lat},${first.geometry.location.lng}:${resolvedText}`,
+            description: resolvedText,
+            mainText: resolvedText,
+            secondaryText: `Plus Code: ${plusMatch[1].toUpperCase()} · ${first.formatted_address}`,
           });
         }
       } catch (plusErr) {

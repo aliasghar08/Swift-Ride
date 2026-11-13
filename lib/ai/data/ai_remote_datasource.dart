@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import '../presentation/dialogs/ai_consent_dialog.dart';
 
 abstract class AiRemoteDataSource {
   Stream<String> streamChat(String message, {String? systemPrompt});
@@ -74,9 +75,12 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
 
   @override
   Stream<String> streamChat(String message, {String? systemPrompt}) async* {
-    _ensureInitialized(systemPrompt: systemPrompt);
+    final hasConsent = await AiConsentDialog.isConsentGranted();
+    if (hasConsent) {
+      _ensureInitialized(systemPrompt: systemPrompt);
+    }
 
-    if (_chatModel != null) {
+    if (hasConsent && _chatModel != null) {
       try {
         final stream = _chatModel!.generateContentStream([Content.text(message)]);
         await for (final chunk in stream) {
@@ -102,9 +106,12 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
 
   @override
   Future<String> generateContent(String prompt, {String? systemPrompt}) async {
-    _ensureInitialized(systemPrompt: systemPrompt);
+    final hasConsent = await AiConsentDialog.isConsentGranted();
+    if (hasConsent) {
+      _ensureInitialized(systemPrompt: systemPrompt);
+    }
 
-    if (_chatModel != null) {
+    if (hasConsent && _chatModel != null) {
       try {
         final response = await _chatModel!.generateContent([Content.text(prompt)]);
         return response.text ?? _getSmartFallback(prompt);
@@ -118,9 +125,12 @@ class FirebaseAiRemoteDataSource implements AiRemoteDataSource {
 
   @override
   Future<FunctionCall?> parseIntentWithTools(String message) async {
-    _ensureInitialized();
+    final hasConsent = await AiConsentDialog.isConsentGranted();
+    if (hasConsent) {
+      _ensureInitialized();
+    }
 
-    if (_toolsModel != null) {
+    if (hasConsent && _toolsModel != null) {
       try {
         final response = await _toolsModel!.generateContent([Content.text(message)]);
         return response.functionCalls.firstOrNull;

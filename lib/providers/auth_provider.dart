@@ -23,6 +23,7 @@ class AuthProvider extends ChangeNotifier {
   String? _authError;
   String? _verificationId;
   int? _resendToken;
+  int _signOutGeneration = 0;
   StreamSubscription<User?>? _authSubscription;
 
   AuthProvider({
@@ -48,7 +49,8 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> _persistCurrentUser() async {
     try {
-      if (_currentUser.phone.isNotEmpty) {
+      if (_currentUser.phone.isNotEmpty ||
+          (_currentUser.id.isNotEmpty && !_currentUser.id.startsWith('guest'))) {
         await _storage.setString(_cachedProfileKey, jsonEncode(_currentUser.toMap()));
       }
     } catch (e) {
@@ -62,7 +64,11 @@ class AuthProvider extends ChangeNotifier {
   String? get authError => _authError;
   String? get verificationId => _verificationId;
   int? get resendToken => _resendToken;
-  bool get isAuthenticated => _authService.isAuthenticated;
+  int get signOutGeneration => _signOutGeneration;
+  bool get isAuthenticated =>
+      _authService.isAuthenticated ||
+      _currentUser.phone.isNotEmpty ||
+      (_currentUser.id.isNotEmpty && !_currentUser.id.startsWith('guest'));
 
   AuthService get authService => _authService;
   FirestoreUserService get firestoreUserService => _firestoreUserService;
@@ -74,9 +80,11 @@ class AuthProvider extends ChangeNotifier {
       if (profileJson != null && profileJson.isNotEmpty) {
         final map = jsonDecode(profileJson) as Map<String, dynamic>;
         final restored = AppUser.fromMap(map);
-        if (restored.phone.isNotEmpty) {
+        if (restored.phone.isNotEmpty ||
+            (restored.id.isNotEmpty && !restored.id.startsWith('guest'))) {
           _currentUser = restored;
           _activeRole = restored.role;
+          unawaited(_firestoreUserService.saveUser(restored));
           notifyListeners();
         }
       }
@@ -108,10 +116,14 @@ class AuthProvider extends ChangeNotifier {
 
   void _initAuthListener() {
     _authSubscription = _authService.authStateChanges.listen((user) async {
-      if (user != null) {
+      if (user != null &&
+          (!user.isAnonymous ||
+              (user.phoneNumber != null && user.phoneNumber!.isNotEmpty))) {
         try {
           final profile = await _firestoreUserService.getUser(user.uid);
-          if (profile != null) {
+          if (profile != null &&
+              (profile.phone.isNotEmpty ||
+                  (profile.id.isNotEmpty && !profile.id.startsWith('guest')))) {
             _currentUser = profile;
             _activeRole = profile.role;
             _persistCurrentUser();
@@ -120,6 +132,15 @@ class AuthProvider extends ChangeNotifier {
             _currentUser = _currentUser.copyWith(
               id: user.uid,
               phone: user.phoneNumber,
+            );
+            _persistCurrentUser();
+            notifyListeners();
+          } else if (user.email != null && user.email!.isNotEmpty) {
+            _currentUser = _currentUser.copyWith(
+              id: user.uid,
+              email: user.email,
+              fullName: user.displayName ?? _currentUser.fullName,
+              photoUrl: user.photoURL,
             );
             _persistCurrentUser();
             notifyListeners();
@@ -175,6 +196,7 @@ class AuthProvider extends ChangeNotifier {
     PhoneAuthCredential credential, {
     String? phoneNumber,
     String? fullName,
+    String? email,
     UserRole? role,
   }) async {
     _isLoading = true;
@@ -189,6 +211,9 @@ class AuthProvider extends ChangeNotifier {
           'user_${cleanDigits.isNotEmpty ? cleanDigits : DateTime.now().millisecondsSinceEpoch}';
 
       final resolvedRole = role ?? _activeRole;
+      final resolvedEmail = (email != null && email.trim().isNotEmpty)
+          ? email.trim()
+          : _currentUser.email;
       final updatedUser = await _authService.syncUserProfile(
         uid: uid,
         phone: phone,
@@ -197,6 +222,7 @@ class AuthProvider extends ChangeNotifier {
             : (_currentUser.fullName.isNotEmpty && _currentUser.fullName != 'Guest User'
                 ? _currentUser.fullName
                 : 'SwiftRide User'),
+        email: resolvedEmail,
         defaultRole: resolvedRole,
       );
 
@@ -221,6 +247,7 @@ class AuthProvider extends ChangeNotifier {
     required String smsCode,
     required String phoneNumber,
     String? fullName,
+    String? email,
     UserRole? role,
     void Function()? onSuccess,
     void Function(String error)? onError,
@@ -255,6 +282,9 @@ class AuthProvider extends ChangeNotifier {
           fallbackUid;
 
       final resolvedRole = role ?? _activeRole;
+      final resolvedEmail = (email != null && email.trim().isNotEmpty)
+          ? email.trim()
+          : _currentUser.email;
 
       final updatedUser = await _authService.syncUserProfile(
         uid: uid,
@@ -264,6 +294,7 @@ class AuthProvider extends ChangeNotifier {
             : (_currentUser.fullName.isNotEmpty && _currentUser.fullName != 'Guest User'
                 ? _currentUser.fullName
                 : 'SwiftRide User'),
+        email: resolvedEmail,
         defaultRole: resolvedRole,
       );
 
@@ -285,13 +316,148 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Sign out the current user session.
+  /// Authenticates using Google Sign-In and persists user profile.
+  Future<bool> signInWithGoogle({
+    required String selectedRole,
+    String? fullName,
+    void Function()? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    _isLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    try {
+      final user = await _authService.signInWithGoogle(
+        selectedRole: selectedRole,
+        fullName: fullName,
+      );
+
+      if (user == null) {
+        // User cancelled flow without error
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      _currentUser = user;
+      _activeRole = user.role;
+      _storage.setString('active_user_role', _activeRole.name);
+      _persistCurrentUser();
+      _isLoading = false;
+      notifyListeners();
+      onSuccess?.call();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
+      _authError = errMsg;
+      notifyListeners();
+      onError?.call(errMsg);
+      return false;
+    }
+  }
+
+  /// Authenticates using Apple Sign-In and persists user profile.
+  Future<bool> signInWithApple({
+    required String selectedRole,
+    String? fullName,
+    void Function()? onSuccess,
+    void Function(String error)? onError,
+  }) async {
+    _isLoading = true;
+    _authError = null;
+    notifyListeners();
+
+    try {
+      final user = await _authService.signInWithApple(
+        selectedRole: selectedRole,
+        fullName: fullName,
+      );
+
+      if (user == null) {
+        // User cancelled flow without error
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      _currentUser = user;
+      _activeRole = user.role;
+      _storage.setString('active_user_role', _activeRole.name);
+      _persistCurrentUser();
+      _isLoading = false;
+      notifyListeners();
+      onSuccess?.call();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
+      _authError = errMsg;
+      notifyListeners();
+      onError?.call(errMsg);
+      return false;
+    }
+  }
+
+  /// Automatically looks up user profile info by [phoneNumber] from local cache or Firestore
+  /// so the login/signup form can autofill Name, Email, and Role while keeping them editable.
+  Future<AppUser?> lookupUserByPhone(String phoneNumber) async {
+    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 9) return null;
+
+    final tail = digits.substring(digits.length - 9);
+
+    // 1. Check current user in memory
+    final currentDigits = _currentUser.phone.replaceAll(RegExp(r'\D'), '');
+    if (currentDigits.length >= 9 &&
+        currentDigits.substring(currentDigits.length - 9) == tail &&
+        _currentUser.fullName.isNotEmpty &&
+        _currentUser.fullName != 'Guest User') {
+      return _currentUser;
+    }
+
+    // 2. Query FirestoreUserService (memory cache + Firestore `users` collection)
+    final fromFirestore = await _firestoreUserService.getUserByPhone(phoneNumber);
+    if (fromFirestore != null) {
+      return fromFirestore;
+    }
+
+    // 3. Fallback: check cached profile in NativeStorageService
+    try {
+      final profileJson = _storage.peekStringSync(_cachedProfileKey);
+      if (profileJson != null && profileJson.isNotEmpty) {
+        final map = jsonDecode(profileJson) as Map<String, dynamic>;
+        final cachedUser = AppUser.fromMap(map);
+        final cachedDigits = cachedUser.phone.replaceAll(RegExp(r'\D'), '');
+        if (cachedDigits.length >= 9 &&
+            cachedDigits.substring(cachedDigits.length - 9) == tail &&
+            cachedUser.fullName.isNotEmpty &&
+            cachedUser.fullName != 'Guest User') {
+          return cachedUser;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  /// Sign out the current user session while remembering registered phone profiles.
   Future<void> signOut() async {
     _isLoading = true;
+    _authError = null;
     notifyListeners();
     try {
+      // Ensure any profile edits made during the session are indexed by phone before signing out
+      if (_currentUser.phone.isNotEmpty &&
+          _currentUser.fullName.isNotEmpty &&
+          _currentUser.fullName != 'Guest User') {
+        await _firestoreUserService.saveUser(_currentUser);
+      }
       await _authService.signOut();
-      await _storage.remove(_cachedProfileKey);
+      unawaited(_storage.remove(_cachedProfileKey));
+      _verificationId = null;
+      _resendToken = null;
       _currentUser = AppUser(
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
@@ -302,8 +468,9 @@ class AuthProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
       _activeRole = UserRole.rider;
-      await _storage.setString('active_user_role', 'rider');
-      _initAnonymousSession();
+      _signOutGeneration++;
+      unawaited(_storage.setString('active_user_role', 'rider'));
+      unawaited(_initAnonymousSession());
     } catch (e) {
       _authError = e.toString();
     } finally {
@@ -321,8 +488,13 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      if (_currentUser.id.isNotEmpty) {
+        await _firestoreUserService.deleteUser(_currentUser.id);
+      }
       await _authService.deleteAccount();
-      await _storage.remove(_cachedProfileKey);
+      unawaited(_storage.remove(_cachedProfileKey));
+      _verificationId = null;
+      _resendToken = null;
       _currentUser = AppUser(
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
@@ -333,9 +505,10 @@ class AuthProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
       );
       _activeRole = UserRole.rider;
-      await _storage.setString('active_user_role', 'rider');
-      await _storage.remove('driver_daily_khata');
-      _initAnonymousSession();
+      _signOutGeneration++;
+      unawaited(_storage.setString('active_user_role', 'rider'));
+      unawaited(_storage.remove('driver_daily_khata'));
+      unawaited(_initAnonymousSession());
       return true;
     } catch (e) {
       final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
@@ -381,14 +554,51 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> updateFullName(String fullName) async {
-    final trimmed = fullName.trim();
-    if (trimmed.isEmpty) return;
-    _currentUser = _currentUser.copyWith(fullName: trimmed);
-    await _persistCurrentUser();
+    await updateUserProfile(fullName: fullName);
+  }
+
+  /// Updates user profile fields (name, phone, optional email, and role) across
+  /// in-memory state, native storage cache, and Cloud Firestore.
+  Future<void> updateUserProfile({
+    String? fullName,
+    String? phone,
+    String? email,
+    UserRole? role,
+  }) async {
+    final nextName = (fullName != null && fullName.trim().isNotEmpty)
+        ? fullName.trim()
+        : _currentUser.fullName;
+    final nextPhone = (phone != null && phone.trim().isNotEmpty)
+        ? (AppUser.normalizePhone(phone.trim()) ?? phone.trim())
+        : _currentUser.phone;
+    final nextEmail = email != null
+        ? (email.trim().isEmpty ? null : email.trim())
+        : _currentUser.email;
+    final nextRole = role ?? _currentUser.role;
+
+    _currentUser = AppUser(
+      id: _currentUser.id.isNotEmpty
+          ? _currentUser.id
+          : 'user_${nextPhone.replaceAll(RegExp(r'\D'), '')}',
+      fullName: nextName,
+      phone: nextPhone,
+      email: nextEmail,
+      role: nextRole,
+      rating: _currentUser.rating,
+      totalRides: _currentUser.totalRides,
+      fcmTokens: _currentUser.fcmTokens,
+      trustedContacts: _currentUser.trustedContacts,
+      createdAt: _currentUser.createdAt,
+    );
+    if (role != null) {
+      _activeRole = role;
+      _storage.setString('active_user_role', role.name);
+    }
+    _persistCurrentUser();
     try {
       await _firestoreUserService.saveUser(_currentUser);
     } catch (e) {
-      debugPrint('[AuthProvider] Failed to save updated name to Firestore: $e');
+      debugPrint('[AuthProvider] Failed to save updated user profile to Firestore: $e');
     }
     notifyListeners();
   }

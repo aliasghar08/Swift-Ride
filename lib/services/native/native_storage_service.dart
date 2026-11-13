@@ -10,6 +10,12 @@ class NativeStorageService {
   // In-memory fallback for unit testing environments where MethodChannels are unmocked
   static final Map<String, dynamic> _fallbackMemory = {};
 
+  /// Synchronously reads cached in-memory string value if available.
+  String? peekStringSync(String key) => _fallbackMemory[key] as String?;
+
+  /// Synchronously reads cached in-memory boolean value if available.
+  bool? peekBoolSync(String key) => _fallbackMemory[key] as bool?;
+
   /// Reads a string value.
   Future<String?> getString(String key) async {
     try {

@@ -261,7 +261,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
             jointType: JointType.round,
             startCap: Cap.roundCap,
             endCap: Cap.roundCap,
-            geodesic: true,
+            geodesic: false,
             zIndex: -1,
           ),
         );
@@ -280,7 +280,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
           jointType: JointType.round,
           startCap: Cap.roundCap,
           endCap: Cap.roundCap,
-          geodesic: true,
+          geodesic: false,
           zIndex: 0,
         ),
       );
@@ -293,7 +293,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
           jointType: JointType.round,
           startCap: Cap.roundCap,
           endCap: Cap.roundCap,
-          geodesic: true,
+          geodesic: false,
           zIndex: 1,
         ),
       );
@@ -314,7 +314,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
             jointType: JointType.round,
             startCap: Cap.roundCap,
             endCap: Cap.roundCap,
-            geodesic: true,
+            geodesic: false,
             zIndex: 2,
           ),
         );

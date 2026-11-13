@@ -6,10 +6,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/provider/custom_provider.dart';
+import '../../core/routing/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
+import '../common/google_logo.dart';
+import '../common/legal_terms_modal.dart';
 import '../view_models/responsive_layout_helper.dart';
 
 enum AuthStep { phone, autoVerifying, otp, profile }
@@ -20,6 +23,23 @@ class PhoneAuthScreen extends StatefulWidget {
   final VoidCallback? onAuthSuccess;
 
   const PhoneAuthScreen({super.key, this.onAuthSuccess});
+
+  /// Smoothly navigates to [PhoneAuthScreen] using `Navigator.pushReplacement`
+  /// (by default when switching sessions) or `Navigator.push`.
+  static Future<T?> navigate<T>(
+    BuildContext context, {
+    bool replace = true,
+    VoidCallback? onAuthSuccess,
+  }) {
+    final route = AppRouter.smoothRoute<T>(
+      PhoneAuthScreen(onAuthSuccess: onAuthSuccess),
+      settings: const RouteSettings(name: '/login'),
+    );
+    if (replace) {
+      return Navigator.of(context).pushReplacement<T, Object?>(route);
+    }
+    return Navigator.of(context).push<T>(route);
+  }
 
   @override
   State<PhoneAuthScreen> createState() => _PhoneAuthScreenState();
@@ -33,19 +53,68 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _isSavingProfile = false;
 
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
   UserRole _selectedRole = UserRole.rider;
+
+  String? _lastLookedUpPhone;
+  bool _isProfileAutofilled = false;
+  bool _suppressAutoLookup = false;
+  String? _inlineError;
 
   Timer? _countdownTimer;
   Timer? _autoVerifyTimer;
   int _secondsRemaining = 45;
   bool _canResend = false;
+  bool _isGoogleLoading = false;
+  bool _isAppleLoading = false;
+  bool get _isSocialLoading => _isGoogleLoading || _isAppleLoading;
+
+  void _setError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _inlineError = message;
+    });
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppTheme.sunsetCoral,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _clearInlineError() {
+    if (_inlineError != null && mounted) {
+      setState(() {
+        _inlineError = null;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _phoneController.addListener(_handlePhoneInputChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+      final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
       if (auth.currentUser.phone.isNotEmpty) {
         final p = auth.currentUser.phone;
         if (p.startsWith('+92')) {
@@ -54,10 +123,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _phoneController.text = p;
         }
       }
-      if (auth.currentUser.fullName.isNotEmpty) {
+      if (auth.currentUser.fullName.isNotEmpty &&
+          auth.currentUser.fullName != 'Guest User') {
         _nameController.text = auth.currentUser.fullName;
       }
+      if (auth.currentUser.email != null &&
+          auth.currentUser.email!.isNotEmpty) {
+        _emailController.text = auth.currentUser.email!;
+      }
       _selectedRole = auth.activeRole;
+      if (_phoneController.text.trim().isNotEmpty) {
+        _handlePhoneInputChanged();
+      }
     });
   }
 
@@ -65,11 +142,52 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   void dispose() {
     _countdownTimer?.cancel();
     _autoVerifyTimer?.cancel();
+    _phoneController.removeListener(_handlePhoneInputChanged);
     _phoneController.dispose();
     _otpController.dispose();
     _otpFocusNode.dispose();
     _nameController.dispose();
+    _emailController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handlePhoneInputChanged() async {
+    if (!mounted || _suppressAutoLookup) return;
+    final raw = _phoneController.text.trim();
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 10) {
+      if (_lastLookedUpPhone != null || _isProfileAutofilled) {
+        setState(() {
+          if (digits.length < 7) {
+            _isProfileAutofilled = false;
+          }
+          _lastLookedUpPhone = null;
+        });
+      }
+      return;
+    }
+
+    final fullPhone = _formatPhoneNumber(raw);
+    if (_lastLookedUpPhone == fullPhone) return;
+    _lastLookedUpPhone = fullPhone;
+
+    try {
+      final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
+      final matchedUser = await auth.lookupUserByPhone(fullPhone);
+      if (!mounted || _suppressAutoLookup) return;
+      if (matchedUser != null) {
+        setState(() {
+          if (matchedUser.fullName.isNotEmpty &&
+              matchedUser.fullName != 'Guest User') {
+            _nameController.text = matchedUser.fullName;
+          }
+          _emailController.text = matchedUser.email ?? '';
+          _selectedRole = matchedUser.role;
+          _isProfileAutofilled = true;
+          _inlineError = null;
+        });
+      }
+    } catch (_) {}
   }
 
   void _onSuccessNavigate() {
@@ -78,7 +196,65 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     } else if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
-      Navigator.of(context).pushReplacementNamed('/');
+      try {
+        Navigator.of(context).pushReplacementNamed('/');
+      } catch (_) {}
+    }
+  }
+
+  Widget _buildGoogleIcon() {
+    return const GoogleLogo(size: 20);
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    _clearInlineError();
+    setState(() => _isGoogleLoading = true);
+    final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
+    try {
+      await auth.signInWithGoogle(
+        selectedRole: _selectedRole.name,
+        fullName: _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : null,
+        onSuccess: () {
+          if (!mounted) return;
+          _onSuccessNavigate();
+        },
+        onError: (err) {
+          if (!mounted) return;
+          _setError(err);
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    _clearInlineError();
+    setState(() => _isAppleLoading = true);
+    final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
+    try {
+      await auth.signInWithApple(
+        selectedRole: _selectedRole.name,
+        fullName: _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : null,
+        onSuccess: () {
+          if (!mounted) return;
+          _onSuccessNavigate();
+        },
+        onError: (err) {
+          if (!mounted) return;
+          _setError(err);
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isAppleLoading = false);
+      }
     }
   }
 
@@ -131,43 +307,77 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   void _useTestNumber() {
     if (kReleaseMode) return;
+    _suppressAutoLookup = true;
     _phoneController.text = '3000000000';
     _otpController.text = '123456';
     _nameController.clear();
+    _emailController.clear();
+    _isProfileAutofilled = false;
+    _clearInlineError();
   }
 
   Future<void> _handleSendOtp() async {
+    _clearInlineError();
     final rawPhone = _phoneController.text.trim();
     if (rawPhone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter your mobile phone number',
-          ),
-          backgroundColor: AppTheme.sunsetCoral,
-        ),
-      );
+      _setError('Please enter your mobile phone number (e.g. 300 1234567).');
       return;
     }
 
     final fullPhone = _formatPhoneNumber(rawPhone);
-    // E.164 verification: must be at least + followed by 9 digits
-    if (fullPhone.length < 11) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please enter a valid phone number (e.g. 300 1234567)',
-          ),
-          backgroundColor: AppTheme.sunsetCoral,
-        ),
+    final rawDigits = fullPhone.replaceAll(RegExp(r'\D'), '');
+    // E.164 verification: must be at least + followed by 11+ total digits (e.g. +92 + 10 digits or +1 + 10 digits)
+    if (fullPhone.length < 12 || rawDigits.length < 11) {
+      _setError(
+        'Please enter a valid 10-digit mobile number (e.g. 300 1234567).',
       );
       return;
     }
 
-    final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+    final enteredName = _nameController.text.trim();
+    if (enteredName.isNotEmpty && enteredName.length < 2) {
+      _setError('Please enter a valid full name (at least 2 characters).');
+      return;
+    }
 
+    final enteredEmail = _emailController.text.trim();
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (enteredEmail.isNotEmpty && !emailRegex.hasMatch(enteredEmail)) {
+      _setError(
+        'Please enter a valid email address (e.g. name@example.com) or leave it blank.',
+      );
+      return;
+    }
+
+    final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
+
+    // Pre-fetch profile by phone if user hasn't filled name yet and auto-lookup wasn't suppressed
+    if (!_suppressAutoLookup && _nameController.text.trim().isEmpty) {
+      try {
+        final matched = await auth.lookupUserByPhone(fullPhone);
+        if (matched != null && mounted) {
+          setState(() {
+            if (_nameController.text.trim().isEmpty &&
+                matched.fullName.isNotEmpty &&
+                matched.fullName != 'Guest User') {
+              _nameController.text = matched.fullName;
+            }
+            if (_emailController.text.trim().isEmpty &&
+                matched.email != null &&
+                matched.email!.isNotEmpty) {
+              _emailController.text = matched.email!;
+            }
+            _selectedRole = matched.role;
+            _isProfileAutofilled = true;
+          });
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
     setState(() {
       _currentStep = AuthStep.autoVerifying;
+      _inlineError = null;
     });
 
     _autoVerifyTimer?.cancel();
@@ -181,71 +391,77 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         if (!mounted) return;
 
         try {
-          final userCred = await auth.signInWithCredential(
+          await auth.signInWithCredential(
             credential,
             phoneNumber: fullPhone,
-            fullName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
+            fullName: _nameController.text.trim().isNotEmpty
+                ? _nameController.text.trim()
+                : null,
+            email: _emailController.text.trim().isNotEmpty
+                ? _emailController.text.trim()
+                : null,
             role: _selectedRole,
           );
-          final user = userCred?.user;
-          if (user != null && user.phoneNumber != null && user.phoneNumber!.isNotEmpty && mounted) {
-            ScaffoldMessenger.of(context).clearSnackBars();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Row(
-                  children: [
-                    Icon(Icons.verified_rounded, color: Colors.white, size: 22),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Phone verified automatically! Signing in...',
-                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).clearSnackBars();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.verified_rounded, color: Colors.white, size: 22),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Phone verified automatically! Signing in...',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
-                  ],
-                ),
-                backgroundColor: const Color(0xFF10B981),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                duration: const Duration(seconds: 2),
+                  ),
+                ],
               ),
-            );
-            _onSuccessNavigate();
-          } else if (mounted) {
-            setState(() {
-              _currentStep = AuthStep.otp;
-            });
-            _startResendTimer();
-          }
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          _onSuccessNavigate();
         } catch (e) {
           if (mounted) {
             setState(() {
               _currentStep = AuthStep.otp;
             });
             _startResendTimer();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Auto-sign in error: $e'),
-                backgroundColor: AppTheme.sunsetCoral,
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            _setError('Auto-sign in error: $e');
           }
         }
       },
       onCodeSent: (vId, token) {
-        if (!mounted) return;
+        if (!mounted || autoVerified) return;
         _autoVerifyTimer?.cancel();
+
+        // If an SMS code was already auto-detected (not via manual dev test button),
+        // verify and sign in immediately without showing the OTP input screen.
+        final preDetectedCode =
+            _otpController.text.replaceAll(RegExp(r'\D'), '').trim();
+        if (!_suppressAutoLookup && preDetectedCode.length == 6) {
+          _handleVerifyOtp();
+          return;
+        }
+
         if (fullPhone != '+923000000000') {
           _otpController.clear();
         }
         setState(() {
           _currentStep = AuthStep.otp;
+          _inlineError = null;
         });
         _startResendTimer();
         ScaffoldMessenger.of(context).clearSnackBars();
 
-        final isDevTestNumber = !kReleaseMode && fullPhone == '+923000000000';
+        final isSimOrDemo = !kReleaseMode &&
+            (vId.startsWith('sim_otp_') ||
+                vId.startsWith('reviewer_demo_') ||
+                fullPhone == '+923000000000');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -254,8 +470,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    isDevTestNumber
-                        ? '[Dev Test Mode] Verification code is 123456.'
+                    isSimOrDemo
+                        ? 'Verification code sent to $fullPhone (Emulator code: 123456).'
                         : '6-digit verification code sent via SMS to $fullPhone.',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
@@ -287,55 +503,46 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         });
         String friendlyError = err;
         if (err.contains('invalid-phone-number')) {
-          friendlyError = 'Invalid phone number format. Please enter a valid number (e.g. 0300 1234567).';
+          friendlyError = 'Invalid phone number format. Please enter a valid 10-digit number (e.g. 300 1234567).';
+        } else if (err.contains('39') ||
+            err.contains('17499') ||
+            err.contains('Error code:39') ||
+            err.contains('internal error has occurred')) {
+          friendlyError =
+              'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.';
         } else if (err.contains('too-many-requests')) {
           friendlyError = 'Too many requests. Please wait a minute before requesting a new code.';
         } else if (err.contains('quota-exceeded')) {
-          friendlyError = 'Daily SMS verification quota reached. Please try again tomorrow or contact support.';
+          friendlyError = 'Daily SMS verification quota reached. Please try again later.';
         } else if (err.contains('network-request-failed')) {
           friendlyError = 'Network connection problem. Please check your internet connection.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyError),
-            backgroundColor: AppTheme.sunsetCoral,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 7),
-            action: SnackBarAction(
-              label: 'DISMISS',
-              textColor: Colors.white,
-              onPressed: () {
-                ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              },
-            ),
-          ),
-        );
+        _setError(friendlyError);
       },
     );
   }
 
   Future<void> _handleVerifyOtp() async {
+    _clearInlineError();
     final rawCode = _otpController.text;
     final code = rawCode.replaceAll(RegExp(r'\D'), '').trim();
     if (code.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter the complete 6-digit OTP code received via SMS'),
-          backgroundColor: AppTheme.sunsetCoral,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      _setError('Please enter the complete 6-digit OTP code received via SMS.');
       return;
     }
 
     final fullPhone = _formatPhoneNumber(_phoneController.text.trim());
-    final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+    final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
+    _countdownTimer?.cancel();
 
     await auth.verifyOtp(
       smsCode: code,
       phoneNumber: fullPhone,
       fullName: _nameController.text.trim().isNotEmpty
           ? _nameController.text.trim()
+          : null,
+      email: _emailController.text.trim().isNotEmpty
+          ? _emailController.text.trim()
           : null,
       role: _selectedRole,
       onSuccess: () {
@@ -345,48 +552,55 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         } else {
           setState(() {
             _currentStep = AuthStep.profile;
+            _inlineError = null;
           });
         }
       },
       onError: (err) {
         String friendlyError = err;
-        if (err.contains('invalid-verification-code')) {
-          friendlyError = 'Incorrect 6-digit code. Please verify the code in your SMS and try again.';
+        if (err.contains('invalid-verification-code') ||
+            err.toLowerCase().contains('invalid verification code') ||
+            err.toLowerCase().contains('incorrect')) {
+          friendlyError = 'Incorrect 6-digit verification code. Please check your SMS and try again.';
         } else if (err.contains('session-expired')) {
           friendlyError = 'The verification code has expired. Please tap "Resend Code" to receive a fresh SMS.';
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(friendlyError),
-            backgroundColor: AppTheme.sunsetCoral,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        _setError(friendlyError);
       },
     );
   }
 
   Future<void> _handleSaveProfile() async {
-    // Guard against double submission: this writes the user document and would
-    // otherwise fire once per tap.
     if (_isSavingProfile) return;
-    setState(() => _isSavingProfile = true);
+    _clearInlineError();
 
     final name = _nameController.text.trim();
-    final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+    if (name.isNotEmpty && name.length < 2) {
+      _setError('Please enter a valid full name (at least 2 characters).');
+      return;
+    }
+
+    final email = _emailController.text.trim();
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (email.isNotEmpty && !emailRegex.hasMatch(email)) {
+      _setError(
+        'Please enter a valid email address (e.g. name@example.com) or leave it blank.',
+      );
+      return;
+    }
+
+    setState(() => _isSavingProfile = true);
+
+    final fullPhone = _formatPhoneNumber(_phoneController.text.trim());
+    final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
 
     final resolvedName = name.isNotEmpty ? name : 'SwiftRide User';
-    final updated = auth.currentUser.copyWith(
+    await auth.updateUserProfile(
       fullName: resolvedName,
+      phone: fullPhone.length >= 11 ? fullPhone : auth.currentUser.phone,
+      email: email,
       role: _selectedRole,
     );
-    auth.updateUser(updated);
-    auth.switchRole(_selectedRole);
-    try {
-      await auth.firestoreUserService.saveUser(updated);
-    } catch (e) {
-      debugPrint('[PhoneAuthScreen] Save user warning: $e');
-    }
 
     if (mounted) setState(() => _isSavingProfile = false);
 
@@ -400,11 +614,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final canCloseToActiveSession =
+        auth.currentUser.phone.isNotEmpty || widget.onAuthSuccess != null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('SwiftRide Authentication'),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: false,
         leading: _currentStep != AuthStep.phone
             ? IconButton(
                 tooltip: 'Back',
@@ -420,17 +638,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   });
                 },
               )
-            : IconButton(
-                tooltip: 'Close',
-                icon: const Icon(Icons.close),
-                onPressed: _onSuccessNavigate,
-              ),
+            : (canCloseToActiveSession
+                ? IconButton(
+                    tooltip: 'Close',
+                    icon: const Icon(Icons.close),
+                    onPressed: _onSuccessNavigate,
+                  )
+                : null),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: layout.scale(24),
-            vertical: layout.scale(16),
+            vertical: layout.scale(10),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -440,25 +660,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 child: GestureDetector(
                   onLongPress: kReleaseMode ? null : _useTestNumber,
                   child: Container(
-                    width: layout.scale(72),
-                    height: layout.scale(72),
+                    width: layout.scale(56),
+                    height: layout.scale(56),
                     decoration: BoxDecoration(
                       gradient: AppTheme.brandGradient,
                       shape: BoxShape.circle,
                       boxShadow: AppTheme.glowShadow(
                         AppTheme.primaryBlue,
-                        blur: 20,
+                        blur: 16,
                       ),
                     ),
                     child: const Icon(
                       Icons.directions_car_filled,
                       color: Colors.white,
-                      size: 36,
+                      size: 30,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 10),
               Text(
                 _currentStep == AuthStep.phone
                     ? 'Enter Your Mobile Number'
@@ -469,13 +689,13 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     : 'Setup Your Profile',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: layout.fontSize(24),
+                  fontSize: layout.fontSize(22),
                   fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : AppTheme.darkNavy,
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               Text(
                 _currentStep == AuthStep.phone
                     ? 'We will send a 6-digit verification code.'
@@ -486,12 +706,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     : 'Choose your account role and display name for Jhang & Toba Tek Singh.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: layout.fontSize(13),
+                  fontSize: layout.fontSize(12.5),
                   color: AppTheme.slateMuted,
-                  height: 1.4,
+                  height: 1.35,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 14),
 
               // Animated Step Container
               AnimatedSwitcher(
@@ -499,7 +719,58 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 child: _buildCurrentStepWidget(layout, auth, isDark),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+
+              // Legal / Terms & Privacy Policy Footer (Required by App Store Guideline 5.1.1)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'By continuing, you agree to our ',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11.5),
+                        color: AppTheme.slateMuted,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => LegalTermsModal.showTerms(context),
+                      child: Text(
+                        'Terms of Service',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11.5),
+                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      ' and ',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11.5),
+                        color: AppTheme.slateMuted,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => LegalTermsModal.showPrivacy(context),
+                      child: Text(
+                        'Privacy Policy',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11.5),
+                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -620,201 +891,549 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     );
   }
 
+  Widget _buildInlineErrorBanner(ResponsiveLayoutHelper layout, bool isDark) {
+    final err = _inlineError;
+    if (err == null || err.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Container(
+      key: const Key('auth_error_banner'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.sunsetCoral.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppTheme.sunsetCoral.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppTheme.sunsetCoral,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              err,
+              style: TextStyle(
+                fontSize: layout.fontSize(11.5),
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white : AppTheme.darkNavy,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: _clearInlineError,
+            borderRadius: BorderRadius.circular(12),
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: AppTheme.sunsetCoral,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPhoneInputStep(
     ResponsiveLayoutHelper layout,
     AuthProvider auth,
     bool isDark,
   ) {
     final c = AppColors.of(layout.context);
-    return Column(
+    return AutofillGroup(
       key: const ValueKey('phone_step'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (auth.currentUser.phone.isNotEmpty) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.emeraldGreen.withValues(alpha: 0.3)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (auth.currentUser.phone.isNotEmpty) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: AppTheme.emeraldGreen,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Active Session: ${auth.currentUser.phone}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: layout.fontSize(12),
+                            color: isDark ? Colors.white : AppTheme.darkNavy,
+                          ),
+                        ),
+                        Text(
+                          'Logged in as ${auth.currentUser.fullName.isEmpty ? "SwiftRide User" : auth.currentUser.fullName}',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(11),
+                            color: AppTheme.slateMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('active_session_sign_out_btn'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.sunsetCoral,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: () async {
+                      await auth.signOut();
+                      if (!mounted) return;
+                      setState(() {
+                        _phoneController.clear();
+                        _nameController.clear();
+                        _emailController.clear();
+                        _isProfileAutofilled = false;
+                        _lastLookedUpPhone = null;
+                        _inlineError = null;
+                      });
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Signed out successfully.'),
+                          backgroundColor: AppTheme.emeraldGreen,
+                          behavior: SnackBarBehavior.floating,
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    },
+                    child: const Text(
+                      'Sign Out',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton(
+                    key: const Key('active_session_continue_btn'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: _onSuccessNavigate,
+                    child: const Text(
+                      'Continue',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
+          // 1. Phone Number Input (Kept as first TextField for test & autofill priority)
+          Container(
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.border),
+              boxShadow: AppTheme.subtleElevation,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: AppTheme.emeraldGreen, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: c.surfaceRaised,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
                     children: [
+                      const Text('🇵🇰', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 5),
                       Text(
-                        'Active Session: ${auth.currentUser.phone}',
+                        '+92',
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
-                          fontSize: layout.fontSize(13),
+                          fontSize: layout.fontSize(14),
                           color: isDark ? Colors.white : AppTheme.darkNavy,
-                        ),
-                      ),
-                      Text(
-                        'Logged in as ${auth.currentUser.fullName.isEmpty ? "SwiftRide User" : auth.currentUser.fullName}',
-                        style: TextStyle(
-                          fontSize: layout.fontSize(11.5),
-                          color: AppTheme.slateMuted,
                         ),
                       ),
                     ],
                   ),
                 ),
-                TextButton(
-                  onPressed: _onSuccessNavigate,
-                  child: const Text('Continue', style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    key: const Key('auth_phone_field'),
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    autofillHints: const [AutofillHints.telephoneNumber],
+                    onChanged: (_) {
+                      _suppressAutoLookup = false;
+                      _clearInlineError();
+                      _handlePhoneInputChanged();
+                    },
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    style: TextStyle(
+                      fontSize: layout.fontSize(15),
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.0,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '300 1234567',
+                      isDense: true,
+                      filled: false,
+                      fillColor: Colors.transparent,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      suffixIcon: _phoneController.text.isNotEmpty
+                          ? IconButton(
+                              key: const Key('clear_phone_btn'),
+                              icon: const Icon(Icons.clear_rounded, size: 18),
+                              tooltip: 'Clear phone number',
+                              onPressed: () {
+                                setState(() {
+                                  _phoneController.clear();
+                                  _isProfileAutofilled = false;
+                                  _lastLookedUpPhone = null;
+                                  _inlineError = null;
+                                });
+                              },
+                            )
+                          : null,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-        ],
-        Container(
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: c.border),
-            boxShadow: AppTheme.subtleElevation,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: c.surfaceRaised,
-                  borderRadius: BorderRadius.circular(8),
+          if (_isProfileAutofilled) ...[
+            const SizedBox(height: 6),
+            Container(
+              key: const Key('autofill_success_banner'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
                 ),
-                child: Row(
-                  children: [
-                    const Text('🇵🇰', style: TextStyle(fontSize: 18)),
-                    const SizedBox(width: 6),
-                    Text(
-                      '+92',
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.auto_fix_high_rounded,
+                    size: 15,
+                    color: AppTheme.emeraldGreen,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Profile fetched from phone & autofilled — you can edit below.',
                       style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: layout.fontSize(15),
+                        fontSize: layout.fontSize(11),
+                        fontWeight: FontWeight.w600,
                         color: isDark ? Colors.white : AppTheme.darkNavy,
                       ),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          // 2. Full Name in its own separate row
+          Container(
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.border),
+              boxShadow: AppTheme.subtleElevation,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: TextField(
+              key: const Key('auth_name_field'),
+              controller: _nameController,
+              keyboardType: TextInputType.name,
+              textCapitalization: TextCapitalization.words,
+              autofillHints: const [AutofillHints.name],
+              onChanged: (_) => _clearInlineError(),
+              style: TextStyle(
+                fontSize: layout.fontSize(14),
+                fontWeight: FontWeight.w600,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Full Name',
+                hintText: 'Enter your full name',
+                isDense: true,
+                filled: false,
+                fillColor: Colors.transparent,
+                prefixIcon: Icon(Icons.person_outline, size: 20),
+                prefixIconConstraints: BoxConstraints(
+                  minWidth: 34,
+                  minHeight: 36,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // 3. Optional Email in its own separate row
+          Container(
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.border),
+              boxShadow: AppTheme.subtleElevation,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+            child: TextField(
+              key: const Key('auth_email_field'),
+              controller: _emailController,
+              keyboardType: TextInputType.emailAddress,
+              autofillHints: const [AutofillHints.email],
+              onChanged: (_) => _clearInlineError(),
+              style: TextStyle(
+                fontSize: layout.fontSize(14),
+                fontWeight: FontWeight.w500,
+              ),
+              decoration: const InputDecoration(
+                labelText: 'Email (Optional)',
+                hintText: 'you@example.com',
+                isDense: true,
+                filled: false,
+                fillColor: Colors.transparent,
+                prefixIcon: Icon(Icons.alternate_email, size: 19),
+                prefixIconConstraints: BoxConstraints(
+                  minWidth: 34,
+                  minHeight: 36,
+                ),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // 4. Account Role Selector in its own separate row
+          Row(
+            children: [
+              Text(
+                'Role:',
+                style: TextStyle(
+                  fontSize: layout.fontSize(12.5),
+                  fontWeight: FontWeight.w700,
+                  color: c.textMuted,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               Expanded(
-                child: TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(11),
-                  ],
-                  style: TextStyle(
-                    fontSize: layout.fontSize(16),
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.1,
+                child: ChoiceChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Rider'),
                   ),
-                  decoration: const InputDecoration(
-                    hintText: '300 1234567',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
+                  selected: _selectedRole == UserRole.rider,
+                  onSelected: (val) {
+                    if (val) setState(() => _selectedRole = UserRole.rider);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ChoiceChip(
+                  visualDensity: VisualDensity.compact,
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Driver'),
                   ),
+                  selected: _selectedRole == UserRole.driver,
+                  onSelected: (val) {
+                    if (val) setState(() => _selectedRole = UserRole.driver);
+                  },
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 20),
-        ElevatedButton(
-          onPressed: auth.isLoading ? null : _handleSendOtp,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primaryBlue,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+          const SizedBox(height: 12),
+          _buildInlineErrorBanner(layout, isDark),
+          ElevatedButton(
+            key: const Key('continue_with_phone_btn'),
+            onPressed: auth.isLoading ? null : _handleSendOtp,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
             ),
-            elevation: 0,
-          ),
-          child: auth.isLoading
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Colors.white,
-                  ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Continue with Phone',
-                      style: TextStyle(
-                        fontSize: layout.fontSize(15),
-                        fontWeight: FontWeight.w700,
-                      ),
+            child: auth.isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Colors.white,
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward, size: 18),
-                  ],
-                ),
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(child: Divider(color: c.border.withValues(alpha: 0.5))),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              child: Text(
-                'OR',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: c.textMuted,
-                  letterSpacing: 1.5,
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Continue with Phone',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(15),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward, size: 18),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 18),
+
+          // OR divider
+          Row(
+            children: [
+              Expanded(
+                child: Divider(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  thickness: 1,
                 ),
               ),
-            ),
-            Expanded(child: Divider(color: c.border.withValues(alpha: 0.5))),
-          ],
-        ),
-        const SizedBox(height: 20),
-        OutlinedButton.icon(
-          onPressed: () async {
-            final authProv = CustomChangeNotifierProvider.of<AuthProvider>(context);
-            if (!authProv.isAuthenticated) {
-              await authProv.authService.signInAnonymously();
-            }
-            if (!mounted) return;
-            _onSuccessNavigate();
-          },
-          icon: const Icon(Icons.auto_awesome, size: 18),
-          label: const Text(
-            'Continue as AI Guest / Passenger',
-            style: TextStyle(fontWeight: FontWeight.w700),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                child: Text(
+                  'OR',
+                  style: TextStyle(
+                    fontSize: layout.fontSize(12),
+                    fontWeight: FontWeight.w700,
+                    color: isDark ? Colors.white54 : AppTheme.slateMuted,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Divider(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  thickness: 1,
+                ),
+              ),
+            ],
           ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: isDark ? AppTheme.accentCyan : AppTheme.primaryNavy,
-            side: BorderSide(
-              color: isDark
-                  ? AppTheme.accentCyan.withValues(alpha: 0.45)
-                  : AppTheme.primaryNavy.withValues(alpha: 0.35),
-              width: 1.3,
+          const SizedBox(height: 16),
+
+          // Continue with Google Button
+          OutlinedButton(
+            key: const Key('continue_with_google_btn'),
+            onPressed: (_isSocialLoading || auth.isLoading) ? null : _handleGoogleSignIn,
+            style: OutlinedButton.styleFrom(
+              backgroundColor: isDark ? const Color(0xFF131314) : Colors.white,
+              foregroundColor: isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F),
+              side: BorderSide(
+                color: isDark ? const Color(0xFF444746) : const Color(0xFFDADCE0),
+                width: 1.0,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
             ),
-            padding: const EdgeInsets.symmetric(vertical: 15),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            child: _isGoogleLoading
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: isDark ? Colors.white : AppTheme.primaryBlue,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _buildGoogleIcon(),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Continue with Google',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(14.5),
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F),
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+
+          // Continue with Apple Button
+          ElevatedButton(
+            key: const Key('continue_with_apple_btn'),
+            onPressed: (_isSocialLoading || auth.isLoading) ? null : _handleAppleSignIn,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.black,
+              foregroundColor: Colors.white,
+              side: isDark ? const BorderSide(color: Colors.white24) : null,
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            child: _isAppleLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.apple, color: Colors.white, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Continue with Apple',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(14.5),
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -909,6 +1528,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   ],
                   autofillHints: const [AutofillHints.oneTimeCode],
                   onChanged: (val) {
+                    _clearInlineError();
                     setState(() {});
                     if (val.trim().length == 6 && !auth.isLoading) {
                       _handleVerifyOtp();
@@ -920,13 +1540,17 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
         ),
         const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
             TextButton.icon(
               onPressed: () {
                 setState(() {
                   _currentStep = AuthStep.phone;
+                  _inlineError = null;
                 });
               },
               icon: const Icon(Icons.edit, size: 14),
@@ -941,17 +1565,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   final code = digits.substring(0, 6);
                   setState(() {
                     _otpController.text = code;
+                    _inlineError = null;
                   });
                   _handleVerifyOtp();
                 } else {
-                  if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('No 6-digit code found in clipboard'),
-                      duration: Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  _setError('No 6-digit verification code found in clipboard.');
                 }
               },
               icon: const Icon(Icons.paste_rounded, size: 14),
@@ -1002,7 +1620,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
         ),
         const SizedBox(height: 14),
+        _buildInlineErrorBanner(layout, isDark),
         ElevatedButton(
+          key: const Key('verify_and_login_btn'),
           onPressed: auth.isLoading ? null : _handleVerifyOtp,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.emeraldGreen,
@@ -1044,10 +1664,22 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       children: [
         TextField(
           controller: _nameController,
+          onChanged: (_) => _clearInlineError(),
           decoration: const InputDecoration(
             labelText: 'Full Name',
             hintText: 'e.g. Tariq Mehmood',
             prefixIcon: Icon(Icons.person),
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          onChanged: (_) => _clearInlineError(),
+          decoration: const InputDecoration(
+            labelText: 'Email (Optional)',
+            hintText: 'e.g. tariq@example.com',
+            prefixIcon: Icon(Icons.alternate_email),
           ),
         ),
         const SizedBox(height: 18),
@@ -1066,7 +1698,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               child: ChoiceChip(
                 label: const FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('Rider (Book Rides)'),
+                  child: Text('Rider'),
                 ),
                 selected: _selectedRole == UserRole.rider,
                 onSelected: (val) {
@@ -1079,7 +1711,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               child: ChoiceChip(
                 label: const FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('Driver (Earn 98%)'),
+                  child: Text('Driver'),
                 ),
                 selected: _selectedRole == UserRole.driver,
                 onSelected: (val) {
@@ -1121,7 +1753,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
         ),
         const SizedBox(height: 20),
+        _buildInlineErrorBanner(layout, isDark),
         ElevatedButton(
+          key: const Key('complete_setup_btn'),
           onPressed: _isSavingProfile ? null : _handleSaveProfile,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.primaryBlue,

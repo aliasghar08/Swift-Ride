@@ -3,8 +3,9 @@ import '../../../core/provider/custom_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../providers/driver_provider.dart';
-import '../../presentation/../../presentation/common/glass_container.dart';
-import '../../presentation/../../presentation/common/staggered_animation.dart';
+import '../dialogs/ai_consent_dialog.dart';
+import '../../../presentation/common/glass_container.dart';
+import '../../../presentation/common/staggered_animation.dart';
 import '../providers/earnings_advisor_provider.dart';
 import '../widgets/ai_insight_card.dart';
 
@@ -16,10 +17,22 @@ class EarningsAdvisorScreen extends StatefulWidget {
 }
 
 class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
+  Future<void> _requestInsightWithConsent(
+    BuildContext context,
+    EarningsAdvisorProvider advisorProv,
+    String driverId, {
+    bool force = false,
+  }) async {
+    final allowed = await AiConsentDialog.ensureConsent(context);
+    if (!allowed || !context.mounted) return;
+    await advisorProv.loadEarningsInsight(driverId, force: force);
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final driverProv = CustomChangeNotifierProvider.read<DriverProvider>(context);
       final earningsProv = CustomChangeNotifierProvider.read<EarningsAdvisorProvider>(context);
       earningsProv.loadEarningsInsight(driverProv.driver.id);
@@ -49,7 +62,14 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                       )
                     : const Icon(Icons.refresh),
                 tooltip: 'Regenerate Forecast',
-                onPressed: isLoading ? null : () => advisorProv.refresh(driverProv.driver.id),
+                onPressed: isLoading
+                    ? null
+                    : () => _requestInsightWithConsent(
+                          context,
+                          advisorProv,
+                          driverProv.driver.id,
+                          force: true,
+                        ),
               ),
             ],
           ),
@@ -127,7 +147,12 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
                   AiInsightCard(
                     insight: insight,
                     isRefreshing: isLoading,
-                    onRefresh: () => advisorProv.refresh(driverProv.driver.id),
+                    onRefresh: () => _requestInsightWithConsent(
+                      context,
+                      advisorProv,
+                      driverProv.driver.id,
+                      force: true,
+                    ),
                   )
                 else if (isLoading)
                   Center(

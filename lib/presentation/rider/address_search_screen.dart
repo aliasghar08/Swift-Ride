@@ -225,8 +225,9 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
         place.placeId.startsWith('plus:') ||
         address == 'Pinned Location' ||
         address.startsWith('Coordinates:') ||
-        RegExp(r'[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,4}').hasMatch(address) ||
+        RegExp(r'[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,5}').hasMatch(address) ||
         isBroadCityOnly ||
+        !NativeMapService.isGranularAddress(address) ||
         address.toLowerCase().trim() == 'faisalabad' ||
         address.toLowerCase().trim() == 'jhang';
 
@@ -526,6 +527,8 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                                 Expanded(
                                   child: Text(
                                     item.mainText,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: isPinned
                                           ? (isDark
@@ -567,6 +570,8 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                             subtitle: item.secondaryText.isNotEmpty
                                 ? Text(
                                     item.secondaryText,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: c.textSecondary,
                                       fontSize: 12,

@@ -387,10 +387,31 @@ class RideProvider extends ChangeNotifier {
           return;
         }
 
+        if (ride.status == RideStatus.cancelled) {
+          _activeOffers = [];
+          _activeSos = null;
+          _availableRides = _availableRides.where((r) => r.id != ride.id).toList();
+          if (!_rideHistory.any((r) => r.id == ride.id)) {
+            _rideHistory = [ride, ..._rideHistory];
+          } else {
+            _rideHistory = _rideHistory
+                .map((r) => r.id == ride.id ? ride : r)
+                .toList();
+          }
+          _rideSub?.cancel();
+          _rideSub = null;
+          _offersSub?.cancel();
+          _offersSub = null;
+          _sosSub?.cancel();
+          _sosSub = null;
+          _currentRide = null;
+          notifyListeners();
+          return;
+        }
+
         _currentRide = ride;
 
-        if (ride.status == RideStatus.completed ||
-            ride.status == RideStatus.cancelled) {
+        if (ride.status == RideStatus.completed) {
           _activeOffers = [];
           if (!_rideHistory.any((r) => r.id == ride.id)) {
             _rideHistory = [ride, ..._rideHistory];
@@ -551,12 +572,45 @@ class RideProvider extends ChangeNotifier {
     return ride;
   }
 
-  /// Cancels the active ride.
+  String? _lastCancellationReason;
+
+  /// The most recent cancellation reason submitted for a ride.
+  String? get lastCancellationReason => _lastCancellationReason;
+
+  /// Cancels the active ride, records the cancellation reason, archives the
+  /// cancelled ride into history, and clears [_currentRide] so the UI smoothly
+  /// returns one step back to the route & fare proposal screen.
   void cancelRide(String reason) {
     final ride = _currentRide;
     if (ride == null) return;
+
+    final resolvedReason =
+        reason.trim().isNotEmpty ? reason.trim() : 'Rider cancelled';
+    _lastCancellationReason = resolvedReason;
+
+    final cancelledRide = ride.copyWith(status: RideStatus.cancelled);
+    if (!_rideHistory.any((r) => r.id == cancelledRide.id)) {
+      _rideHistory = [cancelledRide, ..._rideHistory];
+    } else {
+      _rideHistory = _rideHistory
+          .map((r) => r.id == cancelledRide.id ? cancelledRide : r)
+          .toList();
+    }
+
+    _rideSub?.cancel();
+    _rideSub = null;
+    _offersSub?.cancel();
+    _offersSub = null;
+    _sosSub?.cancel();
+    _sosSub = null;
+    _activeOffers = [];
+    _activeSos = null;
+    _availableRides = _availableRides.where((r) => r.id != ride.id).toList();
+    _currentRide = null;
+    notifyListeners();
+
     unawaited(
-      _firestore.cancelRide(ride.id, reason).catchError((Object e) {
+      _firestore.cancelRide(ride.id, resolvedReason).catchError((Object e) {
         debugPrint('[RideProvider.cancelRide] failed: $e');
         _setError('We could not cancel the ride. Please try again.');
       }),

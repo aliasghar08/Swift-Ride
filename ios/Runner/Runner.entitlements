@@ -7,5 +7,13 @@
 	     including emergency SOS — reaches nobody. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:swift-ride-5ab75.firebaseapp.com</string>
+	</array>
 </dict>
 </plist>

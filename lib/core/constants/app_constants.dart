@@ -1,6 +1,6 @@
 class AppConstants {
   static const String appName = 'SwiftRide';
-  static const String appTagline = 'Ultra-Low 2% Commission Ride-Hailing Platform';
+  static const String appTagline = 'Ultra-Low 2% Platform Fee Ride-Hailing';
 
   // Currency and market standard
   static const String currencyCode = 'PKR';

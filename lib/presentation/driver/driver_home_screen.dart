@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
+import '../common/ai_consent_dialog.dart';
 import '../common/confirm_action.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
@@ -539,7 +540,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             jointType: JointType.round,
                             startCap: Cap.roundCap,
                             endCap: Cap.roundCap,
-                            geodesic: true,
+                            geodesic: false,
                             zIndex: 0,
                           ),
                           Polyline(
@@ -550,7 +551,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             jointType: JointType.round,
                             startCap: Cap.roundCap,
                             endCap: Cap.roundCap,
-                            geodesic: true,
+                            geodesic: false,
                             zIndex: 1,
                           ),
                           if (_showTraffic && intervals.isNotEmpty)
@@ -576,7 +577,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 jointType: JointType.round,
                                 startCap: Cap.roundCap,
                                 endCap: Cap.roundCap,
-                                geodesic: true,
+                                geodesic: false,
                                 zIndex: 2,
                               );
                             }),
@@ -858,9 +859,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   const SizedBox(width: 8),
                                   // AI Advisor shortcut
                                   InkWell(
-                                    onTap: () =>
-                                        Navigator.of(context)
-                                            .pushNamed('/earnings-advisor'),
+                                    onTap: () async {
+                                      final allowed =
+                                          await AiConsentDialog.ensureConsent(
+                                            context,
+                                          );
+                                      if (!allowed || !context.mounted) return;
+                                      Navigator.of(
+                                        context,
+                                      ).pushNamed('/earnings-advisor');
+                                    },
                                     borderRadius: BorderRadius.circular(12),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
@@ -972,7 +980,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       minSpread: 1.0,
                       maxSpread: 5.0,
                       child: FloatingActionButton.extended(
-                        onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
+                        onPressed: () async {
+                          final allowed = await AiConsentDialog.ensureConsent(
+                            context,
+                          );
+                          if (!allowed || !context.mounted) return;
+                          Navigator.of(context).pushNamed('/ai-chat');
+                        },
                         backgroundColor: AppTheme.primaryNavy,
                         foregroundColor: AppTheme.accentCyan,
                         icon: const Icon(Icons.auto_awesome, size: 20),
@@ -1578,6 +1592,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         Builder(
                           builder: (ctx) {
                             final vType = VehicleTypeX.fromString(request.vehicleType);
+                            final driverCarModel = driver.vehicle.model;
+                            final carEngineTier = vType == VehicleType.car
+                                ? CarEngineTierX.fromCarModel(driverCarModel)
+                                : null;
+                            final isCar = vType == VehicleType.car;
                             final econ = TripEconomics.calculate(
                               vehicleType: vType,
                               distanceKm: request.distanceKm,
@@ -1585,6 +1604,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               fare: request.offeredFare,
                               bookedSeats: request.bookedSeats,
                               isAiPredicted: true,
+                              carModel: driverCarModel,
+                              carEngineTier: carEngineTier,
+                              acEnabled: isCar,
                             );
                             return InkWell(
                               borderRadius: BorderRadius.circular(8),
@@ -1592,6 +1614,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 context,
                                 economics: econ,
                                 isDriverView: true,
+                                carEngineTier: carEngineTier,
+                                acEnabled: isCar,
                               ),
                               child: Container(
                                 margin: const EdgeInsets.only(top: 6),
@@ -2192,6 +2216,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         Builder(
           builder: (ctx) {
             final vType = VehicleTypeX.fromString(ride.vehicleType);
+            final driverCarModel = driverProv.driver.vehicle.model;
+            final carEngineTier = vType == VehicleType.car
+                ? CarEngineTierX.fromCarModel(driverCarModel)
+                : null;
+            final isCar = vType == VehicleType.car;
             final econ = TripEconomics.calculate(
               vehicleType: vType,
               distanceKm: ride.distanceKm,
@@ -2199,6 +2228,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               fare: ride.acceptedFare ?? ride.offeredFare,
               bookedSeats: ride.bookedSeats,
               isAiPredicted: true,
+              carModel: driverCarModel,
+              carEngineTier: carEngineTier,
+              acEnabled: isCar,
             );
             return InkWell(
               borderRadius: BorderRadius.circular(10),
@@ -2206,6 +2238,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 context,
                 economics: econ,
                 isDriverView: true,
+                carEngineTier: carEngineTier,
+                acEnabled: isCar,
               ),
               child: Container(
                 margin: EdgeInsets.only(top: layout.scale(8)),
@@ -2878,11 +2912,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               ),
               onPressed: () async {
                 final fare = ride.acceptedFare ?? ride.offeredFare;
+                final vType = VehicleTypeX.fromString(ride.vehicleType);
+                final driverCarModel = driverProv.driver.vehicle.model;
+                final carEngineTier = vType == VehicleType.car
+                    ? CarEngineTierX.fromCarModel(driverCarModel)
+                    : null;
                 final tripEconomics = TripEconomics.calculate(
                   distanceKm: ride.distanceKm,
                   durationMin: ride.durationMin,
                   fare: fare,
-                  vehicleType: VehicleType.car,
+                  vehicleType: vType,
+                  carModel: driverCarModel,
+                  carEngineTier: carEngineTier,
+                  acEnabled: vType == VehicleType.car,
                 );
 
                 final changeResult = await ExactChangeDialog.show(
@@ -2962,11 +3004,19 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         ? null
                         : () async {
                             final fare = ride.acceptedFare ?? ride.offeredFare;
+                            final vType = VehicleTypeX.fromString(ride.vehicleType);
+                            final driverCarModel = driverProv.driver.vehicle.model;
+                            final carEngineTier = vType == VehicleType.car
+                                ? CarEngineTierX.fromCarModel(driverCarModel)
+                                : null;
                             final tripEconomics = TripEconomics.calculate(
                               distanceKm: ride.distanceKm,
                               durationMin: ride.durationMin,
                               fare: fare,
-                              vehicleType: VehicleType.car,
+                              vehicleType: vType,
+                              carModel: driverCarModel,
+                              carEngineTier: carEngineTier,
+                              acEnabled: vType == VehicleType.car,
                             );
 
                             final changeResult = await ExactChangeDialog.show(

@@ -92,6 +92,10 @@ class _MainShellScreenState extends State<MainShellScreen> {
   Widget build(BuildContext context) {
     return CustomConsumer<AuthProvider>(
       builder: (context, auth, _) {
+        if (auth.signOutGeneration > 0 && !auth.isAuthenticated) {
+          return const PhoneAuthScreen();
+        }
+
         Widget activeView;
         switch (auth.activeRole) {
           case UserRole.driver:
@@ -118,47 +122,84 @@ class _MainShellScreenState extends State<MainShellScreen> {
 class AppRouter {
   static const String initialRoute = '/';
 
-  static Route<dynamic> onGenerateRoute(RouteSettings settings) {
-    final uri = Uri.parse(settings.name ?? '/');
+  /// Smooth fade + gentle slide transition for pushReplacement and route navigation.
+  static Route<T> smoothRoute<T>(
+    Widget page, {
+    RouteSettings? settings,
+  }) {
+    return PageRouteBuilder<T>(
+      settings: settings,
+      transitionDuration: const Duration(milliseconds: 260),
+      reverseTransitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (context, animation, secondaryAnimation) => page,
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        final offsetAnimation = Tween<Offset>(
+          begin: const Offset(0.03, 0.0),
+          end: Offset.zero,
+        ).animate(curved);
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          ),
+        );
+      },
+    );
+  }
 
-    if (uri.path == '/login') {
-      return MaterialPageRoute(
-        builder: (_) => const PhoneAuthScreen(),
+  static Route<dynamic> onGenerateRoute(RouteSettings settings) {
+    final rawName = settings.name ?? '/';
+    final uri = Uri.parse(rawName);
+
+    if (uri.path == '/login' ||
+        uri.path == '/auth' ||
+        uri.path == '/link' ||
+        rawName.contains('firebaseauth') ||
+        rawName.contains('googleusercontent') ||
+        rawName.contains('deep_link_id')) {
+      return smoothRoute(
+        const PhoneAuthScreen(),
         settings: settings,
       );
     }
 
     if (uri.path == '/track') {
       final token = uri.queryParameters['token'];
-      return MaterialPageRoute(
-        builder: (_) => SharedTripScreen(token: token),
+      return smoothRoute(
+        SharedTripScreen(token: token),
         settings: settings,
       );
     }
 
     if (uri.path == '/ai-chat') {
-      return MaterialPageRoute(
-        builder: (_) => const AiChatScreen(),
+      return smoothRoute(
+        const AiChatScreen(),
         settings: settings,
       );
     }
 
     if (uri.path == '/earnings-advisor') {
-      return MaterialPageRoute(
-        builder: (_) => const EarningsAdvisorScreen(),
+      return smoothRoute(
+        const EarningsAdvisorScreen(),
         settings: settings,
       );
     }
 
     if (uri.path == '/history') {
-      return MaterialPageRoute(
-        builder: (_) => const RideHistoryScreen(),
+      return smoothRoute(
+        const RideHistoryScreen(),
         settings: settings,
       );
     }
 
-    return MaterialPageRoute(
-      builder: (_) => const MainShellScreen(),
+    return smoothRoute(
+      const MainShellScreen(),
       settings: settings,
     );
   }

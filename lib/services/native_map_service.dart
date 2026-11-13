@@ -630,6 +630,52 @@ class NativeMapService {
     return res;
   }
 
+  /// Checks whether [address] contains granular plot, house, street, or premise
+  /// details rather than just a broad neighborhood or city name.
+  static bool isGranularAddress(String? address) {
+    if (address == null) return false;
+    final trimmed = address.trim();
+    if (trimmed.isEmpty ||
+        trimmed.startsWith('Location (') ||
+        trimmed.startsWith('Pinned Spot') ||
+        trimmed == 'Pinned Location' ||
+        trimmed.startsWith('Coordinates:')) {
+      return false;
+    }
+
+    // Raw Plus Code at the start does not count as a resolved plot/premise name
+    final withoutPlusCode = trimmed.replaceAll(
+      RegExp(r'\b[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,5}\b'),
+      '',
+    );
+
+    final granularKeywords = RegExp(
+      r'\b(plot|house|shop|flat|apt|apartment|suite|floor|unit|plaza|tower|center|centre|complex|arcade|heights|residency|villa|manzil|cottage|chambers|hospital|clinic|pharmacy|university|college|school|academy|institute|masjid|mosque|church|temple|market|bazaar|mall|mart|store|bank|hotel|restaurant|cafe|bakery|station|terminal|stop|park|stadium|club|gym|court|office|street|st|road|rd|avenue|ave|lane|ln|boulevard|blvd|chowk|bazar|gali|kucha|mohalla|mohallah|block|sector|phase|scheme|police|lines|cantonment|cantt|sadar|saddar|hall|markaz|branch|gate|pul|bridge|stand|adda|basti|kot|deh|chak|mouza|moza|deri|dhok|tehsil|headworks|patrolling|barracks)\b',
+      caseSensitive: false,
+    );
+    if (granularKeywords.hasMatch(withoutPlusCode)) {
+      return true;
+    }
+
+    // Check for explicit plot/street/house number tokens (e.g., "145-B", "42", "#12")
+    if (RegExp(r'(?:^|[,\s#/-])\d+[A-Za-z]?(?:\b|$)').hasMatch(withoutPlusCode)) {
+      return true;
+    }
+
+    // If the address has 3+ comma-separated segments and the first segment is not a city/country,
+    // it likely starts with a named premise/landmark (e.g. "Al-Fatah, Gulberg III, Lahore").
+    final segments = withoutPlusCode
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (segments.length >= 3) {
+      return true;
+    }
+
+    return false;
+  }
+
   /// Calculates geodesic distance in kilometers between two coordinates natively.
   Future<double> calculateDistance(
     double lat1,

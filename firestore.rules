@@ -7,13 +7,16 @@ service cloud.firestore {
     // ===============================================================
     //
     // Collection: users/{userId}
-    //   - phone: string (required, 7-20 chars)
+    //   - phone: string | null (optional, 7-25 chars or empty string or null for social auth)
     //   - email: string | null (optional, valid email format)
     //   - fullName: string (required, 1-100 chars)
     //   - role: string ("rider" | "driver" | "admin")
     //   - rating: number (0.0 - 5.0)
     //   - totalRides: number (>= 0)
     //   - fcmTokens: list of strings (max 10 tokens)
+    //   - authProvider: string | null (optional, "google" | "apple" | "phone" etc., max 50 chars)
+    //   - photoUrl: string | null (optional, valid URL format, max 1000 chars)
+    //   - trustedContacts: list of strings (max 5 contacts)
     //   - createdAt: timestamp (immutable)
     //   - updatedAt: timestamp
     //   - location: map | null
@@ -112,6 +115,10 @@ service cloud.firestore {
       return email is string && email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
     }
 
+    function isValidUrl(url) {
+      return url is string && (url.matches('^https://.*') || url.matches('^http://.*'));
+    }
+
     function areImmutableFieldsUnchanged(fields) {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
@@ -126,12 +133,30 @@ service cloud.firestore {
 
     // User Validators
     function isValidUser(data) {
-      return hasRequiredFields(data, ['phone', 'fullName', 'role', 'rating', 'totalRides', 'createdAt']) &&
-        validStringLength(data.phone, 7, 25) &&
+      return hasRequiredFields(data, ['fullName', 'role', 'rating', 'totalRides', 'createdAt']) &&
         validStringLength(data.fullName, 1, 100) &&
         data.role in ['rider', 'driver', 'admin'] &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
         data.totalRides is number && data.totalRides >= 0 &&
+        // Phone: optional for social auth (Google/Apple), but when present must be null, empty, or 7-25 chars
+        (!('phone' in data) ||
+          data.phone == null ||
+          (data.phone is string && (data.phone == '' || (data.phone.size() >= 7 && data.phone.size() <= 25)))) &&
+        // Email: optional, but when present must be null, empty, or valid email format (<= 100 chars)
+        (!('email' in data) ||
+          data.email == null ||
+          (data.email is string && (data.email == '' || (data.email.size() <= 100 && isValidEmail(data.email))))) &&
+        // Auth provider: optional string (e.g. "google", "apple", "phone", max 50 chars)
+        (!('authProvider' in data) ||
+          data.authProvider == null ||
+          (data.authProvider is string && data.authProvider.size() >= 1 && data.authProvider.size() <= 50)) &&
+        // Photo URL: optional URL string (max 1000 chars)
+        (!('photoUrl' in data) ||
+          data.photoUrl == null ||
+          (data.photoUrl is string && (data.photoUrl == '' || (data.photoUrl.size() <= 1000 && isValidUrl(data.photoUrl))))) &&
+        // FCM Tokens list (max 10 tokens)
+        (!('fcmTokens' in data) ||
+          (data.fcmTokens is list && data.fcmTokens.size() <= 10)) &&
         // Trusted contacts feed the SOS fan-out, so bound how many can be set.
         (!('trustedContacts' in data) ||
           (data.trustedContacts is list && data.trustedContacts.size() <= 5));

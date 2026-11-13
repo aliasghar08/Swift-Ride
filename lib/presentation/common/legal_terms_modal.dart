@@ -11,7 +11,7 @@ import '../../core/theme/app_theme.dart';
 /// 3. Permanent, transparent 2% platform fee policy with 98% driver retention.
 /// 4. Comprehensive limitation of liability and statutory insurance compliance.
 /// 5. Full data privacy rights under PECA 2016 and App Store data deletion standards.
-class LegalTermsModal extends StatelessWidget {
+class LegalTermsModal extends StatefulWidget {
   final int initialTabIndex;
 
   const LegalTermsModal({super.key, this.initialTabIndex = 0});
@@ -30,165 +30,225 @@ class LegalTermsModal extends StatelessWidget {
   static Future<void> showPrivacy(BuildContext context) => show(context, initialTabIndex: 2);
 
   @override
+  State<LegalTermsModal> createState() => _LegalTermsModalState();
+}
+
+class _LegalTermsModalState extends State<LegalTermsModal> {
+  late int _selectedIndex;
+
+  static const List<String> _tabTitles = [
+    'Terms & Status',
+    '2% Fee Policy',
+    'Privacy & PECA',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = widget.initialTabIndex.clamp(0, 2);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF0F172A) : Colors.white;
     final cardColor = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
     final borderColor = isDark ? Colors.white12 : Colors.black.withValues(alpha: 0.08);
 
-    return DefaultTabController(
-      length: 3,
-      initialIndex: initialTabIndex,
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.88,
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.25),
-              blurRadius: 20,
-              offset: const Offset(0, -4),
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.88,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 20,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            // 1. Drag handle & Modal Header
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 8),
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : Colors.black12,
+                  borderRadius: BorderRadius.circular(2.5),
+                ),
+              ),
             ),
-          ],
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              // 1. Drag handle & Modal Header
-              Padding(
-                padding: const EdgeInsets.only(top: 12, bottom: 8),
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white24 : Colors.black12,
-                    borderRadius: BorderRadius.circular(2.5),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryBlue.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.verified_user_outlined,
-                        color: AppTheme.primaryBlue,
-                        size: 20,
-                      ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Legal & Regulatory Center',
+                    child: const Icon(
+                      Icons.verified_user_outlined,
+                      color: AppTheme.primaryBlue,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Legal & Regulatory Center',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : AppTheme.darkNavy,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'SwiftRide Platform Terms & Compliance',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white60 : AppTheme.slateMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    color: isDark ? Colors.white70 : AppTheme.darkNavy,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+
+            // 2. Custom Segmented Pill Selector (Clean padding, no bottom underline)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.all(5),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                children: List.generate(_tabTitles.length, (index) {
+                  final isSelected = _selectedIndex == index;
+                  return Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        setState(() {
+                          _selectedIndex = index;
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutCubic,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppTheme.primaryBlue
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: AppTheme.primaryBlue.withValues(
+                                      alpha: 0.28,
+                                    ),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        alignment: Alignment.center,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            _tabTitles[index],
                             style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w800,
-                              color: isDark ? Colors.white : AppTheme.darkNavy,
+                              fontSize: 12.5,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark
+                                      ? Colors.white70
+                                      : AppTheme.slateMuted),
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'SwiftRide Platform Terms & Compliance',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDark ? Colors.white60 : AppTheme.slateMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      color: isDark ? Colors.white70 : AppTheme.darkNavy,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
-              ),
-
-              // 2. Tab Bar
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
-                ),
-                child: TabBar(
-                  indicator: BoxDecoration(
-                    color: AppTheme.primaryBlue,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  labelColor: Colors.white,
-                  unselectedLabelColor: isDark ? Colors.white60 : AppTheme.slateMuted,
-                  labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                  unselectedLabelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                  tabs: const [
-                    Tab(text: 'Terms & Status'),
-                    Tab(text: '2% Fee Policy'),
-                    Tab(text: 'Privacy & PECA'),
-                  ],
-                ),
-              ),
-
-              // 3. Tab Contents
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _buildTermsTab(context, isDark, cardColor, borderColor),
-                    _buildFeePolicyTab(context, isDark, cardColor, borderColor),
-                    _buildPrivacyTab(context, isDark, cardColor, borderColor),
-                  ],
-                ),
-              ),
-
-              // 4. Acceptance Footer
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                decoration: BoxDecoration(
-                  color: cardColor,
-                  border: Border(top: BorderSide(color: borderColor)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.shield_outlined, size: 16, color: AppTheme.emeraldGreen),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Governed by the laws of Pakistan & Arbitration Act 1940.',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white60 : AppTheme.slateMuted,
                         ),
                       ),
                     ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryBlue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
-                      ),
-                      child: const Text('Understood', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
+                  );
+                }),
               ),
-            ],
-          ),
+            ),
+
+            // 3. Tab Contents
+            Expanded(
+              child: IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _buildTermsTab(context, isDark, cardColor, borderColor),
+                  _buildFeePolicyTab(context, isDark, cardColor, borderColor),
+                  _buildPrivacyTab(context, isDark, cardColor, borderColor),
+                ],
+              ),
+            ),
+
+            // 4. Acceptance Footer
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: cardColor,
+                border: Border(top: BorderSide(color: borderColor)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 16, color: AppTheme.emeraldGreen),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Governed by the laws of Pakistan & Arbitration Act 1940.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? Colors.white60 : AppTheme.slateMuted,
+                      ),
+                    ),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryBlue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
+                    ),
+                    child: const Text('Understood', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -335,7 +395,11 @@ class LegalTermsModal extends StatelessWidget {
           borderColor: borderColor,
           title: '4. AI Assistant & Third-Party Processing Disclosure',
           body:
-              'When you interact with the optional SwiftRide AI Assistant or AI Earnings Advisor, your text/voice prompt and non-identifying trip or route context are securely transmitted over TLS 1.3 to Google Gemini AI solely to generate your real-time response. Personal identifiers, phone numbers, and exact home addresses are never sold or used to train third-party AI models.',
+              'Third-Party Artificial Intelligence Services (Google Gemini AI): '
+              'What data is collected & shared: Chat prompts, user role (Rider/Driver), trip context (pickup/dropoff area, distance, duration, fare), and vehicle telemetry. '
+              'How it is collected & used: Collected directly from user inputs and active ride sessions solely to generate real-time AI assistance, earnings insights, and safety check-ins. '
+              'Recipient & Protection: Transmitted to Google LLC via Firebase AI Logic (Google Gemini AI) over encrypted TLS 1.3 connections under Google Cloud / Firebase Data Processing and Security Terms, providing equal or greater privacy protection and never sold. '
+              'User Permission: Shared only after explicit in-app user consent, which can be declined or revoked at any time in Profile / Settings > AI Assistant Data Sharing.',
         ),
         _buildClauseCard(
           isDark: isDark,
@@ -343,7 +407,7 @@ class LegalTermsModal extends StatelessWidget {
           borderColor: borderColor,
           title: '5. Security Operations & Contact',
           body:
-              'All telemetry is transmitted over TLS 1.3 encryption. For privacy inquiries, compliance verification, or statutory disclosures, contact DartNexusLab Security & Compliance at legal@dartnexuslab.com.',
+              'All telemetry is transmitted over TLS 1.3 encryption. For privacy inquiries, compliance verification, or statutory disclosures, contact DartNexusLab Security & Compliance at aliasgharinnocent@yahoo.com.',
         ),
       ],
     );

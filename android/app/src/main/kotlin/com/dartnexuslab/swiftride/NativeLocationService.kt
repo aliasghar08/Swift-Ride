@@ -163,7 +163,7 @@ class NativeLocationService(
             }
         } catch (_: Exception) {}
 
-        // 2. FRESH FIX with responsive 4-second timeout
+        // 2. FRESH FIX with responsive 8-second timeout
         try {
             val cancellationTokenSource = CancellationTokenSource()
             val fusedTimeoutRunnable = Runnable {
@@ -172,7 +172,7 @@ class NativeLocationService(
                     fallbackToLocationManager(result, onCompleted = { completed }, onFinish = { completed = true })
                 }
             }
-            handler.postDelayed(fusedTimeoutRunnable, 4_000L)
+            handler.postDelayed(fusedTimeoutRunnable, 8_000L)
 
             fusedClient.getCurrentLocation(
                 Priority.PRIORITY_HIGH_ACCURACY,
@@ -273,7 +273,7 @@ class NativeLocationService(
                     result.error("LOCATION_TIMEOUT", "No GPS fix within timeout", null)
                 }
             }
-        }, 4_000L)
+        }, 8_000L)
     }
 
     private fun bestLastKnownLocation(lm: LocationManager): Location? {
@@ -298,27 +298,36 @@ class NativeLocationService(
                 val parts = mutableListOf<String>()
                 val streetNumber = addr.subThoroughfare?.trim() ?: ""
                 val streetName = addr.thoroughfare?.trim() ?: ""
+                val premises = addr.premises?.trim() ?: ""
                 val feature = addr.featureName?.trim() ?: ""
 
                 val plotOrHouse = when {
                     streetNumber.isNotEmpty() && streetName.isNotEmpty() -> {
-                        val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "House $streetNumber" else streetNumber
+                        val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
                         "$prefix, $streetName"
                     }
                     streetNumber.isNotEmpty() -> {
-                        if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "House $streetNumber" else streetNumber
+                        if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
                     }
                     streetName.isNotEmpty() -> streetName
                     else -> ""
                 }
 
-                if (plotOrHouse.isNotEmpty()) {
-                    parts.add(plotOrHouse)
-                    if (feature.isNotEmpty() && feature != streetNumber && feature != streetName && !parts.contains(feature)) {
-                        parts.add(0, feature)
-                    }
-                } else if (feature.isNotEmpty()) {
+                if (premises.isNotEmpty() && premises != streetNumber && premises != streetName) {
+                    parts.add(premises)
+                }
+                if (feature.isNotEmpty() &&
+                    feature != streetNumber &&
+                    feature != streetName &&
+                    feature != addr.subLocality &&
+                    feature != addr.locality &&
+                    !feature.matches(Regex("^[A-Za-z0-9]{4,8}\\+[A-Za-z0-9]{2,5}$")) &&
+                    !parts.contains(feature)
+                ) {
                     parts.add(feature)
+                }
+                if (plotOrHouse.isNotEmpty() && !parts.contains(plotOrHouse)) {
+                    parts.add(plotOrHouse)
                 }
 
                 addr.subLocality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }

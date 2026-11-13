@@ -326,5 +326,73 @@ void main() {
       expect(find.text('Projected Surge Hotspots Today'), findsOneWidget);
       expect(find.text('Predictive Vehicle Health'), findsOneWidget);
     });
+
+    testWidgets(
+      'AiConsentDialog (Apple Guideline 5.1.1(i) & 5.1.2(i)) gates AI calls, persists consent, and supports Decline / Agree & Continue',
+      (WidgetTester tester) async {
+        await AiConsentDialog.setConsent(false);
+        expect(await AiConsentDialog.isConsentGranted(), isFalse);
+
+        bool? dialogResult;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () async {
+                    dialogResult = await AiConsentDialog.ensureConsent(context);
+                  },
+                  child: const Text('Trigger AI Consent'),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        // 1. Tap trigger -> modal dialog opens with required disclosures
+        await tester.tap(find.text('Trigger AI Consent'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('AI Data Sharing Permission'), findsOneWidget);
+        expect(
+          find.text('Google LLC (via Google Gemini AI / Firebase AI Logic).'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Your chat messages, user role (Rider/Driver)'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Data is encrypted in transit, used strictly for in-app assistance'),
+          findsOneWidget,
+        );
+        expect(find.text('Decline'), findsOneWidget);
+        expect(find.text('Agree & Continue'), findsOneWidget);
+
+        // 2. Tap Decline -> returns false and keeps consent false
+        await tester.tap(find.text('Decline'));
+        await tester.pumpAndSettle();
+
+        expect(dialogResult, isFalse);
+        expect(await AiConsentDialog.isConsentGranted(), isFalse);
+
+        // 3. Tap trigger again and tap Agree & Continue -> saves true and returns true
+        await tester.tap(find.text('Trigger AI Consent'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Agree & Continue'));
+        await tester.pumpAndSettle();
+
+        expect(dialogResult, isTrue);
+        expect(await AiConsentDialog.isConsentGranted(), isTrue);
+
+        // 4. Subsequent ensureConsent returns true immediately without showing dialog
+        dialogResult = null;
+        await tester.tap(find.text('Trigger AI Consent'));
+        await tester.pumpAndSettle();
+        expect(dialogResult, isTrue);
+        expect(find.text('AI Data Sharing Permission'), findsNothing);
+      },
+    );
   });
 }

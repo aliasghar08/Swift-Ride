@@ -21,6 +21,7 @@ import '../../providers/safety_provider.dart';
 import '../../services/firestore/firestore_driver_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
 import '../../services/map_service.dart';
+import '../../services/coordinate_parser.dart';
 
 import '../common/confirm_action.dart';
 import '../common/glass_container.dart';
@@ -64,6 +65,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   LatLng _mapCenterLocation = const LatLng(31.2785, 72.3317);
   String _pinnedAddress = '';
   Timer? _cameraIdleDebounce;
+  int _pinReverseGeocodeSeq = 0;
 
   // UI Minimization States
   bool _isTopCardMinimized = false;
@@ -344,10 +346,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       } catch (_) {}
     }
 
-    if (addr.isEmpty) {
+    if (addr.isEmpty || addr.startsWith('Location (')) {
       addr = (_viewModel.tempPinLocation?.address.trim().isNotEmpty ?? false)
           ? _viewModel.tempPinLocation!.address
-          : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}';
+          : CoordinateParser.formatOfflineGeotag(lat, lng);
     }
 
     final point = LocationPoint(
@@ -503,7 +505,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     jointType: JointType.round,
                     startCap: Cap.roundCap,
                     endCap: Cap.roundCap,
-                    geodesic: true,
+                    geodesic: false,
                     zIndex: -1,
                   ),
               if (_viewModel.selectedRoute != null) ...[
@@ -517,7 +519,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   jointType: JointType.round,
                   startCap: Cap.roundCap,
                   endCap: Cap.roundCap,
-                  geodesic: true,
+                  geodesic: false,
                   zIndex: 0,
                 ),
                 Polyline(
@@ -530,7 +532,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   jointType: JointType.round,
                   startCap: Cap.roundCap,
                   endCap: Cap.roundCap,
-                  geodesic: true,
+                  geodesic: false,
                   zIndex: 1,
                 ),
                 ...TrafficInterval.segment(
@@ -548,7 +550,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     jointType: JointType.round,
                     startCap: Cap.roundCap,
                     endCap: Cap.roundCap,
-                    geodesic: true,
+                    geodesic: false,
                     zIndex: 2,
                   );
                 }),
@@ -564,7 +566,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 jointType: JointType.round,
                 startCap: Cap.roundCap,
                 endCap: Cap.roundCap,
-                geodesic: true,
+                geodesic: false,
                 zIndex: 0,
               ),
               Polyline(
@@ -577,7 +579,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 jointType: JointType.round,
                 startCap: Cap.roundCap,
                 endCap: Cap.roundCap,
-                geodesic: true,
+                geodesic: false,
                 zIndex: 1,
               ),
               ...TrafficInterval.segment(
@@ -595,7 +597,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   jointType: JointType.round,
                   startCap: Cap.roundCap,
                   endCap: Cap.roundCap,
-                  geodesic: true,
+                  geodesic: false,
                   zIndex: 2,
                 );
               }),
@@ -636,7 +638,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   jointType: JointType.round,
                   startCap: Cap.roundCap,
                   endCap: Cap.roundCap,
-                  geodesic: true,
+                  geodesic: false,
                   zIndex: 0,
                 ),
                 Polyline(
@@ -647,7 +649,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   jointType: JointType.round,
                   startCap: Cap.roundCap,
                   endCap: Cap.roundCap,
-                  geodesic: true,
+                  geodesic: false,
                   zIndex: 1,
                 ),
                 if (_showTraffic && intervals.isNotEmpty)
@@ -666,7 +668,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       jointType: JointType.round,
                       startCap: Cap.roundCap,
                       endCap: Cap.roundCap,
-                      geodesic: true,
+                      geodesic: false,
                       zIndex: 2,
                     );
                   }),
@@ -719,9 +721,17 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   },
                   onCameraMove: (target) {
                     _mapCenterLocation = target;
+                    if ((_isPinningOnMap || _viewModel.isPinMode) && _pinnedAddress != 'Locating...') {
+                      setState(() {
+                        _pinnedAddress = 'Locating...';
+                      });
+                    }
                   },
                   onPinChanged: (coords) {
                     _mapCenterLocation = coords;
+                    if (_pinnedAddress != 'Locating...') {
+                      _pinnedAddress = 'Locating...';
+                    }
                     _viewModel.updatePinnedCoordinates(
                       coords.latitude,
                       coords.longitude,
@@ -730,6 +740,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   onCameraIdle: (coords) {
                     _mapCenterLocation = coords;
                     _cameraIdleDebounce?.cancel();
+                    final seq = ++_pinReverseGeocodeSeq;
                     _cameraIdleDebounce = Timer(const Duration(milliseconds: 300), () async {
                       if (!mounted) return;
                       try {
@@ -737,12 +748,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           coords.latitude,
                           coords.longitude,
                         );
-                        if (!mounted) return;
+                        if (!mounted || seq != _pinReverseGeocodeSeq) return;
                         setState(() {
                           _pinnedAddress = address;
                         });
                       } catch (e) {
                         debugPrint('[RiderHome] reverseGeocode error: $e');
+                        if (mounted && seq == _pinReverseGeocodeSeq) {
+                          setState(() {
+                            _pinnedAddress = CoordinateParser.formatOfflineGeotag(
+                              coords.latitude,
+                              coords.longitude,
+                            );
+                          });
+                        }
                       }
                     });
                     _viewModel.updatePinnedCoordinates(
@@ -1184,7 +1203,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 maxSpread: 5.0,
                 child: FloatingActionButton.extended(
                   heroTag: 'ai_chat_btn',
-                  onPressed: () => Navigator.of(context).pushNamed('/ai-chat'),
+                  onPressed: () async {
+                    final allowed = await AiConsentDialog.ensureConsent(context);
+                    if (!allowed || !context.mounted) return;
+                    Navigator.of(context).pushNamed('/ai-chat');
+                  },
                   backgroundColor: AppTheme.primaryNavy,
                   foregroundColor: AppTheme.accentCyan,
                   icon: const Icon(Icons.auto_awesome, size: 20),
@@ -1439,6 +1462,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       child: IgnorePointer(
                         child: TextField(
                           controller: _viewModel.pickupController,
+                          minLines: 1,
+                          maxLines: 2,
                           style: TextStyle(
                             color: AppColors.of(context).textPrimary,
                             fontSize: layout.fontSize(14),
@@ -1488,6 +1513,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       child: IgnorePointer(
                         child: TextField(
                           controller: _viewModel.dropoffController,
+                          minLines: 1,
+                          maxLines: 2,
                           style: TextStyle(
                             color: AppColors.of(context).textPrimary,
                             fontSize: layout.fontSize(14),
@@ -1739,7 +1766,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             (_viewModel.isResolvingPinAddress && _pinnedAddress.isEmpty)
                                 ? 'Locating...'
                                 : currentAddress,
-                            maxLines: 2,
+                            maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 14,
@@ -2309,9 +2336,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                               onPressed: rideProv.isSubmitting
                                   ? null
                                   : () async {
-                                      final isPhoneUser = authProv.currentUser.phone.isNotEmpty;
-                                      final isAuthenticated = authProv.isAuthenticated;
-                                      if (!isPhoneUser && !isAuthenticated) {
+                                      final isGuest = authProv.currentUser.id.isEmpty ||
+                                          authProv.currentUser.id.startsWith('guest');
+                                      final isAuthenticated = authProv.isAuthenticated && !isGuest;
+                                      if (!isAuthenticated) {
                                         _showSignInPromptDialog(context);
                                         return;
                                       }
@@ -2342,7 +2370,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                       width: 20,
                                       child: CircularProgressIndicator(strokeWidth: 2),
                                     )
-                                  : const Text('Find Nearby Drivers (2% Commission)'),
+                                  : const Text('Find Nearby Drivers (2% Platform Fee)'),
                             ),
                           ),
                         ),
@@ -2635,6 +2663,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               Builder(
                 builder: (ctx) {
                   final vType = VehicleTypeX.fromString(ride.vehicleType);
+                  final isCar = vType == VehicleType.car;
                   final econ = TripEconomics.calculate(
                     vehicleType: vType,
                     distanceKm: ride.distanceKm,
@@ -2642,6 +2671,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     fare: ride.acceptedFare ?? ride.offeredFare,
                     bookedSeats: ride.bookedSeats,
                     isAiPredicted: true,
+                    acEnabled: isCar,
                   );
                   return InkWell(
                     borderRadius: BorderRadius.circular(10),
@@ -2649,6 +2679,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       context,
                       economics: econ,
                       isDriverView: false,
+                      acEnabled: isCar,
                     ),
                     child: Container(
                       margin: EdgeInsets.only(top: layout.scale(8)),
@@ -2826,19 +2857,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                       icon: const Icon(Icons.close),
                       tooltip: 'Cancel Ride',
-                      onPressed: () async {
-                        final confirmed = await confirmAction(
-                          context,
-                          title: 'Cancel this ride?',
-                          message: 'Your driver may already be on the way. Cancelling after a driver has accepted can incur a cancellation fee.',
-                          confirmLabel: 'Cancel ride',
-                          cancelLabel: 'Keep ride',
-                          destructive: true,
-                          icon: Icons.warning_amber_rounded,
-                        );
-                        if (!confirmed) return;
-                        rideProv.cancelRide('User cancelled');
-                      },
+                      onPressed: () => _showCancelRideSheet(
+                        context,
+                        ride,
+                        rideProv,
+                        layout,
+                      ),
                     ),
                   ),
                   ],
@@ -2882,7 +2906,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                '2% Commission',
+                '2% Platform Fee • 98% to Driver',
                 style: TextStyle(
                   fontSize: layout.fontSize(10.5),
                   fontWeight: FontWeight.w700,
@@ -3338,9 +3362,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         // Live Trip Economics Preview Card
         InkWell(
           onTap: () {
+            final isCar = _viewModel.selectedVehicleType == VehicleType.car;
             TripEconomicsSheet.show(
               context,
               economics: _viewModel.currentTripEconomics,
+              acEnabled: isCar,
               onSeatCountChanged: (seats) {
                 setState(() {
                   _viewModel.setBookedSeats(seats);
@@ -4110,6 +4136,362 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     );
   }
 
+  Future<void> _showCancelRideSheet(
+    BuildContext context,
+    RideModel ride,
+    RideProvider rideProv,
+    ResponsiveLayoutHelper layout,
+  ) async {
+    const reasons = <String>[
+      'Driver is taking too long',
+      'Need to edit pickup or destination',
+      'Want to adjust my offered fare',
+      'Driver asked me to cancel',
+      'Changed my plans / no longer need a ride',
+      'Other reason',
+    ];
+    String selectedReason = reasons.first;
+    final customNoteController = TextEditingController();
+    final isDriverAssigned = ride.status == RideStatus.accepted ||
+        ride.status == RideStatus.driverArrived ||
+        ride.status == RideStatus.inProgress;
+    final displayFare = (ride.acceptedFare ?? ride.offeredFare).toInt();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.of(context).surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        final c = AppColors.of(sheetCtx);
+        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        return StatefulBuilder(
+          builder: (sheetCtx, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: layout.scale(20),
+                  right: layout.scale(20),
+                  top: layout.scale(14),
+                  bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + layout.scale(18),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: AppTheme.sunsetCoral.withValues(alpha: 0.14),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.cancel_schedule_send_rounded,
+                              color: AppTheme.sunsetCoral,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Cancel this ride?',
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(18),
+                                    fontWeight: FontWeight.w800,
+                                    color: c.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  isDriverAssigned
+                                      ? 'Your driver is assigned. Please review trip info & select a reason.'
+                                      : 'Free cancellation while searching for drivers.',
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(12),
+                                    color: c.textMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      // Trip Info Summary Card
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isDark ? c.surfaceRaised : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: c.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (isDriverAssigned
+                                            ? AppTheme.amberWarning
+                                            : AppTheme.emeraldGreen)
+                                        .withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isDriverAssigned
+                                        ? 'Status: ${ride.status.displayName}'
+                                        : 'Status: Searching Drivers (No Fee)',
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(11),
+                                      fontWeight: FontWeight.w700,
+                                      color: isDriverAssigned
+                                          ? AppTheme.amberWarning
+                                          : AppTheme.emeraldGreen,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  'PKR $displayFare • ${ride.distanceKm.toStringAsFixed(1)} km',
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(12.5),
+                                    fontWeight: FontWeight.w800,
+                                    color: c.textPrimary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.radio_button_checked,
+                                  size: 15,
+                                  color: AppTheme.emeraldGreen,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Pickup: ${ride.pickup.address}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      fontWeight: FontWeight.w600,
+                                      color: c.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 5),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.location_on,
+                                  size: 15,
+                                  color: AppTheme.sunsetCoral,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Dropoff: ${ride.dropoff.address}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      fontWeight: FontWeight.w600,
+                                      color: c.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Your selected pickup, destination, and route will be kept so you can modify your fare or re-request right away.',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(11),
+                                color: c.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Why are you cancelling?',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(13.5),
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      ...reasons.map((reason) {
+                        final isSelected = selectedReason == reason;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setSheetState(() {
+                                selectedReason = reason;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 9,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? AppTheme.sunsetCoral.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? AppTheme.sunsetCoral
+                                      : c.border,
+                                  width: isSelected ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isSelected
+                                        ? Icons.radio_button_checked_rounded
+                                        : Icons.radio_button_off_rounded,
+                                    size: 18,
+                                    color: isSelected
+                                        ? AppTheme.sunsetCoral
+                                        : c.textMuted,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      reason,
+                                      style: TextStyle(
+                                        fontSize: layout.fontSize(13),
+                                        fontWeight: isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: c.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+                      if (selectedReason == 'Other reason') ...[
+                        const SizedBox(height: 4),
+                        TextField(
+                          controller: customNoteController,
+                          decoration: const InputDecoration(
+                            labelText: 'Additional details (optional)',
+                            hintText: 'Tell us why you need to cancel...',
+                            isDense: true,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => Navigator.of(sheetCtx).pop(),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text(
+                                'Keep ride',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                final customText = customNoteController.text.trim();
+                                final finalReason =
+                                    selectedReason == 'Other reason' &&
+                                            customText.isNotEmpty
+                                        ? 'Other: $customText'
+                                        : selectedReason;
+                                Navigator.of(sheetCtx).pop();
+                                await _viewModel.restoreFromCancelledRide(ride);
+                                rideProv.cancelRide(finalReason);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Ride cancelled ($finalReason). You can adjust your route or fare below.',
+                                      ),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.sunsetCoral,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              label: const Text(
+                                'Cancel ride',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showSignInPromptDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -4123,7 +4505,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           ],
         ),
         content: const Text(
-          'Please sign in with your phone number to request rides and connect with nearby 2% commission drivers.',
+          'Please sign in to request rides and connect with nearby drivers (2% platform fee).',
           style: TextStyle(fontSize: 14),
         ),
         actions: [
@@ -4139,10 +4521,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const PhoneAuthScreen()),
-              );
+              PhoneAuthScreen.navigate(context, replace: false);
             },
             child: const Text('Sign In Now'),
           ),

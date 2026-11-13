@@ -47,7 +47,7 @@ SwiftRide implements defense-in-depth across the Flutter mobile applications and
 We value the security research community. If you discover a vulnerability or security flaw, please report it responsibly:
 
 ### How to Report
-1. **Email**: Send your findings directly to **`security@swiftride.app`** or open a private advisory on [GitHub Security Advisories](https://github.com/aliasghar08/Swift-Ride/security/advisories/new).
+1. **Email**: Send your findings directly to **`aliasgharinnocent@yahoo.com`** or open a private advisory on [GitHub Security Advisories](https://github.com/aliasghar08/Swift-Ride/security/advisories/new).
 2. **Details to Include**:
    - Vulnerability type and affected component (Flutter app, Cloud Function, Firestore Rule)
    - Step-by-step reproduction instructions or Proof-of-Concept (PoC)

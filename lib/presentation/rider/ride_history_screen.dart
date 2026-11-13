@@ -554,7 +554,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
             Text(
               isDriver
                   ? 'Your completed rides and earnings will show up here.'
-                  : 'Start booking 2% commission rides to build your trip history.',
+                  : 'Start booking rides with 2% platform fee to build your trip history.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,

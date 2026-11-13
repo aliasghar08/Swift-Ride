@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:swiftride/domain/models/location_point_model.dart';
+import 'package:swiftride/domain/models/ride_model.dart';
 import 'package:swiftride/domain/models/trip_economics_model.dart';
 import 'package:swiftride/domain/models/vehicle_type.dart';
+import 'package:swiftride/presentation/view_models/driver_view_model.dart';
+import 'package:swiftride/presentation/view_models/rider_view_model.dart';
 import 'package:swiftride/services/pricing_ml_service.dart';
 
 void main() {
@@ -96,6 +100,81 @@ void main() {
       expect(gridlockEcon.totalFare, greaterThan(highwayEcon.totalFare));
     });
 
+    test('predictTripEconomics differentiates 660cc Alto vs 1300cc Corolla accurately', () async {
+      final pricingService = PricingMLService();
+
+      // 660cc Alto
+      final altoEcon = await pricingService.predictTripEconomics(
+        distanceKm: 25.0,
+        durationMin: 45,
+        staticDurationMin: 35,
+        vehicleType: VehicleType.car,
+        carEngineTier: CarEngineTier.mini660cc,
+        carModel: 'Suzuki Alto',
+        bookedSeats: 2,
+        fuelPrice: 332.0,
+      );
+
+      // 1300cc Corolla
+      final corollaEcon = await pricingService.predictTripEconomics(
+        distanceKm: 25.0,
+        durationMin: 45,
+        staticDurationMin: 35,
+        vehicleType: VehicleType.car,
+        carEngineTier: CarEngineTier.sedan1300cc,
+        carModel: 'Toyota Corolla',
+        bookedSeats: 2,
+        fuelPrice: 332.0,
+      );
+
+      expect(altoEcon.isAiPredicted, isTrue);
+      expect(corollaEcon.isAiPredicted, isTrue);
+
+      // Alto (660cc) burns significantly less petrol than Corolla (1300cc)
+      expect(altoEcon.fuelConsumedLiters, lessThan(corollaEcon.fuelConsumedLiters));
+      expect(altoEcon.fuelCost, lessThan(corollaEcon.fuelCost));
+
+      // Sedan maintenance & depreciation is higher
+      expect(altoEcon.maintenanceCost, lessThan(corollaEcon.maintenanceCost));
+
+      // Fair sweet-spot fare reflects the lower operating expense of a 660cc car
+      expect(altoEcon.totalFare, lessThan(corollaEcon.totalFare));
+    });
+
+    test('predictTripEconomics scales with road condition and AC load', () async {
+      final pricingService = PricingMLService();
+
+      // Smooth highway, AC off
+      final smoothEcon = await pricingService.predictTripEconomics(
+        distanceKm: 18.0,
+        durationMin: 25,
+        staticDurationMin: 25,
+        vehicleType: VehicleType.car,
+        carEngineTier: CarEngineTier.compact1000cc,
+        roadCondition: 0,
+        acEnabled: false,
+        bookedSeats: 2,
+        fuelPrice: 332.0,
+      );
+
+      // Broken / rough rural road, AC on
+      final roughAcEcon = await pricingService.predictTripEconomics(
+        distanceKm: 18.0,
+        durationMin: 35,
+        staticDurationMin: 25,
+        vehicleType: VehicleType.car,
+        carEngineTier: CarEngineTier.compact1000cc,
+        roadCondition: 2,
+        acEnabled: true,
+        bookedSeats: 2,
+        fuelPrice: 332.0,
+      );
+
+      expect(roughAcEcon.fuelConsumedLiters, greaterThan(smoothEcon.fuelConsumedLiters));
+      expect(roughAcEcon.maintenanceCost, greaterThan(smoothEcon.maintenanceCost));
+      expect(roughAcEcon.totalFare, greaterThan(smoothEcon.totalFare));
+    });
+
     test('TripEconomics serializes and deserializes isAiPredicted correctly', () {
       final econ = TripEconomics.calculate(
         distanceKm: 10.0,
@@ -107,6 +186,65 @@ void main() {
 
       final map = econ.toMap();
       expect(map['isAiPredicted'], isTrue);
+    });
+
+    test('DriverViewModel predicts economics inferring engine tier from vehicle model', () async {
+      final driverVm = DriverViewModel();
+      final rideCar = RideModel(
+        id: 'ride-alto',
+        riderId: 'rider-1',
+        pickup: LocationPoint(latitude: 31.2785, longitude: 72.3317, address: 'Shaheed Chowk, Jhang'),
+        dropoff: LocationPoint(latitude: 31.2900, longitude: 72.3500, address: 'District Courts, Jhang'),
+        offeredFare: 250.0,
+        distanceKm: 6.0,
+        durationMin: 14.0,
+        suggestedFare: 260.0,
+        vehicleType: 'car',
+        pin: '1234',
+        createdAt: DateTime(2026, 11, 13),
+      );
+
+      // 660cc Alto
+      final altoEcon = await driverVm.predictTripEconomics(
+        ride: rideCar,
+        vehicleModel: 'Suzuki Alto VXR 660cc',
+        fuelPrice: 332.0,
+      );
+      expect(altoEcon.carEngineTier, equals(CarEngineTier.mini660cc));
+      expect(altoEcon.acEnabled, isTrue);
+
+      // 1300cc+ Corolla
+      final corollaEcon = await driverVm.predictTripEconomics(
+        ride: rideCar,
+        vehicleModel: 'Toyota Corolla GLi 1.3',
+        fuelPrice: 332.0,
+      );
+      expect(corollaEcon.carEngineTier, equals(CarEngineTier.sedan1300cc));
+      expect(corollaEcon.acEnabled, isTrue);
+
+      // Corolla consumes more fuel and has higher wear than Alto
+      expect(corollaEcon.fuelConsumedLiters, greaterThan(altoEcon.fuelConsumedLiters));
+      expect(corollaEcon.maintenanceCost, greaterThan(altoEcon.maintenanceCost));
+
+      driverVm.dispose();
+    });
+
+    test('RiderViewModel sets acEnabled true for Car and false for Bike/Rikshaw', () {
+      final riderVm = RiderViewModel();
+
+      // Default or Car
+      riderVm.selectVehicleType(VehicleType.car);
+      expect(riderVm.currentTripEconomics.acEnabled, isTrue);
+
+      // Bike
+      riderVm.selectVehicleType(VehicleType.bike);
+      expect(riderVm.currentTripEconomics.acEnabled, isFalse);
+
+      // Rikshaw
+      riderVm.selectVehicleType(VehicleType.rikshaw);
+      expect(riderVm.currentTripEconomics.acEnabled, isFalse);
+
+      riderVm.dispose();
     });
   });
 }

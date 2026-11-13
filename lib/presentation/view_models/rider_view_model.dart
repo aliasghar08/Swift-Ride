@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../services/native_map_service.dart';
 import '../../core/utils/distance_calculator.dart';
 import '../../domain/models/location_point_model.dart';
+import '../../domain/models/ride_model.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/safety_provider.dart';
 import '../../services/firestore/firestore_safety_service.dart';
@@ -15,7 +16,9 @@ import '../../services/native/native_safety_service.dart';
 import '../../domain/models/payment_rail.dart';
 import '../../domain/models/vehicle_type.dart';
 import '../../domain/models/trip_economics_model.dart';
+import '../../services/fuel_price_service.dart';
 import '../../services/pricing_ml_service.dart';
+import '../../services/coordinate_parser.dart';
 
 /// ViewModel managing Rider UI state, address search, pin-dropping,
 /// route polylines, PKR fare negotiation, and native safety integrations.
@@ -234,8 +237,12 @@ class RiderViewModel extends ChangeNotifier {
 
   /// Calculates real-time trip economics including fuel, mileage, maintenance, and driver profit.
   TripEconomics get currentTripEconomics {
-    final fare = double.tryParse(fareController.text) ?? suggestedFare;
+    final parsed = double.tryParse(fareController.text);
+    final fare = (parsed == null || parsed < 50.0)
+        ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
+        : (parsed > 99999.0 ? 99999.0 : parsed);
     final route = selectedRoute;
+    final isCar = _selectedVehicleType == VehicleType.car;
     return TripEconomics.calculate(
       distanceKm: route?.distanceKm ?? _estimatedDistanceKm,
       durationMin: route?.durationMin ?? _estimatedDurationMin,
@@ -245,6 +252,39 @@ class RiderViewModel extends ChangeNotifier {
       vehicleType: _selectedVehicleType,
       bookedSeats: _bookedSeats,
       isAiPredicted: true,
+      acEnabled: isCar,
+    );
+  }
+
+  /// Asynchronously predicts trip economics using on-device ML model with AC compressor and engine tier parameters.
+  Future<TripEconomics> predictTripEconomics({
+    double? customFare,
+    int? overrideSeats,
+    CarEngineTier? carEngineTier,
+    bool? acEnabled,
+    double? fuelPrice,
+    int roadCondition = 1,
+  }) async {
+    final route = selectedRoute;
+    final dist = route?.distanceKm ?? _estimatedDistanceKm;
+    final dur = (route?.durationMin ?? _estimatedDurationMin).round();
+    final seats = overrideSeats ?? _bookedSeats;
+    final isCar = _selectedVehicleType == VehicleType.car;
+    final effectiveAc = acEnabled ?? isCar;
+    final livePrice = FuelPriceService().currentPrice;
+    final price = fuelPrice ?? livePrice.petrolPricePerL;
+
+    return await _pricingMLService.predictTripEconomics(
+      distanceKm: dist,
+      durationMin: dur,
+      staticDurationMin: route?.staticDurationMin.round(),
+      trafficLevel: route?.trafficLevel,
+      vehicleType: _selectedVehicleType,
+      bookedSeats: seats,
+      fuelPrice: price,
+      carEngineTier: carEngineTier,
+      roadCondition: roadCondition,
+      acEnabled: effectiveAc,
     );
   }
 
@@ -312,7 +352,7 @@ class RiderViewModel extends ChangeNotifier {
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
       if (_isDisposed) return;
-      if (realAddress.isNotEmpty && !realAddress.startsWith('Location (')) {
+      if (realAddress.isNotEmpty) {
         pickupController.text = realAddress;
         _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
         notifyListeners();
@@ -366,7 +406,7 @@ class RiderViewModel extends ChangeNotifier {
         longitude: lng,
         address: realAddress.isNotEmpty
             ? realAddress
-            : '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+            : CoordinateParser.formatOfflineGeotag(lat, lng),
       );
     } catch (e) {
       debugPrint('[RiderViewModel] reverseGeocode failed: $e');
@@ -419,6 +459,34 @@ class RiderViewModel extends ChangeNotifier {
     await setDestination(point);
   }
 
+  /// Preserves or restores pickup, destination, fare, and route state from a
+  /// cancelled [ride] so cancelling a ride returns one step back to the route &
+  /// fare proposal sheet instead of resetting to a blank home screen.
+  Future<void> restoreFromCancelledRide(RideModel ride) async {
+    _pickupLocation ??= ride.pickup;
+    if (pickupController.text.trim().isEmpty) {
+      pickupController.text = ride.pickup.address;
+    }
+    _dropoffLocation ??= ride.dropoff;
+    if (dropoffController.text.trim().isEmpty) {
+      dropoffController.text = ride.dropoff.address;
+    }
+    if (ride.distanceKm > 0 && _estimatedDistanceKm <= 0) {
+      _estimatedDistanceKm = ride.distanceKm;
+    }
+    if (ride.durationMin > 0 && _estimatedDurationMin <= 0) {
+      _estimatedDurationMin = ride.durationMin;
+    }
+    if (ride.offeredFare > 0) {
+      fareController.text = ride.offeredFare.round().toString();
+      _fareTouchedByUser = true;
+    }
+    notifyListeners();
+    if (_routes.isEmpty && _pickupLocation != null && _dropoffLocation != null) {
+      await autoFetchRoute();
+    }
+  }
+
   /// Automatically fetches the route polyline and calculates AI sweet-spot pricing.
   Future<void> fetchRoute() => autoFetchRoute();
 
@@ -436,11 +504,13 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _loadRoute(
+      final success = await _loadRoute(
         LatLng(pickup.latitude, pickup.longitude),
         LatLng(dropoff.latitude, dropoff.longitude),
       );
-      await calculateAiSweetSpotBid();
+      if (success) {
+        await calculateAiSweetSpotBid();
+      }
     } catch (e) {
       debugPrint('[RiderViewModel] Auto route fetch error: $e');
     } finally {
@@ -521,7 +591,7 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadRoute(LatLng origin, LatLng dest) async {
+  Future<bool> _loadRoute(LatLng origin, LatLng dest) async {
     _routeError = null;
     final requestId = ++_routeRequestId;
 
@@ -532,7 +602,7 @@ class RiderViewModel extends ChangeNotifier {
       debugPrint('[RiderViewModel] route fetch failed: $e');
     }
 
-    if (requestId != _routeRequestId) return;
+    if (requestId != _routeRequestId) return false;
 
     if (plan == null || plan.routes.isEmpty) {
       _routes = [];
@@ -544,7 +614,7 @@ class RiderViewModel extends ChangeNotifier {
       _aiSuggestedSweetSpot = null;
       _routeError = 'Could not compute a route. Check your connection.';
       notifyListeners();
-      return;
+      return true;
     }
 
     _routeIsEstimated = false;
@@ -587,13 +657,14 @@ class RiderViewModel extends ChangeNotifier {
     }
 
     notifyListeners();
+    return true;
   }
 
   void quickIncrementFare(double increment) {
     _fareTouchedByUser = true;
     final cur = double.tryParse(fareController.text) ?? suggestedFare;
     final next = (cur + increment).round();
-    fareController.text = (next < 50 ? 50 : next).toString();
+    fareController.text = (next < 50 ? 50 : (next > 99999 ? 99999 : next)).toString();
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
@@ -615,7 +686,10 @@ class RiderViewModel extends ChangeNotifier {
     required RideProvider rideProv,
     String? riderId,
   }) async {
-    final fare = double.tryParse(fareController.text) ?? suggestedFare;
+    final parsed = double.tryParse(fareController.text);
+    final fare = (parsed == null || parsed < 50.0)
+        ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
+        : (parsed > 99999.0 ? 99999.0 : parsed);
     _deviceService.triggerHaptic('medium');
 
     final pickup = _pickupLocation;

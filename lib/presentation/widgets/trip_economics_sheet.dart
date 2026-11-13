@@ -19,12 +19,16 @@ class TripEconomicsSheet extends StatefulWidget {
   final TripEconomics economics;
   final bool isDriverView;
   final ValueChanged<int>? onSeatCountChanged;
+  final CarEngineTier? carEngineTier;
+  final bool? acEnabled;
 
   const TripEconomicsSheet({
     super.key,
     required this.economics,
     this.isDriverView = false,
     this.onSeatCountChanged,
+    this.carEngineTier,
+    this.acEnabled,
   });
 
   static void show(
@@ -32,6 +36,8 @@ class TripEconomicsSheet extends StatefulWidget {
     required TripEconomics economics,
     bool isDriverView = false,
     ValueChanged<int>? onSeatCountChanged,
+    CarEngineTier? carEngineTier,
+    bool? acEnabled,
   }) {
     showModalBottomSheet(
       context: context,
@@ -41,6 +47,8 @@ class TripEconomicsSheet extends StatefulWidget {
         economics: economics,
         isDriverView: isDriverView,
         onSeatCountChanged: onSeatCountChanged,
+        carEngineTier: carEngineTier,
+        acEnabled: acEnabled,
       ),
     );
   }
@@ -80,6 +88,11 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
     int? overrideSeats,
   }) async {
     final seats = overrideSeats ?? _econ.bookedSeats;
+    final effectiveTier = widget.carEngineTier ?? _econ.carEngineTier;
+    final effectiveAc = widget.acEnabled ??
+        _econ.acEnabled ??
+        (_econ.vehicleType == VehicleType.car);
+
     if (_econ.isAiPredicted) {
       return await PricingMLService().predictTripEconomics(
         distanceKm: _econ.distanceKm,
@@ -87,6 +100,8 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
         vehicleType: _econ.vehicleType,
         bookedSeats: seats,
         fuelPrice: fuelPrice,
+        carEngineTier: effectiveTier,
+        acEnabled: effectiveAc,
       );
     } else {
       return TripEconomics.calculate(
@@ -99,6 +114,8 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
         fuelPriceSource: source,
         isFuelPriceLive: isLive,
         isAiPredicted: _econ.isAiPredicted,
+        carEngineTier: effectiveTier,
+        acEnabled: effectiveAc,
       );
     }
   }
@@ -234,7 +251,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '2% Commission',
+                            '2% Platform Fee • 98% to Driver',
                             style: TextStyle(
                               fontSize: layout.fontSize(11),
                               fontWeight: FontWeight.w800,
@@ -534,10 +551,34 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     c: c,
                     icon: Icons.shield_rounded,
                     iconColor: AppTheme.emeraldGreen,
-                    title: 'Platform Service Fee',
-                    subtitle: 'SwiftRide 2% commission (98% to driver)',
+                    title: 'Swift Ride Service Fee (2%)',
+                    subtitle: 'Permanent 2% platform facilitation fee (98% to driver)',
                     trailing: '- PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                     trailingColor: AppTheme.emeraldGreen,
+                  ),
+                  Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
+                  _buildRow(
+                    layout: layout,
+                    c: c,
+                    icon: Icons.account_balance_wallet_rounded,
+                    iconColor: AppTheme.emeraldGreen,
+                    title: 'Driver Net Payout (98% Gross)',
+                    subtitle: 'Gross fare retained before fuel & wear deductions',
+                    trailing: 'PKR ${(_econ.totalFare - _econ.serviceCharges).toStringAsFixed(1)}',
+                    trailingColor: AppTheme.emeraldGreen,
+                    isBold: true,
+                  ),
+                  Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
+                  _buildRow(
+                    layout: layout,
+                    c: c,
+                    icon: Icons.savings_rounded,
+                    iconColor: AppTheme.accentCyan,
+                    title: 'Real Take-Home (After Fuel & Wear)',
+                    subtitle: 'Net retained earnings after fuel, wear, and 2% fee',
+                    trailing: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)}',
+                    trailingColor: AppTheme.accentCyan,
+                    isBold: true,
                   ),
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
                   _buildRow(
@@ -648,23 +689,19 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                           const SizedBox(height: 10),
                           _buildFormulaStep(
                             step: '4. Service Charges',
-                            formula: 'Platform Commission Fee',
-                            calculation: 'SwiftRide 2% Driver Commission',
+                            formula: 'Platform Facilitation Fee',
+                            calculation: 'Swift Ride Service Fee (2%): -PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                             result: 'PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                             layout: layout,
                             c: c,
                           ),
                           const SizedBox(height: 10),
                           _buildFormulaStep(
-                            step: _econ.isAiPredicted
-                                ? '5. 💰 AI Net Take-Home'
-                                : '5. Net Driver Profit',
-                            formula: _econ.isAiPredicted
-                                ? 'Predicted Fare - (Fuel + Maint)'
-                                : 'Fare - (Fuel + Maint + Fee)',
+                            step: '5. Real Take-Home (After Fuel & Wear)',
+                            formula: 'Fare - (Fuel + Maint + 2% Service Fee)',
                             calculation:
-                                'PKR ${_econ.totalFare.toStringAsFixed(0)} - (PKR ${_econ.fuelCost.toStringAsFixed(1)} + PKR ${_econ.maintenanceCost.toStringAsFixed(1)})',
-                            result: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)} Net Profit',
+                                'PKR ${_econ.totalFare.toStringAsFixed(0)} - (PKR ${_econ.fuelCost.toStringAsFixed(1)} + PKR ${_econ.maintenanceCost.toStringAsFixed(1)} + PKR ${_econ.serviceCharges.toStringAsFixed(1)})',
+                            result: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)} Real Take-Home',
                             layout: layout,
                             c: c,
                             isHighlighted: true,
@@ -718,8 +755,8 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                       children: [
                         Text(
                           widget.isDriverView
-                              ? 'YOUR NET TAKE-HOME PROFIT'
-                              : 'DRIVER NET TAKE-HOME PROFIT',
+                              ? 'YOUR REAL TAKE-HOME PROFIT'
+                              : 'DRIVER REAL TAKE-HOME (AFTER FUEL & WEAR)',
                           style: TextStyle(
                             fontSize: layout.fontSize(11),
                             fontWeight: FontWeight.w800,

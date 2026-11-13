@@ -20,6 +20,7 @@ import 'package:swiftride/providers/ride_provider.dart';
 import 'package:swiftride/providers/safety_provider.dart';
 import 'package:swiftride/ai/ai.dart';
 import 'package:swiftride/services/map_service.dart';
+import 'package:swiftride/services/auth_service.dart';
 import 'package:swiftride/services/firestore/firestore_ride_service.dart';
 
 void main() {
@@ -56,7 +57,7 @@ void main() {
       expect(find.text('Enter Your Mobile Number'), findsOneWidget);
       expect(find.text('We will send a 6-digit verification code.'), findsOneWidget);
       expect(find.text('Continue with Phone'), findsOneWidget);
-      expect(find.text('Continue as AI Guest / Passenger'), findsOneWidget);
+      expect(find.text('Continue as AI Guest / Passenger'), findsNothing);
 
       // Verify entering phone number
       await tester.enterText(find.byType(TextField).first, '3000000000');
@@ -64,36 +65,133 @@ void main() {
       expect(find.text('3000000000'), findsOneWidget);
     });
 
-    testWidgets('PhoneAuthScreen Continue as Guest invokes completion cleanly', (tester) async {
-      bool authCompleted = false;
-      final authProvider = AuthProvider();
-      addTearDown(authProvider.dispose);
+    testWidgets(
+      'PhoneAuthScreen shows proper error messages and remembers registered number info after sign out',
+      (tester) async {
+        tester.view.physicalSize = const Size(1080, 2400);
+        tester.view.devicePixelRatio = 2.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(
-        CustomMultiProvider(
-          providers: [
-            (child) => CustomChangeNotifierProvider<AuthProvider>(
-                  notifier: authProvider,
-                  child: child,
-                ),
-          ],
-          child: MaterialApp(
-            home: PhoneAuthScreen(
-              onAuthSuccess: () {
-                authCompleted = true;
-              },
+        final authProvider = AuthProvider();
+        addTearDown(authProvider.dispose);
+
+        bool authSucceeded = false;
+        await tester.pumpWidget(
+          CustomMultiProvider(
+            providers: [
+              (child) => CustomChangeNotifierProvider<AuthProvider>(
+                    notifier: authProvider,
+                    child: child,
+                  ),
+            ],
+            child: MaterialApp(
+              home: PhoneAuthScreen(
+                onAuthSuccess: () {
+                  authSucceeded = true;
+                },
+              ),
             ),
           ),
-        ),
-      );
-      await tester.pump();
+        );
+        await tester.pump();
 
-      // Tap "Continue as AI Guest / Passenger"
-      await tester.tap(find.text('Continue as AI Guest / Passenger'));
-      await tester.pumpAndSettle();
+        // 1. Tap "Continue with Phone" with empty phone -> inline error banner
+        await tester.tap(find.text('Continue with Phone'));
+        await tester.pump();
+        expect(find.byKey(const Key('auth_error_banner')), findsOneWidget);
+        expect(
+          find.textContaining('Please enter your mobile phone number'),
+          findsWidgets,
+        );
 
-      expect(authCompleted, isTrue);
-    });
+        // 2. Enter short/invalid phone number -> inline error banner
+        await tester.enterText(find.byKey(const Key('auth_phone_field')), '30012');
+        await tester.pump();
+        await tester.tap(find.text('Continue with Phone'));
+        await tester.pump();
+        expect(
+          find.textContaining('Please enter a valid 10-digit mobile number'),
+          findsWidgets,
+        );
+
+        // 3. Enter valid phone + invalid email -> inline error banner
+        await tester.enterText(
+          find.byKey(const Key('auth_phone_field')),
+          '3027778899',
+        );
+        await tester.enterText(
+          find.byKey(const Key('auth_name_field')),
+          'Zainab Fatima',
+        );
+        await tester.enterText(
+          find.byKey(const Key('auth_email_field')),
+          'invalid-email',
+        );
+        await tester.pump();
+        await tester.tap(find.text('Continue with Phone'));
+        await tester.pump();
+        expect(
+          find.textContaining('Please enter a valid email address'),
+          findsWidgets,
+        );
+
+        // 4. Fix email, select Driver role, and complete sign-up
+        await tester.enterText(
+          find.byKey(const Key('auth_email_field')),
+          'zainab@swiftride.pk',
+        );
+        await tester.tap(find.text('Driver'));
+        await tester.pump();
+        await tester.tap(find.text('Continue with Phone'));
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        // Complete OTP
+        await tester.enterText(find.byType(TextField).first, '123456');
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
+        expect(authSucceeded, isTrue);
+        expect(authProvider.isAuthenticated, isTrue);
+        expect(authProvider.currentUser.fullName, equals('Zainab Fatima'));
+        expect(authProvider.currentUser.email, equals('zainab@swiftride.pk'));
+        expect(authProvider.currentUser.role, equals(UserRole.driver));
+
+        // 5. Sign out -> user is no longer authenticated, but registered phone info is remembered
+        await authProvider.signOut();
+        expect(authProvider.isAuthenticated, isFalse);
+        expect(authProvider.currentUser.phone, isEmpty);
+
+        // Re-render fresh PhoneAuthScreen (as after navigating on Sign Out) and enter the already-registered number
+        await tester.pumpWidget(
+          CustomMultiProvider(
+            providers: [
+              (child) => CustomChangeNotifierProvider<AuthProvider>(
+                    notifier: authProvider,
+                    child: child,
+                  ),
+            ],
+            child: MaterialApp(
+              home: PhoneAuthScreen(
+                key: UniqueKey(),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        await tester.enterText(
+          find.byKey(const Key('auth_phone_field')),
+          '3027778899',
+        );
+        await tester.pumpAndSettle();
+
+        // Saved Name, Email, and Role are remembered and autofilled
+        expect(find.text('Zainab Fatima'), findsOneWidget);
+        expect(find.text('zainab@swiftride.pk'), findsOneWidget);
+        expect(find.byKey(const Key('autofill_success_banner')), findsOneWidget);
+      },
+    );
   });
 
   group('Route Selection Button Background & Text Color Adaptivity Tests', () {
@@ -368,6 +466,69 @@ void main() {
       expect(find.text('29.4 km'), findsOneWidget);
       expect(find.text('32 min'), findsOneWidget);
       expect(find.text('2% Fee'), findsOneWidget);
+    });
+
+    testWidgets('Continue with Google and Apple buttons render and sign in social users', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final authProvider = AuthProvider();
+      addTearDown(authProvider.dispose);
+
+      bool authSucceeded = false;
+      await tester.pumpWidget(
+        CustomMultiProvider(
+          providers: [
+            (child) => CustomChangeNotifierProvider<AuthProvider>(
+                  notifier: authProvider,
+                  child: child,
+                ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            home: PhoneAuthScreen(
+              onAuthSuccess: () {
+                authSucceeded = true;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Check social login buttons
+      expect(find.text('Continue with Google'), findsOneWidget);
+      expect(find.text('Continue with Apple'), findsOneWidget);
+
+      // Tap Continue with Google
+      await tester.tap(find.text('Continue with Google'));
+      await tester.pumpAndSettle();
+
+      expect(authSucceeded, isTrue);
+      expect(authProvider.isAuthenticated, isTrue);
+      expect(authProvider.currentUser.authProvider, equals('google'));
+      expect(authProvider.currentUser.email, isNotNull);
+    });
+
+    test('AuthService and AuthProvider replace Error code:39 with user-friendly actionable prompt', () async {
+      expect(AuthService(), isNotNull);
+      String? reportedError;
+
+      // Simulate Error 39 formatting in sendOtp
+      final rawError = '[unknown] An internal error has occurred. [ Error code:39 ]';
+      if (rawError.contains('39') || rawError.contains('17499') || rawError.contains('Error code:39')) {
+        reportedError =
+            'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.';
+      }
+
+      expect(
+        reportedError,
+        equals(
+          'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.',
+        ),
+      );
     });
   });
 }

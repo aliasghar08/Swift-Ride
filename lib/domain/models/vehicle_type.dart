@@ -7,6 +7,105 @@ enum VehicleType {
   rikshaw,
 }
 
+/// Realistic engine displacement and chassis tiers for cars in Pakistan.
+/// Used by the on-device AI economics model for exact fuel and wear calculations.
+enum CarEngineTier {
+  /// 660cc Kei cars (Suzuki Alto, Daihatsu Mira, Mehran)
+  mini660cc,
+
+  /// 1000cc Compact hatchbacks (Suzuki Cultus, WagonR, Vitz)
+  compact1000cc,
+
+  /// 1300cc+ Sedans (Toyota Corolla, Yaris, Honda City, Civic)
+  sedan1300cc,
+}
+
+extension CarEngineTierX on CarEngineTier {
+  String get displayName {
+    switch (this) {
+      case CarEngineTier.mini660cc:
+        return 'Mini (660cc)';
+      case CarEngineTier.compact1000cc:
+        return 'Compact (1000cc)';
+      case CarEngineTier.sedan1300cc:
+        return 'Sedan (1300cc+)';
+    }
+  }
+
+  /// Vehicle tier integer code matching the 8-feature ML economics dataset (2, 3, 4)
+  double get vehicleTierCode {
+    switch (this) {
+      case CarEngineTier.mini660cc:
+        return 2.0;
+      case CarEngineTier.compact1000cc:
+        return 3.0;
+      case CarEngineTier.sedan1300cc:
+        return 4.0;
+    }
+  }
+
+  /// Baseline uninhibited fuel mileage in km/L
+  double get baseFuelAverageKmPerL {
+    switch (this) {
+      case CarEngineTier.mini660cc:
+        return 19.5;
+      case CarEngineTier.compact1000cc:
+        return 16.0;
+      case CarEngineTier.sedan1300cc:
+        return 13.0;
+    }
+  }
+
+  /// Base mechanical maintenance wear in PKR/km
+  double get baseWearPerKm {
+    switch (this) {
+      case CarEngineTier.mini660cc:
+        return 3.2;
+      case CarEngineTier.compact1000cc:
+        return 4.0;
+      case CarEngineTier.sedan1300cc:
+        return 5.2;
+    }
+  }
+
+  /// Automatically infers the car engine tier from vehicle name/model string.
+  static CarEngineTier fromCarModel(String? model) {
+    if (model == null || model.isEmpty) return CarEngineTier.compact1000cc;
+    final m = model.toLowerCase();
+    if (m.contains('corolla') ||
+        m.contains('civic') ||
+        m.contains('city') ||
+        m.contains('yaris') ||
+        m.contains('alsvin') ||
+        m.contains('sedan') ||
+        m.contains('1300') ||
+        m.contains('1500') ||
+        m.contains('1600') ||
+        m.contains('1800') ||
+        m.contains('elantra') ||
+        m.contains('sonata') ||
+        m.contains('camry') ||
+        m.contains('prius') ||
+        m.contains('accord')) {
+      return CarEngineTier.sedan1300cc;
+    }
+    if (m.contains('alto') ||
+        m.contains('mira') ||
+        m.contains('mehran') ||
+        m.contains('660') ||
+        m.contains('ek wagon') ||
+        m.contains('move') ||
+        m.contains('hustler') ||
+        m.contains('dayz') ||
+        m.contains('tanto') ||
+        m.contains('n-one') ||
+        m.contains('n-box')) {
+      return CarEngineTier.mini660cc;
+    }
+    return CarEngineTier.compact1000cc;
+  }
+}
+
 extension VehicleTypeX on VehicleType {
   /// Unique identifier matching database string
   String get id => name;
@@ -60,7 +159,7 @@ extension VehicleTypeX on VehicleType {
   }
 
   /// Predicts real-world fuel mileage (km/L) using Google Maps route data (distance, traffic duration, congestion),
-  /// the vehicle's car model, and fuel efficiency characteristics.
+  /// the vehicle's car model, engine tier, AC compressor load, and fuel efficiency characteristics.
   double predictMileage({
     required double distanceKm,
     double? durationMin,
@@ -68,24 +167,19 @@ extension VehicleTypeX on VehicleType {
     String? trafficLevel,
     String? carModel,
     double? customMileage,
+    CarEngineTier? carEngineTier,
+    bool? acEnabled,
   }) {
     if (customMileage != null && customMileage > 0) {
       return customMileage;
     }
     double base = averageMileageKmPerL;
-    if (this == VehicleType.car && carModel != null && carModel.isNotEmpty) {
-      final m = carModel.toLowerCase();
-      if (m.contains('corolla') ||
-          m.contains('civic') ||
-          m.contains('city') ||
-          m.contains('yaris') ||
-          m.contains('camry') ||
-          m.contains('sedan')) {
-        base = 10.0; // Sedan / Comfort AC
-      } else if (m.contains('alto') || m.contains('mira') || m.contains('mehran') || m.contains('660')) {
-        base = 15.5; // Economy Kei / Hatchback
-      } else {
-        base = 13.0; // Cultus / WagonR / 1000cc
+    if (this == VehicleType.car) {
+      if (carEngineTier != null) {
+        base = carEngineTier.baseFuelAverageKmPerL;
+      } else if (carModel != null && carModel.isNotEmpty) {
+        final tier = CarEngineTierX.fromCarModel(carModel);
+        base = tier.baseFuelAverageKmPerL;
       }
     }
 
@@ -138,7 +232,18 @@ extension VehicleTypeX on VehicleType {
       speedAdjustment = 1.0;
     }
 
-    final predicted = (base + speedAdjustment - trafficPenalty).clamp(6.5, 14.0);
+    // AC compressor drag penalty (~1.2 - 1.5 km/L) when active
+    final double acPenalty;
+    if (acEnabled != null) {
+      acPenalty = (this == VehicleType.car && acEnabled) ? 1.4 : 0.0;
+    } else if (carEngineTier != null) {
+      acPenalty = 1.4;
+    } else {
+      acPenalty = 0.0;
+    }
+
+    final double maxClamp = (carEngineTier != null || (carModel != null && carModel.isNotEmpty)) ? 24.0 : 14.0;
+    final predicted = (base + speedAdjustment - trafficPenalty - acPenalty).clamp(6.5, maxClamp);
     return (predicted * 10).round() / 10.0;
   }
 

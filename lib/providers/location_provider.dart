@@ -4,6 +4,8 @@ import 'package:swiftride/services/location_service.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/geohash_util.dart';
 import '../domain/models/location_point_model.dart';
+import '../services/coordinate_parser.dart';
+import '../services/map_service.dart';
 
 /// Streams live driver coordinates, calculates heading rotations, and drives
 /// map animations. Also exposes [hasRealFix] so the UI can distinguish "still
@@ -18,6 +20,9 @@ class LocationProvider extends ChangeNotifier {
   double _speed = 0.0;
   bool _isBroadcasting = false;
   bool _hasRealFix = false;
+  String _address = '';
+  double _lastGeotaggedLat = 0.0;
+  double _lastGeotaggedLng = 0.0;
 
   /// Invoked on every location update. The driver cockpit uses this to publish
   /// telemetry to the backend while a trip is active.
@@ -42,6 +47,20 @@ class LocationProvider extends ChangeNotifier {
             '${update.latitude.toStringAsFixed(5)}, '
             '${update.longitude.toStringAsFixed(5)}');
       }
+
+      // Asynchronously resolve human-readable geotagged address when moved > 50m
+      if (_address.isEmpty ||
+          GeohashUtil.distanceKm(_latitude, _longitude, _lastGeotaggedLat, _lastGeotaggedLng) > 0.05) {
+        _lastGeotaggedLat = _latitude;
+        _lastGeotaggedLng = _longitude;
+        MapService.instance.reverseGeocode(_latitude, _longitude).then((addr) {
+          if (addr.isNotEmpty && !addr.startsWith('Location (')) {
+            _address = addr;
+            notifyListeners();
+          }
+        }).catchError((_) {});
+      }
+
       onLocationUpdate?.call(update.latitude, update.longitude, update.heading);
     });
 
@@ -56,6 +75,7 @@ class LocationProvider extends ChangeNotifier {
   double get speed => _speed;
   bool get isBroadcasting => _isBroadcasting;
   bool get hasRealFix => _hasRealFix;
+  String get address => _address;
 
   /// Current location encoded as a precision-7 geohash.
   String get geohash => GeohashUtil.encode(_latitude, _longitude, 7);
@@ -64,7 +84,9 @@ class LocationProvider extends ChangeNotifier {
   LocationPoint get locationPoint => LocationPoint.withGeotag(
         latitude: _latitude,
         longitude: _longitude,
-        address: '',
+        address: _address.isNotEmpty
+            ? _address
+            : CoordinateParser.formatOfflineGeotag(_latitude, _longitude),
       );
 
   /// Waits for the first genuine GPS fix (or times out). Returns null on

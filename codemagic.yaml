@@ -91,7 +91,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dev@swiftride.app
+          - aliasgharinnocent@yahoo.com
         notify:
           success: true
           failure: true
@@ -167,7 +167,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dev@swiftride.app
+          - aliasgharinnocent@yahoo.com
         notify:
           success: true
           failure: true

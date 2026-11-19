@@ -44,39 +44,42 @@ export const toggleOnline = onCall(
       });
     }
 
-    // 2. Ensure driver profile exists and is verified
+    // 2. Ensure driver profile exists, has registered vehicle details, and is verified
     const driverRef = db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(caller.uid);
     const driverDoc = await driverRef.get();
 
     if (!driverDoc.exists) {
-      await driverRef.set({
-        userId: caller.uid,
-        licenseNumber: 'PK-DL-VERIFIED',
-        vehicleMake: 'Toyota',
-        vehicleModel: 'Corolla',
-        vehiclePlate: 'SWR-777',
-        vehicleColor: 'Silver',
-        vehicleYear: 2022,
-        isVerified: true,
-        isOnline: data.isOnline,
-        rating: 5.0,
-        totalRides: 0,
-        totalEarnings: 0,
-        subscriptionStatus: 'ACTIVE',
-        subscriptionExpiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        payoutStatus: 'active',
-        createdAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-        ...(data.currentLocation ? { currentLocation: data.currentLocation } : {}),
-      });
-    } else {
-      await driverRef.update({
-        isOnline: data.isOnline,
-        isVerified: true,
-        ...(data.currentLocation ? { currentLocation: data.currentLocation } : {}),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+      if (data.isOnline) {
+        throw new HttpsError(
+          'failed-precondition',
+          'Please enter your vehicle details and complete document verification before going online.'
+        );
+      }
+      return { success: false, isOnline: false };
     }
+
+    const driverData = driverDoc.data();
+    const isVerified = driverData?.isVerified === true;
+    const plate = driverData?.vehiclePlate;
+    const hasValidVehicle = Boolean(
+      plate &&
+      plate !== 'SWIFT-101' &&
+      plate !== 'ABC-1234' &&
+      driverData?.vehicleMake
+    );
+
+    if (data.isOnline && (!isVerified || !hasValidVehicle)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Please enter complete vehicle details (legal & visual) and complete document verification before going online.'
+      );
+    }
+
+    await driverRef.update({
+      isOnline: data.isOnline,
+      ...(data.currentLocation ? { currentLocation: data.currentLocation } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
     // 3. Update RTDB live driver locations
     if (data.isOnline && data.currentLocation) {

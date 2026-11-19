@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../domain/models/driver_profile_model.dart';
 import '../domain/models/driver_document_model.dart';
+import '../domain/models/vehicle_info_model.dart';
 import '../services/driver_service.dart';
 import '../services/firestore/firestore_driver_service.dart';
 
@@ -136,6 +137,31 @@ class DriverProvider extends ChangeNotifier {
       (d) => d.type == DriverDocumentType.drivingLicense && d.isVerified,
     );
     return (hasCnic && hasLicense) || _driverProfile.isVerified;
+  }
+
+  /// Whether the driver has entered complete legal & visual vehicle information
+  /// and passed official verification to safely receive ride requests.
+  bool get canActAsDriver {
+    return _driverProfile.vehicle.isConfigured &&
+        (_driverProfile.isVerified || hasPassedAiVerification);
+  }
+
+  /// Updates driver's vehicle legal and visual details and persists to Firestore.
+  Future<bool> updateVehicleInfo(
+    VehicleInfo vehicle, {
+    String? licenseNumber,
+  }) async {
+    _driverProfile = _driverProfile.copyWith(
+      vehicle: vehicle,
+      licenseNumber: licenseNumber ?? _driverProfile.licenseNumber,
+    );
+    notifyListeners();
+
+    final uid = _driverProfile.userId;
+    if (uid.isNotEmpty) {
+      await _firestoreService.saveDriverProfile(_driverProfile);
+    }
+    return true;
   }
 
   void watchDocuments(String driverId) {

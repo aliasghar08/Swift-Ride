@@ -6,6 +6,7 @@ import 'package:swiftride/domain/models/driver_document_model.dart';
 import 'package:swiftride/domain/models/driver_profile_model.dart';
 import 'package:swiftride/domain/models/user_model.dart';
 import 'package:swiftride/domain/models/user_role.dart';
+import 'package:swiftride/domain/models/vehicle_info_model.dart';
 import 'package:swiftride/presentation/driver/driver_verification_screen.dart';
 import 'package:swiftride/providers/auth_provider.dart';
 import 'package:swiftride/providers/driver_provider.dart';
@@ -17,12 +18,45 @@ void main() {
       expect(DriverDocumentType.cnicBack.code, 'CNIC_BACK');
       expect(DriverDocumentType.drivingLicense.code, 'DRIVING_LICENSE');
       expect(DriverDocumentType.vehicleRegistration.code, 'VEHICLE_REGISTRATION');
+      expect(DriverDocumentType.vehicleFront.code, 'VEHICLE_FRONT');
+      expect(DriverDocumentType.vehicleInterior.code, 'VEHICLE_INTERIOR');
 
       expect(DriverDocumentTypeX.fromCode('CNIC_FRONT'), DriverDocumentType.cnicFront);
       expect(DriverDocumentTypeX.fromCode('cnic_back'), DriverDocumentType.cnicBack);
       expect(DriverDocumentTypeX.fromCode('DRIVING_LICENSE'), DriverDocumentType.drivingLicense);
       expect(DriverDocumentTypeX.fromCode('VEHICLE_REGISTRATION'), DriverDocumentType.vehicleRegistration);
+      expect(DriverDocumentTypeX.fromCode('VEHICLE_FRONT'), DriverDocumentType.vehicleFront);
+      expect(DriverDocumentTypeX.fromCode('VEHICLE_INTERIOR'), DriverDocumentType.vehicleInterior);
       expect(DriverDocumentTypeX.fromCode('UNKNOWN'), DriverDocumentType.cnicFront);
+    });
+
+    test('VehicleInfo.isConfigured checks for non-placeholder legal details', () {
+      const placeholderVehicle = VehicleInfo(
+        make: '',
+        model: '',
+        year: 0,
+        plate: '',
+        color: '',
+      );
+      expect(placeholderVehicle.isConfigured, isFalse);
+
+      const defaultPlaceholder = VehicleInfo(
+        make: 'Toyota',
+        model: 'Camry',
+        year: 2022,
+        plate: 'SWIFT-101',
+        color: 'Silver',
+      );
+      expect(defaultPlaceholder.isConfigured, isFalse);
+
+      const configuredVehicle = VehicleInfo(
+        make: 'Suzuki',
+        model: 'Alto',
+        year: 2021,
+        plate: 'LEA-21-4567',
+        color: 'White',
+      );
+      expect(configuredVehicle.isConfigured, isTrue);
     });
 
     test('DocVerificationStatus mappings', () {
@@ -141,11 +175,27 @@ void main() {
         ),
       ]);
       expect(driverProv.hasPassedAiVerification, isTrue);
+
+      // canActAsDriver requires both verified documents AND configured vehicle
+      expect(driverProv.canActAsDriver, isFalse);
+
+      driverProv.setDriverProfileForTesting(
+        driverProv.driverProfile.copyWith(
+          vehicle: const VehicleInfo(
+            make: 'Toyota',
+            model: 'Corolla',
+            year: 2022,
+            plate: 'ICT-22-999',
+            color: 'White',
+          ),
+        ),
+      );
+      expect(driverProv.canActAsDriver, isTrue);
     });
   });
 
   group('DriverVerificationScreen Widget Rendering Tests', () {
-    testWidgets('Renders DriverVerificationScreen header and 4 document cards', (tester) async {
+    testWidgets('Renders DriverVerificationScreen header, vehicle details card, and all document cards', (tester) async {
       final authProv = AuthProvider(
         initialUser: AppUser(
           id: 'test_driver_101',
@@ -179,13 +229,22 @@ void main() {
       // Check header and titles
       expect(find.text('Driver Verification'), findsOneWidget);
       expect(find.text('Pending Document Verification'), findsOneWidget);
+      expect(find.text('Vehicle Information (Legal & Visual)'), findsOneWidget);
       expect(find.text('Required Documents'), findsOneWidget);
 
-      // Check all 4 document card titles
+      // Check vehicle details fields & save button
+      expect(find.text('Save Vehicle Details'), findsOneWidget);
+      expect(find.text('Vehicle Make'), findsOneWidget);
+      expect(find.text('Vehicle Model'), findsOneWidget);
+      expect(find.text('Registration Plate #'), findsOneWidget);
+
+      // Check all document & visual inspection card titles
       expect(find.text('CNIC (Front)'), findsOneWidget);
       expect(find.text('CNIC (Back)'), findsOneWidget);
       expect(find.text('Driving License'), findsOneWidget);
       expect(find.text('Vehicle Registration'), findsOneWidget);
+      expect(find.text('Vehicle Front (Plate Visible)'), findsOneWidget);
+      expect(find.text('Vehicle Interior (Cabin & Seats)'), findsOneWidget);
 
       // Check action buttons exist
       expect(find.text('Camera'), findsWidgets);

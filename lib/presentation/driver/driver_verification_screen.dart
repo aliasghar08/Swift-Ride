@@ -6,13 +6,16 @@ import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/driver_document_model.dart';
+import '../../domain/models/vehicle_info_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../common/ai_consent_dialog.dart';
 import '../view_models/responsive_layout_helper.dart';
 
-/// Screen allowing drivers to upload official Pakistani documents (CNIC, Driving License,
-/// Vehicle Registration) and run real-time AI-powered inspection via Google Gemini 3.8 Flash.
+/// Screen allowing drivers to input vehicle legal and visual specifications,
+/// upload official documents (CNIC, Driving License, Vehicle Registration),
+/// and submit visual inspection photos (Front with plate, Interior cabin)
+/// for real-time AI verification via Google Gemini 3.8 Flash.
 class DriverVerificationScreen extends StatefulWidget {
   const DriverVerificationScreen({super.key});
 
@@ -27,6 +30,42 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
   final Map<DriverDocumentType, bool> _isVerifyingType = {};
   bool _initialized = false;
 
+  late final TextEditingController _makeController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _plateController;
+  late final TextEditingController _yearController;
+  late final TextEditingController _colorController;
+  late final TextEditingController _licenseController;
+
+  String _vehicleType = 'car';
+  bool _hasAc = true;
+  int _seats = 4;
+  bool _isSavingVehicle = false;
+  String? _vehicleSaveSuccess;
+  String? _vehicleSaveError;
+
+  @override
+  void initState() {
+    super.initState();
+    _makeController = TextEditingController();
+    _modelController = TextEditingController();
+    _plateController = TextEditingController();
+    _yearController = TextEditingController();
+    _colorController = TextEditingController();
+    _licenseController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _makeController.dispose();
+    _modelController.dispose();
+    _plateController.dispose();
+    _yearController.dispose();
+    _colorController.dispose();
+    _licenseController.dispose();
+    super.dispose();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -39,6 +78,90 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       if (uid.isNotEmpty) {
         driverProv.watchDocuments(uid);
       }
+
+      final driver = driverProv.driverProfile;
+      final v = driver.vehicle;
+      if (v.make.isNotEmpty && v.make != 'Toyota') {
+        _makeController.text = v.make;
+      }
+      if (v.model.isNotEmpty && v.model != 'Camry') {
+        _modelController.text = v.model;
+      }
+      if (v.plate.isNotEmpty && v.plate != 'SWIFT-101' && v.plate != 'ABC-1234') {
+        _plateController.text = v.plate;
+      }
+      if (v.year >= 1995) {
+        _yearController.text = v.year.toString();
+      }
+      if (v.color.isNotEmpty && v.color != 'Silver') {
+        _colorController.text = v.color;
+      }
+      if (driver.licenseNumber.isNotEmpty && driver.licenseNumber != 'PK-DL-VERIFIED') {
+        _licenseController.text = driver.licenseNumber;
+      }
+      _vehicleType = v.type;
+      _hasAc = v.hasAc;
+      _seats = v.seats;
+    }
+  }
+
+  Future<void> _saveVehicleDetails(DriverProvider driverProv) async {
+    final make = _makeController.text.trim();
+    final model = _modelController.text.trim();
+    final plate = _plateController.text.trim().toUpperCase();
+    final year = int.tryParse(_yearController.text.trim()) ?? 0;
+    final color = _colorController.text.trim();
+    final license = _licenseController.text.trim();
+
+    if (make.isEmpty || model.isEmpty || plate.isEmpty || color.isEmpty) {
+      setState(() {
+        _vehicleSaveError = 'Please fill in make, model, number plate, and color.';
+        _vehicleSaveSuccess = null;
+      });
+      return;
+    }
+
+    final currentYear = DateTime.now().year;
+    if (year < 1995 || year > currentYear + 1) {
+      setState(() {
+        _vehicleSaveError = 'Please enter a valid model year (1995 - ${currentYear + 1}).';
+        _vehicleSaveSuccess = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isSavingVehicle = true;
+      _vehicleSaveError = null;
+      _vehicleSaveSuccess = null;
+    });
+
+    final updatedVehicle = VehicleInfo(
+      make: make,
+      model: model,
+      year: year,
+      plate: plate,
+      color: color,
+      type: _vehicleType,
+      hasAc: _hasAc,
+      seats: _seats,
+    );
+
+    final ok = await driverProv.updateVehicleInfo(
+      updatedVehicle,
+      licenseNumber: license.isNotEmpty ? license : null,
+    );
+
+    if (mounted) {
+      setState(() {
+        _isSavingVehicle = false;
+        if (ok) {
+          _vehicleSaveSuccess = 'Vehicle legal & visual details saved! Verify documents below.';
+          _vehicleSaveError = null;
+        } else {
+          _vehicleSaveError = 'Failed to save vehicle details. Please try again.';
+        }
+      });
     }
   }
 
@@ -100,9 +223,15 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
 
       final expected = <String, String>{
         'fullName': user.fullName,
-        'licenseNumber': driver.licenseNumber,
-        'vehiclePlate': driver.vehicle.plate,
-        'vehicleModel': driver.vehicle.model,
+        'licenseNumber': _licenseController.text.trim().isNotEmpty
+            ? _licenseController.text.trim()
+            : driver.licenseNumber,
+        'vehiclePlate': _plateController.text.trim().isNotEmpty
+            ? _plateController.text.trim().toUpperCase()
+            : driver.vehicle.plate,
+        'vehicleModel': _modelController.text.trim().isNotEmpty
+            ? '${_makeController.text.trim()} ${_modelController.text.trim()}'.trim()
+            : driver.vehicle.model,
       };
 
       final resultDoc = await driverProv.uploadAndVerifyDocument(
@@ -430,6 +559,24 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
             const SizedBox(height: 20),
 
             Text(
+              'Vehicle Information (Legal & Visual)',
+              style: TextStyle(
+                fontSize: layout.fontSize(16),
+                fontWeight: FontWeight.w800,
+                color: c.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            _buildVehicleDetailsCard(
+              layout: layout,
+              c: c,
+              isDark: isDark,
+              driverProv: driverProv,
+            ),
+            const SizedBox(height: 20),
+
+            Text(
               'Required Documents',
               style: TextStyle(
                 fontSize: layout.fontSize(16),
@@ -478,6 +625,26 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
               driverProv: driverProv,
               auth: auth,
             ),
+            const SizedBox(height: 14),
+
+            _buildDocCard(
+              type: DriverDocumentType.vehicleFront,
+              layout: layout,
+              c: c,
+              isDark: isDark,
+              driverProv: driverProv,
+              auth: auth,
+            ),
+            const SizedBox(height: 14),
+
+            _buildDocCard(
+              type: DriverDocumentType.vehicleInterior,
+              layout: layout,
+              c: c,
+              isDark: isDark,
+              driverProv: driverProv,
+              auth: auth,
+            ),
             const SizedBox(height: 24),
 
             // AI Compliance & Security Footer Note
@@ -516,6 +683,425 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildVehicleDetailsCard({
+    required ResponsiveLayoutHelper layout,
+    required AppColors c,
+    required bool isDark,
+    required DriverProvider driverProv,
+  }) {
+    final isConfigured = driverProv.driverProfile.vehicle.isConfigured;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isConfigured
+              ? AppTheme.emeraldGreen.withValues(alpha: 0.35)
+              : (isDark ? Colors.white12 : Colors.black12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: (isConfigured ? AppTheme.emeraldGreen : AppTheme.primaryBlue)
+                      .withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _vehicleType == 'bike'
+                      ? Icons.two_wheeler_rounded
+                      : (_vehicleType == 'rikshaw'
+                          ? Icons.electric_rickshaw_rounded
+                          : Icons.directions_car_rounded),
+                  color: isConfigured ? AppTheme.emeraldGreen : AppTheme.primaryBlue,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Vehicle Legal & Visual Details',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(15),
+                        fontWeight: FontWeight.w700,
+                        color: c.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isConfigured
+                          ? '${driverProv.driverProfile.vehicle.summary} · Configured'
+                          : 'Provide your vehicle make, model, registration plate & specs',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(12),
+                        color: c.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (isConfigured ? AppTheme.emeraldGreen : AppTheme.amberWarning)
+                      .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isConfigured ? 'Saved' : 'Required',
+                  style: TextStyle(
+                    color: isConfigured ? AppTheme.emeraldGreen : AppTheme.amberWarning,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Vehicle Type Selector
+          Text(
+            'Vehicle Category',
+            style: TextStyle(
+              fontSize: layout.fontSize(12.5),
+              fontWeight: FontWeight.w700,
+              color: c.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildCategoryChip(
+                label: 'Car',
+                icon: Icons.directions_car_rounded,
+                selected: _vehicleType == 'car',
+                c: c,
+                onTap: () {
+                  setState(() {
+                    _vehicleType = 'car';
+                    _seats = 4;
+                    _hasAc = true;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildCategoryChip(
+                label: 'Bike / Moto',
+                icon: Icons.two_wheeler_rounded,
+                selected: _vehicleType == 'bike',
+                c: c,
+                onTap: () {
+                  setState(() {
+                    _vehicleType = 'bike';
+                    _seats = 1;
+                    _hasAc = false;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildCategoryChip(
+                label: 'Auto Rikshaw',
+                icon: Icons.electric_rickshaw_rounded,
+                selected: _vehicleType == 'rikshaw',
+                c: c,
+                onTap: () {
+                  setState(() {
+                    _vehicleType = 'rikshaw';
+                    _seats = 3;
+                    _hasAc = false;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Make & Model Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildInputField(
+                  controller: _makeController,
+                  label: 'Vehicle Make',
+                  hint: _vehicleType == 'bike' ? 'Honda, United' : 'Toyota, Suzuki',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildInputField(
+                  controller: _modelController,
+                  label: 'Vehicle Model',
+                  hint: _vehicleType == 'bike' ? 'CD 70, 125' : 'Corolla, Alto',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Plate & Year Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildInputField(
+                  controller: _plateController,
+                  label: 'Registration Plate #',
+                  hint: 'LEA-2021 / ICT-123',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                  textCapitalization: TextCapitalization.characters,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildInputField(
+                  controller: _yearController,
+                  label: 'Model Year',
+                  hint: '2022',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Color & License Row
+          Row(
+            children: [
+              Expanded(
+                child: _buildInputField(
+                  controller: _colorController,
+                  label: 'Vehicle Color',
+                  hint: 'White, Silver, Black',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildInputField(
+                  controller: _licenseController,
+                  label: 'Driving License #',
+                  hint: 'PK-DL-XXXXXXX',
+                  layout: layout,
+                  c: c,
+                  isDark: isDark,
+                  textCapitalization: TextCapitalization.characters,
+                ),
+              ),
+            ],
+          ),
+
+          if (_vehicleType == 'car') ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Air Conditioning (AC)',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(13),
+                          fontWeight: FontWeight.w600,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        _hasAc ? 'AC Comfort Tier' : 'Non-AC Economy',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(11),
+                          color: c.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _hasAc,
+                  onChanged: (val) => setState(() => _hasAc = val),
+                  activeTrackColor: AppTheme.emeraldGreen,
+                ),
+              ],
+            ),
+          ],
+
+          if (_vehicleSaveError != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _vehicleSaveError!,
+              style: TextStyle(
+                color: AppTheme.sunsetCoral,
+                fontSize: layout.fontSize(12),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+
+          if (_vehicleSaveSuccess != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              _vehicleSaveSuccess!,
+              style: TextStyle(
+                color: AppTheme.emeraldGreen,
+                fontSize: layout.fontSize(12),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: _isSavingVehicle ? null : () => _saveVehicleDetails(driverProv),
+            icon: _isSavingVehicle
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.check_rounded, size: 18),
+            label: Text(_isSavingVehicle ? 'Saving Details...' : 'Save Vehicle Details'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryChip({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required AppColors c,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? AppTheme.primaryBlue
+                : c.border.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppTheme.primaryBlue : c.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? Colors.white : c.textSecondary,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? Colors.white : c.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required ResponsiveLayoutHelper layout,
+    required AppColors c,
+    required bool isDark,
+    TextInputType keyboardType = TextInputType.text,
+    TextCapitalization textCapitalization = TextCapitalization.words,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: layout.fontSize(11.5),
+            fontWeight: FontWeight.w700,
+            color: c.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          textCapitalization: textCapitalization,
+          style: TextStyle(
+            fontSize: layout.fontSize(13),
+            color: c.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              fontSize: layout.fontSize(12),
+              color: c.textMuted,
+            ),
+            isDense: true,
+            filled: true,
+            fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: c.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: c.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.primaryBlue, width: 1.5),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

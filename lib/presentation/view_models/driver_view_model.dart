@@ -350,6 +350,16 @@ class DriverViewModel extends ChangeNotifier {
     required LocationProvider locProv,
     required bool online,
   }) async {
+    if (online) {
+      final driver = driverProv.driverProfile;
+      if (!driver.vehicle.isConfigured) {
+        return 'Please input your vehicle details (legal & visual info) before going online.';
+      }
+      if (!driver.isVerified && !driverProv.hasPassedAiVerification) {
+        return 'Please verify your driver documents before going online.';
+      }
+    }
+
     final error = await driverProv.toggleOnline(
       online,
       latitude: locProv.latitude,

@@ -6,6 +6,8 @@ enum DriverDocumentType {
   cnicBack,
   drivingLicense,
   vehicleRegistration,
+  vehicleFront,
+  vehicleInterior,
 }
 
 extension DriverDocumentTypeX on DriverDocumentType {
@@ -19,6 +21,10 @@ extension DriverDocumentTypeX on DriverDocumentType {
         return 'DRIVING_LICENSE';
       case DriverDocumentType.vehicleRegistration:
         return 'VEHICLE_REGISTRATION';
+      case DriverDocumentType.vehicleFront:
+        return 'VEHICLE_FRONT';
+      case DriverDocumentType.vehicleInterior:
+        return 'VEHICLE_INTERIOR';
     }
   }
 
@@ -32,6 +38,10 @@ extension DriverDocumentTypeX on DriverDocumentType {
         return 'Driving License';
       case DriverDocumentType.vehicleRegistration:
         return 'Vehicle Registration';
+      case DriverDocumentType.vehicleFront:
+        return 'Vehicle Front (Plate Visible)';
+      case DriverDocumentType.vehicleInterior:
+        return 'Vehicle Interior (Cabin & Seats)';
     }
   }
 
@@ -45,6 +55,10 @@ extension DriverDocumentTypeX on DriverDocumentType {
         return 'Valid Pakistani driving license (LTV/HTV/Motorcycle)';
       case DriverDocumentType.vehicleRegistration:
         return 'Vehicle smart card or excise registration book';
+      case DriverDocumentType.vehicleFront:
+        return 'Clear photo of front bumper showing registration plate and vehicle body';
+      case DriverDocumentType.vehicleInterior:
+        return 'Clear photo of passenger seats, interior cleanliness, and cabin condition';
     }
   }
 
@@ -58,6 +72,10 @@ extension DriverDocumentTypeX on DriverDocumentType {
         return DriverDocumentType.drivingLicense;
       case 'VEHICLE_REGISTRATION':
         return DriverDocumentType.vehicleRegistration;
+      case 'VEHICLE_FRONT':
+        return DriverDocumentType.vehicleFront;
+      case 'VEHICLE_INTERIOR':
+        return DriverDocumentType.vehicleInterior;
       default:
         return DriverDocumentType.cnicFront;
     }

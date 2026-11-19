@@ -47,7 +47,13 @@ class FirestoreDriverService {
           'vehiclePlate': driver.vehicle.plate,
           'vehicleColor': driver.vehicle.color,
           'vehicleYear': driver.vehicle.year,
-          'isVerified': false, // Verification managed by admin/cloud functions
+          'vehicleType': driver.vehicle.type,
+          'hasAc': driver.vehicle.hasAc,
+          'seats': driver.vehicle.seats,
+          if (driver.vehicle.engineCapacityCc != null) 'engineCapacityCc': driver.vehicle.engineCapacityCc,
+          if (driver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': driver.vehicle.frontPhotoUrl,
+          if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
+          'isVerified': driver.isVerified,
           'isOnline': driver.isOnline,
           'subscriptionStatus': driver.subscriptionStatus.name.toUpperCase(),
           'subscriptionExpiresAt': Timestamp.fromDate(driver.subscriptionExpiresAt),
@@ -70,6 +76,14 @@ class FirestoreDriverService {
           'vehicleModel': driver.vehicle.model,
           'vehiclePlate': driver.vehicle.plate,
           'vehicleColor': driver.vehicle.color,
+          'vehicleYear': driver.vehicle.year,
+          'vehicleType': driver.vehicle.type,
+          'hasAc': driver.vehicle.hasAc,
+          'seats': driver.vehicle.seats,
+          if (driver.vehicle.engineCapacityCc != null) 'engineCapacityCc': driver.vehicle.engineCapacityCc,
+          if (driver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': driver.vehicle.frontPhotoUrl,
+          if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
+          'isVerified': driver.isVerified,
           'isOnline': driver.isOnline,
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -424,11 +438,17 @@ class FirestoreDriverService {
 
   DriverProfile _parseDriverProfile(Map<String, dynamic> data, String id) {
     final vehicle = VehicleInfo(
-      make: data['vehicleMake'] ?? 'Toyota',
-      model: data['vehicleModel'] ?? 'Camry',
-      year: (data['vehicleYear'] as num?)?.toInt() ?? 2022,
-      plate: data['vehiclePlate'] ?? 'ABC-1234',
-      color: data['vehicleColor'] ?? 'Midnight Black',
+      make: data['vehicleMake'] ?? '',
+      model: data['vehicleModel'] ?? '',
+      year: (data['vehicleYear'] as num?)?.toInt() ?? 0,
+      plate: data['vehiclePlate'] ?? '',
+      color: data['vehicleColor'] ?? '',
+      type: data['vehicleType'] ?? 'car',
+      hasAc: data['hasAc'] as bool? ?? (data['vehicleType'] != 'bike' && data['vehicleType'] != 'rikshaw'),
+      seats: (data['seats'] as num?)?.toInt() ?? (data['vehicleType'] == 'bike' ? 1 : (data['vehicleType'] == 'rikshaw' ? 3 : 4)),
+      engineCapacityCc: (data['engineCapacityCc'] as num?)?.toInt(),
+      frontPhotoUrl: data['frontPhotoUrl'] as String?,
+      interiorPhotoUrl: data['interiorPhotoUrl'] as String?,
     );
 
     double lat = 33.6844;

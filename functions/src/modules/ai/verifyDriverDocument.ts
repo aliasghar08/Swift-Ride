@@ -12,6 +12,8 @@ const DocumentTypeEnum = z.enum([
   'CNIC_BACK',
   'DRIVING_LICENSE',
   'VEHICLE_REGISTRATION',
+  'VEHICLE_FRONT',
+  'VEHICLE_INTERIOR',
 ]);
 
 const ExpectedDataSchema = z.object({
@@ -79,24 +81,37 @@ export const verifyDriverDocument = onCall(
 
     const prompt = `
 You are an expert document verification and fraud prevention officer for SwiftRide in Pakistan.
-Analyze the provided Pakistani document image.
+Analyze the provided Pakistani document or vehicle inspection image.
 Expected Document Type: ${data.documentType}
 Expected Full Name: ${expected.fullName || 'Not provided'}
 Expected CNIC (13 digits): ${expected.cnicNumber || 'Not provided'}
 Expected License Number: ${expected.licenseNumber || 'Not provided'}
 Expected Vehicle Plate: ${expected.vehiclePlate || 'Not provided'}
+Expected Vehicle Model: ${expected.vehicleModel || 'Not provided'}
 
-Tasks:
-1. Identify if the document is an official Pakistani document (CNIC, Driving License, or Vehicle Registration Book/Card).
-2. Read the text via OCR and extract:
-   - Full Name
-   - ID / Document Number (13-digit CNIC, License #, or Vehicle Reg #)
-   - Expiry Date (if visible, in YYYY-MM-DD or DD/MM/YYYY)
-   - Issue Date (if visible)
-   - Vehicle Plate # (for Vehicle Registration)
-3. Check for quality: is it clear, readable, un-blurred, and untampered?
-4. Check if the extracted name or document number matches the expected profile.
-5. Check if the document has expired.
+Tasks by Document Type:
+- If CNIC_FRONT, CNIC_BACK, DRIVING_LICENSE, or VEHICLE_REGISTRATION:
+  1. Identify if the document is an official Pakistani document.
+  2. Read the text via OCR and extract:
+     - Full Name
+     - ID / Document Number (13-digit CNIC, License #, or Vehicle Reg #)
+     - Expiry Date (if visible, in YYYY-MM-DD or DD/MM/YYYY)
+     - Issue Date (if visible)
+     - Vehicle Plate # (for Vehicle Registration)
+  3. Check for quality: is it clear, readable, un-blurred, and untampered?
+  4. Check if the extracted name or document number matches the expected profile.
+  5. Check if the document has expired.
+
+- If VEHICLE_FRONT:
+  1. Verify if this is a real vehicle exterior front view.
+  2. OCR the number plate on the bumper: does it match "${expected.vehiclePlate || ''}"?
+  3. Verify that the vehicle is in roadworthy condition without major front collision damage.
+  4. Extract "vehiclePlate" into extractedFields.
+
+- If VEHICLE_INTERIOR:
+  1. Verify if this is an authentic vehicle passenger cabin/seats interior.
+  2. Check if the passenger seats are clean, undamaged, and safe for riders.
+  3. Verify no severe tears, hazards, or obstruction.
 
 You must respond ONLY with a valid raw JSON object (no markdown, no backticks, no code fence).
 Use this exact JSON schema:
@@ -122,12 +137,12 @@ Use this exact JSON schema:
   },
   "status": "VERIFIED",
   "issues": [],
-  "summary": "Official document verified successfully."
+  "summary": "Verified successfully."
 }
 
 Rules for status:
-- "VERIFIED": Valid official document, not expired, clear photo, name/number matches, confidence >= 0.80.
-- "NEEDS_REVIEW": Low quality, slight name variation, or borderline confidence (0.60 - 0.79).
+- "VERIFIED": Valid official document or clear vehicle photo, plate/details match, confidence >= 0.80.
+- "NEEDS_REVIEW": Low quality, slight discrepancy, or borderline confidence (0.60 - 0.79).
 - "REJECTED": Expired, clear mismatch, fake/tampered document, or unreadable blur (confidence < 0.60).
 `;
 

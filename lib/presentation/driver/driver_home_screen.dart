@@ -165,6 +165,52 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         });
   }
 
+  void _showVehicleSetupRequiredDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        icon: const Icon(
+          Icons.directions_car_filled_rounded,
+          size: 40,
+          color: AppTheme.amberWarning,
+        ),
+        title: const Text(
+          'Vehicle Setup & Verification',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+        ),
+        content: const Text(
+          'Before acting as a driver on Swift Ride, you must provide your vehicle specifications (make, model, plate, color, photos) and complete document verification.',
+          style: TextStyle(fontSize: 13.5, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const DriverVerificationScreen(),
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryBlue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Setup Vehicle & Verify'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _locProv?.onLocationUpdate = null;
@@ -824,6 +870,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     activeThumbColor: AppTheme.accentCyan,
                                     onChanged: (val) async {
                                       if (val) {
+                                        if (!driver.vehicle.isConfigured || (!driver.isVerified && !driverProv.hasPassedAiVerification)) {
+                                          _showVehicleSetupRequiredDialog(context);
+                                          return;
+                                        }
+
                                         // 1. Foreground Location Prominent Disclosure -> OS runtime prompt
                                         final granted = await PermissionDisclosures
                                             .ensureForegroundLocation(
@@ -889,7 +940,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   ),
                                 ],
                               ),
-                              if (!driver.isVerified) ...[
+                              if (!driver.isVerified || !driver.vehicle.isConfigured) ...[
                                 const SizedBox(height: 8),
                                 InkWell(
                                   onTap: () {
@@ -919,7 +970,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            'Documents unverified. Tap to verify with AI to go online.',
+                                            !driver.vehicle.isConfigured
+                                                ? 'Vehicle details missing. Tap to setup vehicle & verify.'
+                                                : 'Documents unverified. Tap to verify with AI to go online.',
                                             style: TextStyle(
                                               color: isDark ? Colors.amber.shade200 : AppTheme.amberWarning,
                                               fontSize: layout.fontSize(11),

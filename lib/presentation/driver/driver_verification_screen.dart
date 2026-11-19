@@ -8,6 +8,7 @@ import '../../core/theme/design_tokens.dart';
 import '../../domain/models/driver_document_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
+import '../common/ai_consent_dialog.dart';
 import '../view_models/responsive_layout_helper.dart';
 
 /// Screen allowing drivers to upload official Pakistani documents (CNIC, Driving License,
@@ -81,6 +82,9 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       );
       return;
     }
+
+    final consented = await AiConsentDialog.ensureConsent(context);
+    if (!consented || !mounted) return;
 
     setState(() {
       _isVerifyingType[type] = true;

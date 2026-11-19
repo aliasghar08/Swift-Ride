@@ -223,13 +223,13 @@
     <h2>5. Third-Party Artificial Intelligence Services (Google Gemini AI)</h2>
     <div class="card">
       <p>
-        In addition to on-device TensorFlow Lite fare calculation, SwiftRide provides optional cloud AI features (In-App Conversational Assistant, Daily Earnings Advisor, Proactive Safety Check-In / SwiftGuard, and Fleet Maintenance Predictor). In accordance with Apple App Store Guidelines 5.1.1(i) and 5.1.2(i):
+        In addition to on-device TensorFlow Lite fare calculation, SwiftRide provides optional cloud AI features (In-App Conversational Assistant, Daily Earnings Advisor, Proactive Safety Check-In / SwiftGuard, Fleet Maintenance Predictor, and Driver Document Verification). In accordance with Apple App Store Guidelines 5.1.1(i) and 5.1.2(i):
       </p>
       <ul>
-        <li><strong>What Data is Collected &amp; Shared:</strong> Chat prompts, user role (<code>Rider</code> or <code>Driver</code>), trip context (pickup/dropoff area, distance, duration, fare metrics), and vehicle telemetry.</li>
-        <li><strong>How It is Collected &amp; Used:</strong> Collected directly from user inputs and active ride sessions solely to generate real-time AI assistance, earnings insights, and safety check-ins.</li>
-        <li><strong>Recipient &amp; Protection:</strong> Transmitted to <strong>Google LLC</strong> via <strong>Firebase AI Logic (Google Gemini AI)</strong> over encrypted TLS connections under Google Cloud / Firebase Data Processing and Security Terms, providing equal or greater privacy protection. Data is never sold.</li>
-        <li><strong>User Permission:</strong> Shared only after explicit in-app user consent (<code>Agree &amp; Continue</code>), which can be declined or revoked at any time in <strong>Settings &gt; AI Assistant Data Sharing</strong> while keeping all core ride-hailing features active.</li>
+        <li><strong>What Data is Collected &amp; Shared:</strong> Chat prompts, user role (<code>Rider</code> or <code>Driver</code>), trip context (pickup/dropoff area, distance, duration, fare metrics), vehicle telemetry, and <strong>driver verification documents</strong> (photos of CNIC Front/Back, Driving License, and Vehicle Registration smart card/book).</li>
+        <li><strong>How It is Collected &amp; Used:</strong> Collected directly from user inputs, ride sessions, and driver document uploads solely to generate real-time AI assistance, earnings insights, safety check-ins, and <strong>automated identity/license validation (OCR &amp; fraud check)</strong> before drivers accept trips.</li>
+        <li><strong>Recipient &amp; Protection:</strong> Transmitted to <strong>Google LLC</strong> via <strong>Firebase AI Logic (Google Gemini AI)</strong> over encrypted TLS connections under Google Cloud / Firebase Data Processing and Security Terms, providing equal or greater privacy protection. Data is never sold or used to train public AI models.</li>
+        <li><strong>User Permission:</strong> Shared only after explicit in-app user consent (<code>Agree &amp; Continue</code>), which is prompted before AI features or document submission, and can be declined or revoked at any time in <strong>Settings &gt; AI Assistant Data Sharing</strong> while keeping all core ride-hailing features active.</li>
       </ul>
     </div>
 

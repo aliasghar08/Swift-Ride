@@ -77,6 +77,10 @@
 	<string>Swift Ride uses the microphone when you tap the voice input button in the SwiftRide AI Assistant to dictate ride questions or hands-free navigation commands.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Swift Ride uses speech recognition to transcribe your spoken voice queries into text for the SwiftRide AI Assistant.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Swift Ride uses the camera to capture your CNIC, driving license, and vehicle registration for driver verification.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Swift Ride accesses your photo library so you can upload existing photos of your driver verification documents.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -2217,7 +2217,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                           ),
                                         ),
                                         Text(
-                                          'Automatically accept any driver offer up to PKR ${(_viewModel.maxAutoFare ?? ((double.tryParse(_viewModel.fareController.text) ?? _viewModel.suggestedFare) * 1.2 / 10).round() * 10).toInt()}',
+                                          'Automatically accept drivers at PKR ${(double.tryParse(_viewModel.fareController.text) ?? _viewModel.suggestedFare).toInt()} or lower (never higher)',
                                           style: TextStyle(
                                             fontSize: layout.fontSize(11),
                                             color: c.textSecondary,
@@ -2235,55 +2235,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                   ),
                                 ],
                               ),
-                              if (_viewModel.isAutoNegotiateEnabled) ...[
-                                const SizedBox(height: 8),
-                                const Divider(height: 1),
-                                const SizedBox(height: 8),
-                                SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        'Budget Ceiling:',
-                                        style: TextStyle(
-                                          fontSize: layout.fontSize(11),
-                                          fontWeight: FontWeight.w600,
-                                          color: c.textSecondary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ...[10, 20, 30].map((percent) {
-                                        final base = double.tryParse(_viewModel.fareController.text) ??
-                                            _viewModel.suggestedFare;
-                                        final targetCeiling =
-                                            (((base * (1 + percent / 100)) / 10).round() * 10).toDouble();
-                                        final isSelected =
-                                            (_viewModel.maxAutoFare ?? 0).toInt() == targetCeiling.toInt();
-                                        return Padding(
-                                          padding: const EdgeInsets.only(right: 6),
-                                          child: ChoiceChip(
-                                            label: Text(
-                                              '+$percent% (PKR ${targetCeiling.toInt()})',
-                                              style: TextStyle(
-                                                fontSize: layout.fontSize(10),
-                                                fontWeight: FontWeight.w600,
-                                                color: isSelected ? Colors.white : c.textPrimary,
-                                              ),
-                                            ),
-                                            selected: isSelected,
-                                            selectedColor: AppTheme.accentCyan,
-                                            onSelected: (selected) {
-                                              if (selected) {
-                                                _viewModel.setMaxAutoFare(targetCeiling);
-                                              }
-                                            },
-                                          ),
-                                        );
-                                      }),
-                                    ],
-                                  ),
-                                ),
-                              ],
                             ],
                           ),
                         ),
@@ -3742,6 +3693,24 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     color: AppTheme.primaryBlue,
                   ),
                 ),
+                if (rideProv.currentRide != null &&
+                    offer.counterFare < rideProv.currentRide!.fare)
+                  Container(
+                    margin: const EdgeInsets.only(top: 2, bottom: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'Saves PKR ${(rideProv.currentRide!.fare - offer.counterFare).toInt()}',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(10),
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.emeraldGreen,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 4),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(

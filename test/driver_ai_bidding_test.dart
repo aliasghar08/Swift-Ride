@@ -103,5 +103,29 @@ void main() {
         isFalse,
       );
     });
+
+    test('5. Cost floor guard strictly blocks auto-acceptance below floor', () {
+      viewModel.toggleAutoAcceptAiValuedRides(true);
+
+      // Offer of 158 is normally accepted against AI 160 (-1.25%), but if cost floor is 165, it MUST be rejected
+      expect(
+        viewModel.shouldAutoAccept(
+          offeredFare: 158.0,
+          aiValuation: 160.0,
+          costFloor: 165.0,
+        ),
+        isFalse,
+      );
+
+      // Offer of 170 >= cost floor 165 -> accepted
+      expect(
+        viewModel.shouldAutoAccept(
+          offeredFare: 170.0,
+          aiValuation: 160.0,
+          costFloor: 165.0,
+        ),
+        isTrue,
+      );
+    });
   });
 }

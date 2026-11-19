@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -180,6 +179,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     required String driverName,
     required String rideId,
     required double initialFare,
+    double? costFloor,
   }) {
     // Check race condition upfront
     final isStillAvailable = rideProv.incomingRequests.any((r) => r.id == rideId) ||
@@ -385,6 +385,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           ],
                         ),
                       ),
+                      if (costFloor != null && parsedFare < costFloor) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber.shade700),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 16, color: Colors.amber.shade700),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Below cost floor of PKR ${costFloor.toInt()} (Fuel + Wear + 35%). You may operate at a loss.',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.amber.shade300 : Colors.amber.shade900,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 18),
                       SizedBox(
                         width: double.infinity,
@@ -1689,7 +1716,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             ],
                           ),
                         ),
-                        // Live Trip Economics Preview (Fuel expense & Driver Take-Home Profit)
+                        // Live Trip Economics Preview & Downward Competitive Bidding
                         Builder(
                           builder: (ctx) {
                             final vType = VehicleTypeX.fromString(request.vehicleType);
@@ -1709,187 +1736,205 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               carEngineTier: carEngineTier,
                               acEnabled: isCar,
                             );
-                            return InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () => TripEconomicsSheet.show(
-                                context,
-                                economics: econ,
-                                isDriverView: true,
-                                carEngineTier: carEngineTier,
-                                acEnabled: isCar,
-                              ),
-                              child: Container(
-                                margin: const EdgeInsets.only(top: 6),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: isDark ? const Color(0xFF161F30) : const Color(0xFFF1F5F9),
+                            final costFloor = econ.costFloor;
+                            final fare20 = request.offeredFare - 20.0;
+                            final fare50 = request.offeredFare - 50.0;
+                            final canBid20 = fare20 >= costFloor && fare20 >= 50.0;
+                            final canBid50 = fare50 >= costFloor && fare50 >= 50.0;
+
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                InkWell(
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.25),
+                                  onTap: () => TripEconomicsSheet.show(
+                                    context,
+                                    economics: econ,
+                                    isDriverView: true,
+                                    carEngineTier: carEngineTier,
+                                    acEnabled: isCar,
+                                  ),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: isDark ? const Color(0xFF161F30) : const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: AppTheme.emeraldGreen.withValues(alpha: 0.25),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.local_gas_station_rounded, size: 13, color: Colors.orange),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'Fuel: ${CurrencyFormatter.format(econ.fuelCost)}',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(10),
+                                            color: c.textMuted,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Icon(Icons.account_balance_wallet_rounded, size: 13, color: AppTheme.emeraldGreen),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            'Net Profit: ${CurrencyFormatter.format(econ.driverNetProfit)}',
+                                            style: TextStyle(
+                                              fontSize: layout.fontSize(10),
+                                              color: AppTheme.emeraldGreen,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Details >',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(9.5),
+                                            color: AppTheme.accentCyan,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.local_gas_station_rounded, size: 13, color: Colors.orange),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Fuel: ${CurrencyFormatter.format(econ.fuelCost)}',
-                                      style: TextStyle(
-                                        fontSize: layout.fontSize(10),
-                                        color: c.textMuted,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Icon(Icons.account_balance_wallet_rounded, size: 13, color: AppTheme.emeraldGreen),
-                                    const SizedBox(width: 4),
-                                    Expanded(
-                                      child: Text(
-                                        'Net Profit: ${CurrencyFormatter.format(econ.driverNetProfit)}',
-                                        style: TextStyle(
-                                          fontSize: layout.fontSize(10),
-                                          color: AppTheme.emeraldGreen,
-                                          fontWeight: FontWeight.w800,
+                                Container(
+                                  margin: const EdgeInsets.only(top: 6, bottom: 6),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.accentCyan.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.bolt_rounded, size: 13, color: AppTheme.accentCyan),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          'Bid at or below PKR ${request.offeredFare.toInt()} to win instantly',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(10.5),
+                                            fontWeight: FontWeight.w700,
+                                            color: isDark ? AppTheme.accentCyan : AppTheme.primaryNavy,
+                                          ),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 3,
+                                      child: SizedBox(
+                                        height: layout.touchTarget(44),
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppTheme.emeraldGreen,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                                          ),
+                                          onPressed: () => _viewModel.submitCounterOffer(
+                                            rideProv: rideProv,
+                                            driver: driver,
+                                            driverName: authProv.currentUser.fullName,
+                                            rideId: request.id,
+                                            fare: request.offeredFare,
+                                          ),
+                                          child: Text(
+                                            'Accept PKR ${request.offeredFare.toInt()}',
+                                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                    Text(
-                                      'Details >',
-                                      style: TextStyle(
-                                        fontSize: layout.fontSize(9.5),
-                                        color: AppTheme.accentCyan,
-                                        fontWeight: FontWeight.w700,
+                                    const SizedBox(width: 4),
+                                    SizedBox(
+                                      height: layout.touchTarget(44),
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: canBid20 ? AppTheme.accentCyan : c.textMuted,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          minimumSize: Size.zero,
+                                        ),
+                                        onPressed: canBid20
+                                            ? () => _viewModel.submitCounterOffer(
+                                                  rideProv: rideProv,
+                                                  driver: driver,
+                                                  driverName: authProv.currentUser.fullName,
+                                                  rideId: request.id,
+                                                  fare: fare20,
+                                                )
+                                            : null,
+                                        child: Text(
+                                          '-Rs 20',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: canBid20 ? null : c.textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    SizedBox(
+                                      height: layout.touchTarget(44),
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: canBid50 ? Colors.orange.shade400 : c.textMuted,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          minimumSize: Size.zero,
+                                        ),
+                                        onPressed: canBid50
+                                            ? () => _viewModel.submitCounterOffer(
+                                                  rideProv: rideProv,
+                                                  driver: driver,
+                                                  driverName: authProv.currentUser.fullName,
+                                                  rideId: request.id,
+                                                  fare: fare50,
+                                                )
+                                            : null,
+                                        child: Text(
+                                          '-Rs 50',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: canBid50 ? null : c.textMuted,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    SizedBox(
+                                      height: layout.touchTarget(44),
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppTheme.accentCyan,
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          minimumSize: Size.zero,
+                                        ),
+                                        onPressed: () => _showDriverCustomFareSheet(
+                                          context: context,
+                                          rideProv: rideProv,
+                                          driver: driver,
+                                          driverName: authProv.currentUser.fullName,
+                                          rideId: request.id,
+                                          initialFare: request.offeredFare,
+                                          costFloor: costFloor,
+                                        ),
+                                        child: const Icon(Icons.edit_note_rounded, size: 20),
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
+                              ],
                             );
                           },
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            SizedBox(
-                              height: layout.touchTarget(44),
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.orange.shade400,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                                onPressed: () => _viewModel.submitCounterOffer(
-                                  rideProv: rideProv,
-                                  driver: driver,
-                                  driverName: authProv.currentUser.fullName,
-                                  rideId: request.id,
-                                  fare: math.max(50.0, request.offeredFare - 50.0),
-                                ),
-                                child: const Text(
-                                  '-50',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: SizedBox(
-                                height: layout.touchTarget(44),
-                                child: OutlinedButton(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  ),
-                                  onPressed: () => _viewModel.submitCounterOffer(
-                                    rideProv: rideProv,
-                                    driver: driver,
-                                    driverName: authProv.currentUser.fullName,
-                                    rideId: request.id,
-                                    fare: request.offeredFare,
-                                  ),
-                                  child: Text(
-                                    'Match ${CurrencyFormatter.format(request.offeredFare)}',
-                                    style: const TextStyle(fontSize: 10.5),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            // Match AI Recommended Fare Button
-                            Expanded(
-                              child: SizedBox(
-                                height: layout.touchTarget(44),
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: analysis.isLow
-                                        ? Colors.amber.shade700
-                                        : AppTheme.accentCyan,
-                                    foregroundColor: analysis.isLow
-                                        ? Colors.white
-                                        : AppTheme.primaryNavy,
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  ),
-                                  onPressed: () => _viewModel.submitCounterOffer(
-                                    rideProv: rideProv,
-                                    driver: driver,
-                                    driverName: authProv.currentUser.fullName,
-                                    rideId: request.id,
-                                    fare: aiFare,
-                                  ),
-                                  child: Text(
-                                    'AI (${CurrencyFormatter.format(aiFare)})',
-                                    style: const TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            SizedBox(
-                              height: layout.touchTarget(44),
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppTheme.accentCyan,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                                onPressed: () => _viewModel.submitCounterOffer(
-                                  rideProv: rideProv,
-                                  driver: driver,
-                                  driverName: authProv.currentUser.fullName,
-                                  rideId: request.id,
-                                  fare: request.offeredFare + 50.0,
-                                ),
-                                child: const Text(
-                                  '+50',
-                                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            SizedBox(
-                              height: layout.touchTarget(44),
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: AppTheme.accentCyan,
-                                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                                  minimumSize: Size.zero,
-                                ),
-                                onPressed: () => _showDriverCustomFareSheet(
-                                  context: context,
-                                  rideProv: rideProv,
-                                  driver: driver,
-                                  driverName: authProv.currentUser.fullName,
-                                  rideId: request.id,
-                                  initialFare: request.offeredFare,
-                                ),
-                                child: const Icon(Icons.edit_note_rounded, size: 20),
-                              ),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -2685,6 +2730,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 aiValuation: aiFare,
               );
 
+              final vType = VehicleTypeX.fromString(ride.vehicleType);
+              final driverCarModel = driverProv.driverProfile.vehicle.model;
+              final carEngineTier = vType == VehicleType.car
+                  ? CarEngineTierX.fromCarModel(driverCarModel)
+                  : null;
+              final isCar = vType == VehicleType.car;
+              final econ = TripEconomics.calculate(
+                vehicleType: vType,
+                distanceKm: ride.distanceKm,
+                durationMin: ride.durationMin,
+                fare: ride.offeredFare,
+                bookedSeats: ride.bookedSeats,
+                isAiPredicted: true,
+                carModel: driverCarModel,
+                carEngineTier: carEngineTier,
+                acEnabled: isCar,
+              );
+              final costFloor = econ.costFloor;
+              final fare20 = ride.offeredFare - 20.0;
+              final fare50 = ride.offeredFare - 50.0;
+              final canBid20 = fare20 >= costFloor && fare20 >= 50.0;
+              final canBid50 = fare50 >= costFloor && fare50 >= 50.0;
+
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2727,45 +2795,49 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ],
                     ),
                   ),
-                  Text(
-                    'Counter-Offer (Dynamic Bidding):',
-                    style: TextStyle(
-                      color: c.textMuted,
-                      fontSize: layout.fontSize(12),
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentCyan.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      SizedBox(
-                        height: layout.touchTarget(48),
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.orange.shade400,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: () => _viewModel.submitCounterOffer(
-                            rideProv: rideProv,
-                            driver: driverProv.driverProfile,
-                            driverName: authProv.currentUser.fullName,
-                            rideId: ride.id,
-                            fare: math.max(50.0, ride.offeredFare - 50.0),
-                          ),
-                          child: const Text(
-                            '-50',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.bolt_rounded, size: 13, color: AppTheme.accentCyan),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Bid at or below PKR ${ride.offeredFare.toInt()} to win instantly',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(10.5),
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? AppTheme.accentCyan : AppTheme.primaryNavy,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
+                        Text(
+                          'Est. Profit: PKR ${econ.driverNetProfit.toInt()}',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(10),
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.emeraldGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      // Accept / Match passenger fare to win instantly
                       Expanded(
+                        flex: 3,
                         child: SizedBox(
                           height: layout.touchTarget(48),
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: isDark ? Colors.white : AppTheme.primaryBlue,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.emeraldGreen,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                             ),
                             onPressed: () => _viewModel.submitCounterOffer(
@@ -2776,66 +2848,73 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               fare: ride.offeredFare,
                             ),
                             child: Text(
-                              'Match ${CurrencyFormatter.format(ride.offeredFare)}',
-                              style: const TextStyle(fontSize: 10.5),
+                              'Accept PKR ${ride.offeredFare.toInt()}',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Expanded(
-                        child: SizedBox(
-                          height: layout.touchTarget(48),
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: analysis.isLow
-                                  ? Colors.amber.shade700
-                                  : AppTheme.accentCyan,
-                              foregroundColor: analysis.isLow
-                                  ? Colors.white
-                                  : AppTheme.primaryNavy,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                            ),
-                            onPressed: () => _viewModel.submitCounterOffer(
-                              rideProv: rideProv,
-                              driver: driverProv.driverProfile,
-                              driverName: authProv.currentUser.fullName,
-                              rideId: ride.id,
-                              fare: aiFare,
-                            ),
-                            child: Text(
-                              'AI (${CurrencyFormatter.format(aiFare)})',
-                              style: const TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
+                      // Competitive undercut -20 (disabled if below cost floor)
                       SizedBox(
                         height: layout.touchTarget(48),
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: AppTheme.accentCyan,
+                            foregroundColor: canBid20 ? AppTheme.accentCyan : c.textMuted,
                             padding: const EdgeInsets.symmetric(horizontal: 6),
                             minimumSize: Size.zero,
                           ),
-                          onPressed: () => _viewModel.submitCounterOffer(
-                            rideProv: rideProv,
-                            driver: driverProv.driverProfile,
-                            driverName: authProv.currentUser.fullName,
-                            rideId: ride.id,
-                            fare: ride.offeredFare + 50.0,
-                          ),
-                          child: const Text(
-                            '+50',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          onPressed: canBid20
+                              ? () => _viewModel.submitCounterOffer(
+                                    rideProv: rideProv,
+                                    driver: driverProv.driverProfile,
+                                    driverName: authProv.currentUser.fullName,
+                                    rideId: ride.id,
+                                    fare: fare20,
+                                  )
+                              : null,
+                          child: Text(
+                            '-Rs 20',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: canBid20 ? null : c.textMuted,
+                            ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 4),
+                      // Competitive undercut -50 (disabled if below cost floor)
+                      SizedBox(
+                        height: layout.touchTarget(48),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: canBid50 ? Colors.orange.shade400 : c.textMuted,
+                            padding: const EdgeInsets.symmetric(horizontal: 6),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: canBid50
+                              ? () => _viewModel.submitCounterOffer(
+                                    rideProv: rideProv,
+                                    driver: driverProv.driverProfile,
+                                    driverName: authProv.currentUser.fullName,
+                                    rideId: ride.id,
+                                    fare: fare50,
+                                  )
+                              : null,
+                          child: Text(
+                            '-Rs 50',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: canBid50 ? null : c.textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // Custom Bid
                       SizedBox(
                         height: layout.touchTarget(48),
                         child: OutlinedButton(
@@ -2851,6 +2930,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             driverName: authProv.currentUser.fullName,
                             rideId: ride.id,
                             initialFare: ride.offeredFare,
+                            costFloor: costFloor,
                           ),
                           child: const Icon(Icons.edit_note_rounded, size: 20),
                         ),

@@ -58,6 +58,9 @@ class TripEconomics {
   double get fuelCostPkr => fuelCost;
   double get maintenanceCostPkr => maintenanceCost;
 
+  /// Minimum profitable fare guard: (Fuel + Wear) * 1.35
+  double get costFloor => (fuelCostPkr + maintenanceCostPkr) * 1.35;
+
   /// Factory calculator evaluating fuel, maintenance, and driver profit in real-time.
   /// Automatically uses live internet fuel rates from [FuelPriceService] when not overridden.
   factory TripEconomics.calculate({

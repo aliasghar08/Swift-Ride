@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -424,12 +425,23 @@ class RideProvider extends ChangeNotifier {
 
     _offersSub = _firestore.streamOffersForRide(rideId).listen(
       (offers) {
-        _activeOffers = offers;
-        _checkAutoNegotiate(rideId, offers);
+        final sorted = _sortOffersCheapestFirst(offers);
+        _activeOffers = sorted;
+        _checkAutoNegotiate(rideId, sorted);
         notifyListeners();
       },
       onError: (Object e) => debugPrint('[RideProvider] offers stream error: $e'),
     );
+  }
+
+  /// Sorts driver offers ascending by fare (cheapest first, rating as tie-breaker).
+  List<RideOffer> _sortOffersCheapestFirst(List<RideOffer> offers) {
+    final sorted = List<RideOffer>.from(offers);
+    sorted.sort((a, b) {
+      final comp = a.counterFare.compareTo(b.counterFare);
+      return comp != 0 ? comp : b.driverRating.compareTo(a.driverRating);
+    });
+    return sorted;
   }
 
   /// Listens to incoming driver offers for [rideId] and triggers auto-negotiation if enabled.
@@ -439,15 +451,21 @@ class RideProvider extends ChangeNotifier {
 
   void _checkAutoNegotiate(String rideId, List<RideOffer> offers) {
     final ride = _currentRide;
-    if (ride == null || !ride.isAutoNegotiateEnabled || ride.maxAutoAcceptFare == null) {
+    if (ride == null || !ride.isAutoNegotiateEnabled) {
       return;
     }
+    // Strict ceiling: NEVER exceed passenger proposed fare (zero upward buffer)
+    final ceiling = ride.maxAutoAcceptFare != null
+        ? math.min(ride.maxAutoAcceptFare!, ride.fare)
+        : ride.fare;
+
     if (_isAcceptingOffer) return;
 
     for (final offer in offers) {
-      if (offer.counterFare <= ride.maxAutoAcceptFare!) {
+      final status = offer.status.toUpperCase();
+      if ((status == 'PENDING' || status.isEmpty) && offer.counterFare <= ceiling) {
         final message =
-            "Auto-Negotiate: Accepted Captain ${offer.driverName}'s offer of PKR ${offer.counterFare.toInt()}!";
+            "Auto-Matched at PKR ${offer.counterFare.toInt()} (Within your PKR ${ceiling.toInt()} offer)!";
         _autoNegotiateBanner = message;
         debugPrint('[RideProvider] $message');
         onAutoNegotiateAccepted?.call(message);
@@ -467,8 +485,9 @@ class RideProvider extends ChangeNotifier {
 
   @visibleForTesting
   void handleIncomingOffers(List<RideOffer> offers) {
-    _activeOffers = offers;
-    _checkAutoNegotiate(_currentRide?.id ?? '', offers);
+    final sorted = _sortOffersCheapestFirst(offers);
+    _activeOffers = sorted;
+    _checkAutoNegotiate(_currentRide?.id ?? '', sorted);
     notifyListeners();
   }
 

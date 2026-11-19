@@ -124,6 +124,9 @@ class RideModel {
     this.changeDue,
   });
 
+  /// Effective fare: accepted fare once matched, or offered fare while pending.
+  double get fare => acceptedFare ?? offeredFare;
+
   RideModel copyWith({
     String? id,
     String? riderId,

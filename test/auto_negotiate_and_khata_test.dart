@@ -10,7 +10,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Auto-Negotiate Bot & Driver Khata Tests', () {
-    test('RideProvider auto-accepts offers at or below maxAutoAcceptFare and ignores offers above it', () async {
+    test('RideProvider auto-accepts offers at or below passenger proposed fare and ignores offers above it', () async {
       final initialRide = RideModel(
         id: 'test_ride_123',
         riderId: 'rider_99',
@@ -23,23 +23,23 @@ void main() {
         pin: '1234',
         createdAt: DateTime.now(),
         isAutoNegotiateEnabled: true,
-        maxAutoAcceptFare: 400.0,
+        maxAutoAcceptFare: 350.0,
         status: RideStatus.requested,
       );
 
       final rideProv = RideProvider(initialRide: initialRide);
 
       expect(rideProv.currentRide?.isAutoNegotiateEnabled, isTrue);
-      expect(rideProv.currentRide?.maxAutoAcceptFare, 400.0);
+      expect(rideProv.currentRide?.maxAutoAcceptFare, 350.0);
       expect(rideProv.currentRide?.status, RideStatus.requested);
 
-      // 1. Offer exceeding budget ceiling (450 > 400) -> Must be ignored
+      // 1. Offer exceeding passenger proposed fare (380 > 350) -> Must be ignored (never auto-accept above proposed fare)
       final highOffer = RideOffer(
         id: 'offer_high',
         rideId: 'test_ride_123',
         driverId: 'driver_expensive',
         driverName: 'Aslam',
-        counterFare: 450.0,
+        counterFare: 380.0,
         etaMinutes: 5,
         vehicleSummary: 'Honda Civic (White)',
         driverRating: 4.8,
@@ -53,13 +53,13 @@ void main() {
       expect(rideProv.currentRide?.driverId, isNull);
       expect(rideProv.autoNegotiateBanner, isNull);
 
-      // 2. Offer within budget ceiling (380 <= 400) -> Must auto-accept instantly
+      // 2. Offer at or below passenger proposed fare (330 <= 350) -> Must auto-accept instantly
       final fairOffer = RideOffer(
         id: 'offer_fair',
         rideId: 'test_ride_123',
         driverId: 'driver_hamza',
         driverName: 'Hamza',
-        counterFare: 380.0,
+        counterFare: 330.0,
         etaMinutes: 3,
         vehicleSummary: 'Toyota Corolla (Silver)',
         driverRating: 4.9,
@@ -72,12 +72,77 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 50));
 
       expect(rideProv.currentRide?.driverId, 'driver_hamza');
-      expect(rideProv.currentRide?.acceptedFare, 380.0);
+      expect(rideProv.currentRide?.acceptedFare, 330.0);
       expect(rideProv.currentRide?.status, RideStatus.accepted);
       expect(
         rideProv.autoNegotiateBanner,
-        contains("Auto-Negotiate: Accepted Captain Hamza's offer of PKR 380!"),
+        contains("Auto-Matched at PKR 330 (Within your PKR 350 offer)!"),
       );
+
+      rideProv.dispose();
+    });
+
+    test('RideProvider sorts incoming offers cheapest first (downward price competition)', () {
+      final initialRide = RideModel(
+        id: 'test_ride_456',
+        riderId: 'rider_99',
+        pickup: const LocationPoint(latitude: 31.5204, longitude: 74.3587, address: 'Lahore Cantt'),
+        dropoff: const LocationPoint(latitude: 31.5820, longitude: 74.3294, address: 'Gulberg III'),
+        offeredFare: 400.0,
+        suggestedFare: 400.0,
+        distanceKm: 8.5,
+        durationMin: 22.0,
+        pin: '1234',
+        createdAt: DateTime.now(),
+        isAutoNegotiateEnabled: false, // manual review to inspect sort order
+        status: RideStatus.requested,
+      );
+
+      final rideProv = RideProvider(initialRide: initialRide);
+
+      final offerA = RideOffer(
+        id: 'offer_a',
+        rideId: 'test_ride_456',
+        driverId: 'd1',
+        driverName: 'Driver A',
+        counterFare: 420.0,
+        etaMinutes: 5,
+        vehicleSummary: 'Car',
+        driverRating: 4.8,
+        createdAt: DateTime.now(),
+      );
+
+      final offerB = RideOffer(
+        id: 'offer_b',
+        rideId: 'test_ride_456',
+        driverId: 'd2',
+        driverName: 'Driver B',
+        counterFare: 380.0,
+        etaMinutes: 4,
+        vehicleSummary: 'Car',
+        driverRating: 4.9,
+        createdAt: DateTime.now(),
+      );
+
+      final offerC = RideOffer(
+        id: 'offer_c',
+        rideId: 'test_ride_456',
+        driverId: 'd3',
+        driverName: 'Driver C',
+        counterFare: 350.0,
+        etaMinutes: 3,
+        vehicleSummary: 'Car',
+        driverRating: 4.7,
+        createdAt: DateTime.now(),
+      );
+
+      rideProv.handleIncomingOffers([offerA, offerB, offerC]);
+
+      // Should be sorted ascending by fare: 350, then 380, then 420
+      expect(rideProv.activeOffers.length, 3);
+      expect(rideProv.activeOffers[0].counterFare, 350.0);
+      expect(rideProv.activeOffers[1].counterFare, 380.0);
+      expect(rideProv.activeOffers[2].counterFare, 420.0);
 
       rideProv.dispose();
     });

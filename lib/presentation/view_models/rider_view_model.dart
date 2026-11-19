@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../services/native_map_service.dart';
 import '../../core/utils/distance_calculator.dart';
@@ -213,6 +214,14 @@ class RiderViewModel extends ChangeNotifier {
     }
   }
 
+  /// Rider's currently proposed/entered fare (sanitized with 50 PKR minimum).
+  double get proposedFare {
+    final parsed = double.tryParse(fareController.text);
+    return (parsed == null || parsed < 50.0)
+        ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
+        : (parsed > 99999.0 ? 99999.0 : parsed);
+  }
+
   bool get autoNegotiate => _autoNegotiate;
   bool get isAutoNegotiateEnabled => _autoNegotiate;
   double? get maxAutoFare => _maxAutoFare;
@@ -220,18 +229,19 @@ class RiderViewModel extends ChangeNotifier {
 
   void setAutoNegotiate(bool value, {double? maxFare}) {
     _autoNegotiate = value;
-    if (maxFare != null) {
-      _maxAutoFare = maxFare;
-    } else if (value && _maxAutoFare == null) {
-      final baseFare = double.tryParse(fareController.text) ?? suggestedFare;
-      _maxAutoFare = ((baseFare * 1.2) / 10).round() * 10.0;
+    if (!value) {
+      _maxAutoFare = null;
+    } else if (maxFare != null) {
+      _maxAutoFare = math.min(maxFare, proposedFare);
+    } else {
+      _maxAutoFare = proposedFare;
     }
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
 
   void setMaxAutoFare(double maxFare) {
-    _maxAutoFare = maxFare;
+    _maxAutoFare = math.min(maxFare, proposedFare);
     notifyListeners();
   }
 
@@ -310,6 +320,9 @@ class RiderViewModel extends ChangeNotifier {
     final fare = _vehicleFares[type] ?? type.calculateFare(suggestedFare);
     fareController.text = fare.round().toString();
     _fareTouchedByUser = false;
+    if (_autoNegotiate) {
+      _maxAutoFare = proposedFare;
+    }
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
@@ -318,6 +331,9 @@ class RiderViewModel extends ChangeNotifier {
     final fare = suggestedFare;
     fareController.text = fare.round().toString();
     _fareTouchedByUser = true;
+    if (_autoNegotiate) {
+      _maxAutoFare = proposedFare;
+    }
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
@@ -665,6 +681,9 @@ class RiderViewModel extends ChangeNotifier {
     final cur = double.tryParse(fareController.text) ?? suggestedFare;
     final next = (cur + increment).round();
     fareController.text = (next < 50 ? 50 : (next > 99999 ? 99999 : next)).toString();
+    if (_autoNegotiate) {
+      _maxAutoFare = proposedFare;
+    }
     _deviceService.triggerHaptic('selection');
     notifyListeners();
   }
@@ -709,7 +728,7 @@ class RiderViewModel extends ChangeNotifier {
       bookedSeats: _bookedSeats,
       seatPreference: _seatPreference,
       isAutoNegotiateEnabled: _autoNegotiate,
-      maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare ?? ((fare * 1.2) / 10).round() * 10.0) : null,
+      maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare != null ? math.min(_maxAutoFare!, fare) : fare) : null,
       riderId: riderId,
     );
 

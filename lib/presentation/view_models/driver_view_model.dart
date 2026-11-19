@@ -239,14 +239,20 @@ class DriverViewModel extends ChangeNotifier {
   }
 
   /// Checks if an incoming ride qualifies for auto-acceptance based on the active mode:
-  /// - [AutoAcceptMode.currentRate]: auto-accepts any valid bid (>= PKR 50) at the rider's offered rate.
-  /// - [AutoAcceptMode.aiValuation]: auto-accepts if offered fare is within ±5% or above the AI fair market value.
+  /// - [AutoAcceptMode.currentRate]: auto-accepts any valid bid (>= costFloor, min PKR 50) at the rider's offered rate.
+  /// - [AutoAcceptMode.aiValuation]: auto-accepts if offered fare is within ±5% or above the AI fair market value and >= costFloor.
   /// - [AutoAcceptMode.off]: manual acceptance only.
   bool shouldAutoAccept({
     required double offeredFare,
     required double aiValuation,
+    double? costFloor,
   }) {
     if (_autoAcceptMode == AutoAcceptMode.off) return false;
+
+    // Cost floor protection: never auto-accept a ride that operates at a loss
+    if (costFloor != null && offeredFare < costFloor) {
+      return false;
+    }
 
     if (_autoAcceptMode == AutoAcceptMode.currentRate) {
       return offeredFare >= 50.0;
@@ -275,14 +281,26 @@ class DriverViewModel extends ChangeNotifier {
       if (_autoAcceptedRideIds.contains(req.id)) continue;
       if (req.status != RideStatus.requested) continue;
 
+      final vType = VehicleTypeX.fromString(req.vehicleType);
+      final econ = TripEconomics.calculate(
+        vehicleType: vType,
+        distanceKm: req.distanceKm,
+        durationMin: req.durationMin,
+        fare: req.offeredFare,
+        bookedSeats: req.bookedSeats,
+        isAiPredicted: true,
+      );
+      final costFloor = econ.costFloor;
+
       final aiFare = await getOrCalculateAiValuation(req);
-      if (shouldAutoAccept(offeredFare: req.offeredFare, aiValuation: aiFare)) {
+      if (shouldAutoAccept(
+        offeredFare: req.offeredFare,
+        aiValuation: aiFare,
+        costFloor: costFloor,
+      )) {
         _autoAcceptedRideIds.add(req.id);
-        final fareToOffer = _autoAcceptMode == AutoAcceptMode.currentRate
-            ? req.offeredFare
-            : (_autoAcceptMode == AutoAcceptMode.aiValuation && aiFare > req.offeredFare
-                ? aiFare
-                : req.offeredFare);
+        // Under downward competitive rules, auto-accept at req.offeredFare to win instantly
+        final fareToOffer = req.offeredFare;
 
         submitCounterOffer(
           rideProv: rideProv,

@@ -524,13 +524,17 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     c: c,
                     icon: Icons.local_gas_station_rounded,
                     iconColor: Colors.amber.shade700,
-                    title: _econ.isPredictedFromGoogleMaps
-                        ? 'Fuel (Google Maps Traffic Calibrated)'
-                        : 'Fuel Consumption',
+                    title: widget.isDriverView
+                        ? (_econ.isPredictedFromGoogleMaps
+                            ? 'Fuel (Google Maps Traffic Calibrated)'
+                            : 'Fuel Consumption')
+                        : 'Estimated Fuel Cost',
                     subtitle: _econ.trafficConditionNote != null
                         ? '${_econ.distanceKm.toStringAsFixed(1)}km @ ${_econ.vehicleMileageKmPerL.toStringAsFixed(1)} km/L · ${_econ.trafficConditionNote}'
                         : '${_econ.distanceKm.toStringAsFixed(1)}km @ ${_econ.vehicleMileageKmPerL.toStringAsFixed(0)} km/L (Rs ${_econ.fuelPricePerL.toInt()}/L)',
-                    trailing: '- PKR ${_econ.fuelCost.toStringAsFixed(0)}',
+                    trailing: widget.isDriverView
+                        ? '- PKR ${_econ.fuelCost.toStringAsFixed(0)}'
+                        : 'PKR ${_econ.fuelCost.toStringAsFixed(0)}',
                     trailingColor: Colors.orange.shade700,
                   ),
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
@@ -539,10 +543,14 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     c: c,
                     icon: Icons.build_circle_rounded,
                     iconColor: Colors.blueGrey,
-                    title: 'Maintenance & Wear',
+                    title: widget.isDriverView
+                        ? 'Maintenance & Wear'
+                        : 'Vehicle Operating & Maintenance',
                     subtitle:
                         'Oil, tires, brakes @ Rs ${_econ.maintenanceRatePerKm.toStringAsFixed(1)}/km',
-                    trailing: '- PKR ${_econ.maintenanceCost.toStringAsFixed(0)}',
+                    trailing: widget.isDriverView
+                        ? '- PKR ${_econ.maintenanceCost.toStringAsFixed(0)}'
+                        : 'PKR ${_econ.maintenanceCost.toStringAsFixed(0)}',
                     trailingColor: Colors.blueGrey,
                   ),
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
@@ -553,7 +561,9 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     iconColor: AppTheme.emeraldGreen,
                     title: 'Swift Ride Service Fee (2%)',
                     subtitle: 'Permanent 2% platform facilitation fee (98% to driver)',
-                    trailing: '- PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
+                    trailing: widget.isDriverView
+                        ? '- PKR ${_econ.serviceCharges.toStringAsFixed(1)}'
+                        : 'PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
                     trailingColor: AppTheme.emeraldGreen,
                   ),
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
@@ -562,24 +572,30 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     c: c,
                     icon: Icons.account_balance_wallet_rounded,
                     iconColor: AppTheme.emeraldGreen,
-                    title: 'Driver Net Payout (98% Gross)',
-                    subtitle: 'Gross fare retained before fuel & wear deductions',
+                    title: widget.isDriverView
+                        ? 'Driver Net Payout (98% Gross)'
+                        : 'Captain Payout (98%)',
+                    subtitle: widget.isDriverView
+                        ? 'Gross fare retained before fuel & wear deductions'
+                        : '98% of your fare goes directly to the captain',
                     trailing: 'PKR ${(_econ.totalFare - _econ.serviceCharges).toStringAsFixed(1)}',
                     trailingColor: AppTheme.emeraldGreen,
                     isBold: true,
                   ),
-                  Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
-                  _buildRow(
-                    layout: layout,
-                    c: c,
-                    icon: Icons.savings_rounded,
-                    iconColor: AppTheme.accentCyan,
-                    title: 'Real Take-Home (After Fuel & Wear)',
-                    subtitle: 'Net retained earnings after fuel, wear, and 2% fee',
-                    trailing: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)}',
-                    trailingColor: AppTheme.accentCyan,
-                    isBold: true,
-                  ),
+                  if (widget.isDriverView) ...[
+                    Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
+                    _buildRow(
+                      layout: layout,
+                      c: c,
+                      icon: Icons.savings_rounded,
+                      iconColor: AppTheme.accentCyan,
+                      title: 'Real Take-Home (After Fuel & Wear)',
+                      subtitle: 'Net retained earnings after fuel, wear, and 2% fee',
+                      trailing: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)}',
+                      trailingColor: AppTheme.accentCyan,
+                      isBold: true,
+                    ),
+                  ],
                   Divider(height: 18, color: c.border.withValues(alpha: 0.6)),
                   _buildRow(
                     layout: layout,
@@ -696,16 +712,28 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                             c: c,
                           ),
                           const SizedBox(height: 10),
-                          _buildFormulaStep(
-                            step: '5. Real Take-Home (After Fuel & Wear)',
-                            formula: 'Fare - (Fuel + Maint + 2% Service Fee)',
-                            calculation:
-                                'PKR ${_econ.totalFare.toStringAsFixed(0)} - (PKR ${_econ.fuelCost.toStringAsFixed(1)} + PKR ${_econ.maintenanceCost.toStringAsFixed(1)} + PKR ${_econ.serviceCharges.toStringAsFixed(1)})',
-                            result: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)} Real Take-Home',
-                            layout: layout,
-                            c: c,
-                            isHighlighted: true,
-                          ),
+                          if (widget.isDriverView)
+                            _buildFormulaStep(
+                              step: '5. Real Take-Home (After Fuel & Wear)',
+                              formula: 'Fare - (Fuel + Maint + 2% Service Fee)',
+                              calculation:
+                                  'PKR ${_econ.totalFare.toStringAsFixed(0)} - (PKR ${_econ.fuelCost.toStringAsFixed(1)} + PKR ${_econ.maintenanceCost.toStringAsFixed(1)} + PKR ${_econ.serviceCharges.toStringAsFixed(1)})',
+                              result: 'PKR ${_econ.driverNetProfit.toStringAsFixed(1)} Real Take-Home',
+                              layout: layout,
+                              c: c,
+                              isHighlighted: true,
+                            )
+                          else
+                            _buildFormulaStep(
+                              step: '5. Direct Captain Payout (98%)',
+                              formula: 'Total Fare - 2% Platform Fee',
+                              calculation:
+                                  'PKR ${_econ.totalFare.toStringAsFixed(0)} - PKR ${_econ.serviceCharges.toStringAsFixed(1)}',
+                              result: 'PKR ${(_econ.totalFare - _econ.serviceCharges).toStringAsFixed(0)} to Captain',
+                              layout: layout,
+                              c: c,
+                              isHighlighted: true,
+                            ),
                         ],
                       ),
                     ),
@@ -716,7 +744,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
 
             const SizedBox(height: 14),
 
-            // Driver Net Profit Highlight Banner
+            // Driver Net Profit / Rider Fairness Highlight Banner
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -742,8 +770,10 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                       color: AppTheme.emeraldGreen,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_rounded,
+                    child: Icon(
+                      widget.isDriverView
+                          ? Icons.account_balance_wallet_rounded
+                          : Icons.volunteer_activism_rounded,
                       color: Colors.white,
                       size: 22,
                     ),
@@ -756,7 +786,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                         Text(
                           widget.isDriverView
                               ? 'YOUR REAL TAKE-HOME PROFIT'
-                              : 'DRIVER REAL TAKE-HOME (AFTER FUEL & WEAR)',
+                              : 'FAIR FARE SPLIT (98% TO CAPTAIN)',
                           style: TextStyle(
                             fontSize: layout.fontSize(11),
                             fontWeight: FontWeight.w800,
@@ -766,7 +796,9 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'PKR ${_econ.driverNetProfit.toStringAsFixed(0)}',
+                          widget.isDriverView
+                              ? 'PKR ${_econ.driverNetProfit.toStringAsFixed(0)}'
+                              : 'PKR ${(_econ.totalFare - _econ.serviceCharges).toStringAsFixed(0)}',
                           style: TextStyle(
                             fontSize: layout.fontSize(22),
                             fontWeight: FontWeight.w900,
@@ -774,7 +806,9 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                           ),
                         ),
                         Text(
-                          'Earning rate: ~Rs ${_econ.profitPerMinute.toStringAsFixed(1)} / minute after all expenses',
+                          widget.isDriverView
+                              ? 'Earning rate: ~Rs ${_econ.profitPerMinute.toStringAsFixed(1)} / minute after all expenses'
+                              : '98% goes directly to your captain • Swift Ride charges only 2% platform fee',
                           style: TextStyle(
                             fontSize: layout.fontSize(11),
                             fontWeight: FontWeight.w500,
@@ -841,14 +875,17 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                step,
-                style: TextStyle(
-                  fontSize: layout.fontSize(11.5),
-                  fontWeight: FontWeight.w800,
-                  color: isHighlighted ? AppTheme.emeraldGreen : AppTheme.accentCyan,
+              Expanded(
+                child: Text(
+                  step,
+                  style: TextStyle(
+                    fontSize: layout.fontSize(11.5),
+                    fontWeight: FontWeight.w800,
+                    color: isHighlighted ? AppTheme.emeraldGreen : AppTheme.accentCyan,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 formula,
                 style: TextStyle(
@@ -863,14 +900,17 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                calculation,
-                style: TextStyle(
-                  fontSize: layout.fontSize(11),
-                  fontFamily: 'monospace',
-                  color: c.textPrimary,
+              Expanded(
+                child: Text(
+                  calculation,
+                  style: TextStyle(
+                    fontSize: layout.fontSize(11),
+                    fontFamily: 'monospace',
+                    color: c.textPrimary,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 result,
                 style: TextStyle(

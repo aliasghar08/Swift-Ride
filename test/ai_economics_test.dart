@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swiftride/domain/models/location_point_model.dart';
 import 'package:swiftride/domain/models/ride_model.dart';
@@ -5,6 +6,7 @@ import 'package:swiftride/domain/models/trip_economics_model.dart';
 import 'package:swiftride/domain/models/vehicle_type.dart';
 import 'package:swiftride/presentation/view_models/driver_view_model.dart';
 import 'package:swiftride/presentation/view_models/rider_view_model.dart';
+import 'package:swiftride/presentation/widgets/trip_economics_sheet.dart';
 import 'package:swiftride/services/pricing_ml_service.dart';
 
 void main() {
@@ -308,6 +310,69 @@ void main() {
       );
       expect(rikshawEcon.totalFare, greaterThanOrEqualTo(320.0));
       expect(rikshawEcon.totalFare, lessThanOrEqualTo(360.0));
+    });
+
+    testWidgets('TripEconomicsSheet displays 98% fairness breakdown for riders and hides net profit', (tester) async {
+      final pricingService = PricingMLService();
+      final econ = await pricingService.predictTripEconomics(
+        distanceKm: 10.0,
+        durationMin: 20,
+        staticDurationMin: 20,
+        vehicleType: VehicleType.car,
+        bookedSeats: 1,
+        fuelPrice: 285.0,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TripEconomicsSheet(
+              economics: econ,
+              isDriverView: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Rider view must show 98% Captain Payout & Fair Split banner
+      expect(find.text('FAIR FARE SPLIT (98% TO CAPTAIN)'), findsOneWidget);
+      expect(find.text('Captain Payout (98%)'), findsOneWidget);
+      expect(find.textContaining('98% goes directly to your captain'), findsOneWidget);
+
+      // Rider view must NEVER show driver net take-home profit
+      expect(find.text('YOUR REAL TAKE-HOME PROFIT'), findsNothing);
+      expect(find.text('Real Take-Home (After Fuel & Wear)'), findsNothing);
+    });
+
+    testWidgets('TripEconomicsSheet displays full ledger & take-home profit for drivers', (tester) async {
+      final pricingService = PricingMLService();
+      final econ = await pricingService.predictTripEconomics(
+        distanceKm: 10.0,
+        durationMin: 20,
+        staticDurationMin: 20,
+        vehicleType: VehicleType.car,
+        bookedSeats: 1,
+        fuelPrice: 285.0,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TripEconomicsSheet(
+              economics: econ,
+              isDriverView: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Driver view must show full take-home profit ledger
+      expect(find.text('YOUR REAL TAKE-HOME PROFIT'), findsOneWidget);
+      expect(find.text('Real Take-Home (After Fuel & Wear)'), findsOneWidget);
+      expect(find.text('Driver Net Payout (98% Gross)'), findsOneWidget);
+      expect(find.text('FAIR FARE SPLIT (98% TO CAPTAIN)'), findsNothing);
     });
   });
 }

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
 import '../domain/models/driver_profile_model.dart';
+import '../domain/models/driver_document_model.dart';
 import '../domain/models/ride_model.dart';
 import '../services/admin_service.dart';
 import '../services/firestore/firestore_ride_service.dart';
@@ -142,6 +143,23 @@ class AdminProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[AdminProvider] verifyDriver failed: $e');
       return false;
+    }
+  }
+
+  /// Fetches uploaded driver documents and AI inspection results for admin inspection.
+  Future<List<DriverDocumentModel>> fetchDriverDocuments(String driverId) async {
+    if (Firebase.apps.isEmpty) return [];
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('getDriverDocuments');
+      final res = await callable.call<Map<String, dynamic>>({'driverId': driverId});
+      final list = (res.data['documents'] as List<dynamic>?) ?? [];
+      return list
+          .map((e) => DriverDocumentModel.fromMap(
+              Map<String, dynamic>.from(e as Map), e['id'] ?? ''))
+          .toList();
+    } catch (e) {
+      debugPrint('[AdminProvider] fetchDriverDocuments notice: $e');
+      return [];
     }
   }
 

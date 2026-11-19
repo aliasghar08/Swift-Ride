@@ -11,6 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/auth_service.dart';
 import '../common/google_logo.dart';
 import '../common/legal_terms_modal.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -69,6 +70,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   bool _isAppleLoading = false;
   bool get _isSocialLoading => _isGoogleLoading || _isAppleLoading;
 
+  /// Sign in with Apple is only offered on Apple platforms (iOS / macOS).
+  bool get _showAppleSignIn =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+
   void _setError(String message) {
     if (!mounted) return;
     setState(() {
@@ -79,7 +86,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -413,14 +424,19 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   Expanded(
                     child: Text(
                       'Phone verified automatically! Signing in...',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
               ),
               backgroundColor: const Color(0xFF10B981),
               behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
               duration: const Duration(seconds: 2),
             ),
           );
@@ -441,8 +457,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
         // If an SMS code was already auto-detected (not via manual dev test button),
         // verify and sign in immediately without showing the OTP input screen.
-        final preDetectedCode =
-            _otpController.text.replaceAll(RegExp(r'\D'), '').trim();
+        final preDetectedCode = _otpController.text
+            .replaceAll(RegExp(r'\D'), '')
+            .trim();
         if (!_suppressAutoLookup && preDetectedCode.length == 6) {
           _handleVerifyOtp();
           return;
@@ -458,7 +475,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         _startResendTimer();
         ScaffoldMessenger.of(context).clearSnackBars();
 
-        final isSimOrDemo = !kReleaseMode &&
+        final isSimOrDemo =
+            !kReleaseMode &&
             (vId.startsWith('sim_otp_') ||
                 vId.startsWith('reviewer_demo_') ||
                 fullPhone == '+923000000000');
@@ -466,21 +484,30 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
+                const Icon(
+                  Icons.mark_email_read_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     isSimOrDemo
                         ? 'Verification code sent to $fullPhone (Emulator code: 123456).'
                         : '6-digit verification code sent via SMS to $fullPhone.',
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
             ),
             backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
             duration: const Duration(seconds: 4),
           ),
         );
@@ -508,12 +535,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             err.contains('17499') ||
             err.contains('Error code:39') ||
             err.contains('internal error has occurred')) {
-          friendlyError =
-              'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.';
+          friendlyError = AuthService.smsUnavailableMessage;
         } else if (err.contains('too-many-requests')) {
           friendlyError = 'Too many requests. Please wait a minute before requesting a new code.';
         } else if (err.contains('quota-exceeded')) {
-          friendlyError = 'Daily SMS verification quota reached. Please try again later.';
+          friendlyError =
+              'Daily SMS verification quota reached. Please try again later.';
         } else if (err.contains('network-request-failed')) {
           friendlyError = 'Network connection problem. Please check your internet connection.';
         }
@@ -639,12 +666,12 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 },
               )
             : (canCloseToActiveSession
-                ? IconButton(
-                    tooltip: 'Close',
-                    icon: const Icon(Icons.close),
-                    onPressed: _onSuccessNavigate,
-                  )
-                : null),
+                  ? IconButton(
+                      tooltip: 'Close',
+                      icon: const Icon(Icons.close),
+                      onPressed: _onSuccessNavigate,
+                    )
+                  : null),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -723,7 +750,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
               // Legal / Terms & Privacy Policy Footer (Required by App Store Guideline 5.1.1)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Wrap(
                   alignment: WrapAlignment.center,
                   crossAxisAlignment: WrapCrossAlignment.center,
@@ -741,7 +771,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         'Terms of Service',
                         style: TextStyle(
                           fontSize: layout.fontSize(11.5),
-                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                          color: isDark
+                              ? AppTheme.accentCyan
+                              : AppTheme.primaryBlue,
                           fontWeight: FontWeight.w600,
                           decoration: TextDecoration.underline,
                         ),
@@ -760,7 +792,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         'Privacy Policy',
                         style: TextStyle(
                           fontSize: layout.fontSize(11.5),
-                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                          color: isDark
+                              ? AppTheme.accentCyan
+                              : AppTheme.primaryBlue,
                           fontWeight: FontWeight.w600,
                           decoration: TextDecoration.underline,
                         ),
@@ -836,7 +870,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     height: layout.scale(32),
                     child: const CircularProgressIndicator(
                       strokeWidth: 3,
-                      valueColor: AlwaysStoppedAnimation<Color>(AppTheme.primaryBlue),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppTheme.primaryBlue,
+                      ),
                     ),
                   ),
                 ),
@@ -903,9 +939,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       decoration: BoxDecoration(
         color: AppTheme.sunsetCoral.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: AppTheme.sunsetCoral.withValues(alpha: 0.45),
-        ),
+        border: Border.all(color: AppTheme.sunsetCoral.withValues(alpha: 0.45)),
       ),
       child: Row(
         children: [
@@ -1053,7 +1087,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: c.surfaceRaised,
                     borderRadius: BorderRadius.circular(8),
@@ -1351,12 +1388,18 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           // Continue with Google Button
           OutlinedButton(
             key: const Key('continue_with_google_btn'),
-            onPressed: (_isSocialLoading || auth.isLoading) ? null : _handleGoogleSignIn,
+            onPressed: (_isSocialLoading || auth.isLoading)
+                ? null
+                : _handleGoogleSignIn,
             style: OutlinedButton.styleFrom(
               backgroundColor: isDark ? const Color(0xFF131314) : Colors.white,
-              foregroundColor: isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F),
+              foregroundColor: isDark
+                  ? const Color(0xFFE3E3E3)
+                  : const Color(0xFF1F1F1F),
               side: BorderSide(
-                color: isDark ? const Color(0xFF444746) : const Color(0xFFDADCE0),
+                color: isDark
+                    ? const Color(0xFF444746)
+                    : const Color(0xFFDADCE0),
                 width: 1.0,
               ),
               padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
@@ -1384,54 +1427,62 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         style: TextStyle(
                           fontSize: layout.fontSize(14.5),
                           fontWeight: FontWeight.w600,
-                          color: isDark ? const Color(0xFFE3E3E3) : const Color(0xFF1F1F1F),
+                          color: isDark
+                              ? const Color(0xFFE3E3E3)
+                              : const Color(0xFF1F1F1F),
                           letterSpacing: 0.1,
                         ),
                       ),
                     ],
                   ),
           ),
-          const SizedBox(height: 10),
-
-          // Continue with Apple Button
-          ElevatedButton(
-            key: const Key('continue_with_apple_btn'),
-            onPressed: (_isSocialLoading || auth.isLoading) ? null : _handleAppleSignIn,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.black,
-              foregroundColor: Colors.white,
-              side: isDark ? const BorderSide(color: Colors.white24) : null,
-              padding: const EdgeInsets.symmetric(vertical: 13),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          // Continue with Apple Button — Apple platforms only (iOS / macOS).
+          // Sign in with Apple is irrelevant on Android, so it is hidden there.
+          if (_showAppleSignIn) ...[
+            const SizedBox(height: 10),
+            ElevatedButton(
+              key: const Key('continue_with_apple_btn'),
+              onPressed: (_isSocialLoading || auth.isLoading)
+                  ? null
+                  : _handleAppleSignIn,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isDark
+                    ? const Color(0xFF0F172A)
+                    : Colors.black,
+                foregroundColor: Colors.white,
+                side: isDark ? const BorderSide(color: Colors.white24) : null,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
               ),
-              elevation: 0,
-            ),
-            child: _isAppleLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.apple, color: Colors.white, size: 22),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Continue with Apple',
-                        style: TextStyle(
-                          fontSize: layout.fontSize(14.5),
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
+              child: _isAppleLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
                       ),
-                    ],
-                  ),
-          ),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.apple, color: Colors.white, size: 22),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Continue with Apple',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(14.5),
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+          ],
         ],
       ),
     );
@@ -1463,7 +1514,8 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: List.generate(6, (index) {
                     final digit = index < otpText.length ? otpText[index] : '';
-                    final isFocused = index == otpText.length ||
+                    final isFocused =
+                        index == otpText.length ||
                         (index == 5 && otpText.length == 6);
                     final isFilled = digit.isNotEmpty;
 
@@ -1477,25 +1529,37 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                         decoration: BoxDecoration(
                           color: isDark
                               ? (isFilled
-                                  ? AppTheme.accentCyan.withValues(alpha: 0.12)
-                                  : Colors.white.withValues(alpha: 0.05))
+                                    ? AppTheme.accentCyan.withValues(
+                                        alpha: 0.12,
+                                      )
+                                    : Colors.white.withValues(alpha: 0.05))
                               : (isFilled
-                                  ? AppTheme.primaryBlue.withValues(alpha: 0.08)
-                                  : Colors.black.withValues(alpha: 0.03)),
+                                    ? AppTheme.primaryBlue.withValues(
+                                        alpha: 0.08,
+                                      )
+                                    : Colors.black.withValues(alpha: 0.03)),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: isFocused
-                                ? (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
+                                ? (isDark
+                                      ? AppTheme.accentCyan
+                                      : AppTheme.primaryBlue)
                                 : (isFilled
-                                    ? (isDark
-                                        ? AppTheme.accentCyan.withValues(alpha: 0.55)
-                                        : AppTheme.primaryBlue.withValues(alpha: 0.55))
-                                    : c.border),
+                                      ? (isDark
+                                            ? AppTheme.accentCyan.withValues(
+                                                alpha: 0.55,
+                                              )
+                                            : AppTheme.primaryBlue.withValues(
+                                                alpha: 0.55,
+                                              ))
+                                      : c.border),
                             width: isFocused ? 2.0 : 1.2,
                           ),
                           boxShadow: isFocused
                               ? AppTheme.glowShadow(
-                                  isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                                  isDark
+                                      ? AppTheme.accentCyan
+                                      : AppTheme.primaryBlue,
                                   blur: 8,
                                   opacity: 0.25,
                                 )
@@ -1506,7 +1570,9 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                           style: TextStyle(
                             fontSize: layout.fontSize(22),
                             fontWeight: FontWeight.w800,
-                            color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                            color: isDark
+                                ? AppTheme.accentCyan
+                                : AppTheme.primaryBlue,
                           ),
                         ),
                       ),
@@ -1580,7 +1646,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     onPressed: _handleSendOtp,
                     child: const Text(
                       'Resend Code',
-                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
                     ),
                   )
                 : Text(
@@ -1605,7 +1674,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.shield_outlined, size: 16, color: AppTheme.accentCyan),
+              const Icon(
+                Icons.shield_outlined,
+                size: 16,
+                color: AppTheme.accentCyan,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1737,7 +1810,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           ),
           child: Row(
             children: [
-              const Icon(Icons.location_on, size: 18, color: AppTheme.accentCyan),
+              const Icon(
+                Icons.location_on,
+                size: 18,
+                color: AppTheme.accentCyan,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

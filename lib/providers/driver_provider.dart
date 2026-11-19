@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../domain/models/driver_profile_model.dart';
+import '../domain/models/driver_document_model.dart';
 import '../services/driver_service.dart';
 import '../services/firestore/firestore_driver_service.dart';
 
@@ -111,6 +113,103 @@ class DriverProvider extends ChangeNotifier {
   // the backend ledger. There is no local equivalent on purpose.
 
   void updateProfile(DriverProfile profile) {
+    _driverProfile = profile;
+    notifyListeners();
+  }
+
+  // Document Verification Support
+  List<DriverDocumentModel> _documents = [];
+  StreamSubscription<List<DriverDocumentModel>>? _documentsSub;
+  bool _isUploadingDoc = false;
+  String? _docError;
+
+  List<DriverDocumentModel> get documents => _documents;
+  bool get isUploadingDoc => _isUploadingDoc;
+  String? get docError => _docError;
+
+  /// Whether the driver's CNIC and Driving License are AI-verified.
+  bool get hasPassedAiVerification {
+    final hasCnic = _documents.any(
+      (d) => (d.type == DriverDocumentType.cnicFront || d.type == DriverDocumentType.cnicBack) && d.isVerified,
+    );
+    final hasLicense = _documents.any(
+      (d) => d.type == DriverDocumentType.drivingLicense && d.isVerified,
+    );
+    return (hasCnic && hasLicense) || _driverProfile.isVerified;
+  }
+
+  void watchDocuments(String driverId) {
+    if (driverId.isEmpty) return;
+    _documentsSub?.cancel();
+    _documentsSub = _firestoreService.streamDriverDocuments(driverId).listen((docs) {
+      _documents = docs;
+      // If AI or admin verified documents, update local driver profile state
+      if (docs.any((d) => d.isVerified) && !_driverProfile.isVerified) {
+        if (hasPassedAiVerification) {
+          _driverProfile = _driverProfile.copyWith(isVerified: true);
+        }
+      }
+      notifyListeners();
+    });
+  }
+
+  Future<DriverDocumentModel?> uploadAndVerifyDocument({
+    required DriverDocumentType type,
+    required String imageBase64,
+    String mimeType = 'image/jpeg',
+    Map<String, String>? expectedData,
+  }) async {
+    final uid = _driverProfile.userId;
+    if (uid.isEmpty) return null;
+
+    _isUploadingDoc = true;
+    _docError = null;
+    notifyListeners();
+
+    try {
+      final doc = await _firestoreService.submitAndVerifyDocument(
+        driverId: uid,
+        type: type,
+        imageBase64: imageBase64,
+        mimeType: mimeType,
+        expectedData: expectedData,
+      );
+
+      final idx = _documents.indexWhere((d) => d.type == type);
+      if (idx >= 0) {
+        _documents[idx] = doc;
+      } else {
+        _documents.add(doc);
+      }
+
+      if (hasPassedAiVerification) {
+        _driverProfile = _driverProfile.copyWith(isVerified: true);
+      }
+
+      return doc;
+    } catch (e) {
+      _docError = 'Document verification failed: $e';
+      return null;
+    } finally {
+      _isUploadingDoc = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _documentsSub?.cancel();
+    super.dispose();
+  }
+
+  @visibleForTesting
+  void setDocumentsForTesting(List<DriverDocumentModel> docs) {
+    _documents = docs;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setDriverProfileForTesting(DriverProfile profile) {
     _driverProfile = profile;
     notifyListeners();
   }

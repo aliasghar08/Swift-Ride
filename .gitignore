@@ -121,3 +121,4 @@ auth_key_*.p8
 **/__pycache__/
 ml_pipeline/.venv/
 
+ios/build/

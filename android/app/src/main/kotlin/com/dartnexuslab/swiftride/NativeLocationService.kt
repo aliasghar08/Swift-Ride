@@ -38,6 +38,7 @@ class NativeLocationService(
 
     companion object {
         const val PERMISSION_REQUEST_CODE = 1001
+        const val BACKGROUND_PERMISSION_REQUEST_CODE = 1003
         const val PRIMARY_CHANNEL = "com.swiftride.app/location"
         const val ALT_CHANNEL = "com.dartnexuslab.swiftride/location"
 
@@ -59,11 +60,28 @@ class NativeLocationService(
         return fine || coarse
     }
 
+    fun hasBackgroundLocationPermission(): Boolean {
+        if (!hasLocationPermission()) return false
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
     fun handleRequestPermissionsResult(
         requestCode: Int,
         grantResults: IntArray
     ): Boolean {
         if (requestCode == PERMISSION_REQUEST_CODE) {
+            val granted = grantResults.isNotEmpty() &&
+                grantResults.any { it == PackageManager.PERMISSION_GRANTED }
+            pendingPermissionResult?.success(granted)
+            pendingPermissionResult = null
+            return true
+        } else if (requestCode == BACKGROUND_PERMISSION_REQUEST_CODE) {
             val granted = grantResults.isNotEmpty() &&
                 grantResults.any { it == PackageManager.PERMISSION_GRANTED }
             pendingPermissionResult?.success(granted)
@@ -79,6 +97,10 @@ class NativeLocationService(
                 result.success(hasLocationPermission())
             }
 
+            "checkBackgroundLocationPermission" -> {
+                result.success(hasBackgroundLocationPermission())
+            }
+
             "requestLocationPermissions" -> {
                 if (hasLocationPermission()) {
                     result.success(true)
@@ -92,6 +114,21 @@ class NativeLocationService(
                         ),
                         PERMISSION_REQUEST_CODE
                     )
+                }
+            }
+
+            "requestBackgroundLocationPermission" -> {
+                if (hasBackgroundLocationPermission()) {
+                    result.success(true)
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    pendingPermissionResult = result
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                        BACKGROUND_PERMISSION_REQUEST_CODE
+                    )
+                } else {
+                    result.success(true)
                 }
             }
 

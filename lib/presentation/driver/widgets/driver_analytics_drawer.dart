@@ -10,6 +10,7 @@ import '../../common/ai_consent_dialog.dart';
 import '../../common/legal_terms_modal.dart';
 import 'driver_khata_sheet.dart';
 import 'driver_name_dialog.dart';
+import '../driver_verification_screen.dart';
 
 /// Full-featured, production-grade Driver Analytics Navigation Drawer.
 /// Displays driver identity, daily cash ledger (Khata), 2% fee economics,
@@ -136,31 +137,42 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: (driver.isVerified ? AppTheme.accentCyan : Colors.orange)
-                                        .withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        driver.isVerified ? Icons.verified : Icons.pending,
-                                        size: 12,
-                                        color: driver.isVerified ? AppTheme.accentCyan : Colors.orange,
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.of(context).pop();
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const DriverVerificationScreen(),
                                       ),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        driver.isVerified ? 'Verified' : 'Pending',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: (driver.isVerified ? AppTheme.accentCyan : Colors.orange)
+                                          .withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          driver.isVerified ? Icons.verified : Icons.pending,
+                                          size: 12,
                                           color: driver.isVerified ? AppTheme.accentCyan : Colors.orange,
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          driver.isVerified ? 'Verified' : 'Verify Docs',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            color: driver.isVerified ? AppTheme.accentCyan : Colors.orange,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ],
@@ -600,6 +612,23 @@ class DriverAnalyticsDrawer extends StatelessWidget {
                         context,
                         currentName: user.fullName,
                         barrierDismissible: true,
+                      );
+                    },
+                  ),
+                  _buildDrawerActionTile(
+                    title: 'Documents & AI Verification',
+                    subtitle: driver.isVerified
+                        ? 'CNIC & license verified by AI'
+                        : 'Upload CNIC & license for AI check',
+                    icon: Icons.document_scanner_rounded,
+                    iconColor: driver.isVerified ? AppTheme.accentCyan : Colors.orange,
+                    isDark: isDark,
+                    onTap: () {
+                      Navigator.of(context).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const DriverVerificationScreen(),
+                        ),
                       );
                     },
                   ),

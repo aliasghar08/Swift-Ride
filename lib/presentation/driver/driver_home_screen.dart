@@ -22,6 +22,7 @@ import '../../services/ride_service.dart';
 import '../../services/firestore/firestore_user_service.dart';
 
 import '../common/glass_container.dart';
+import '../common/prominent_disclosure_dialog.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
 import '../common/staggered_animation.dart';
@@ -35,6 +36,7 @@ import '../common/exact_change_dialog.dart';
 import '../../services/route_corridor_service.dart';
 import 'widgets/driver_analytics_drawer.dart';
 import 'widgets/driver_name_dialog.dart';
+import 'driver_verification_screen.dart';
 import '../../domain/models/user_role.dart';
 
 class DriverHomeScreen extends StatefulWidget {
@@ -794,6 +796,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     value: driverProv.isOnline,
                                     activeThumbColor: AppTheme.accentCyan,
                                     onChanged: (val) async {
+                                      if (val) {
+                                        // 1. Foreground Location Prominent Disclosure -> OS runtime prompt
+                                        final granted = await PermissionDisclosures
+                                            .ensureForegroundLocation(
+                                          context,
+                                          asDriver: true,
+                                        );
+                                        if (!context.mounted) return;
+                                        if (!granted &&
+                                            await locProv.permissionStatus() ==
+                                                false) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Location access is required to go online. You can enable it in your device Settings.',
+                                              ),
+                                            ),
+                                          );
+                                          return;
+                                        }
+
+                                        // 2. Background Location Prominent Disclosure -> OS runtime prompt ("Allow all the time")
+                                        // Contains mandatory Google Play copy: "even when the app is closed or not in use"
+                                        if (!context.mounted) return;
+                                        await PermissionDisclosures
+                                            .ensureBackgroundLocation(context);
+                                        if (!context.mounted) return;
+                                      }
                                       final error = await _viewModel.toggleOnline(
                                         driverProv: driverProv,
                                         locProv: locProv,
@@ -804,13 +835,83 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                           SnackBar(
                                             content: Text(error),
                                             backgroundColor: AppTheme.sunsetCoral,
+                                            action: !driver.isVerified
+                                                ? SnackBarAction(
+                                                    label: 'Verify Now',
+                                                    textColor: Colors.white,
+                                                    onPressed: () {
+                                                      Navigator.of(context).push(
+                                                        MaterialPageRoute(
+                                                          builder: (_) => const DriverVerificationScreen(),
+                                                        ),
+                                                      );
+                                                    },
+                                                  )
+                                                : null,
                                           ),
                                         );
+                                      } else if (error == null &&
+                                          val &&
+                                          context.mounted) {
+                                        // Deferred so it never interrupts the
+                                        // location flow; own disclosure first.
+                                        await PermissionDisclosures
+                                            .ensureNotifications(context);
                                       }
                                     },
                                   ),
                                 ],
                               ),
+                              if (!driver.isVerified) ...[
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => const DriverVerificationScreen(),
+                                      ),
+                                    );
+                                  },
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.amberWarning.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: AppTheme.amberWarning.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.verified_user_outlined,
+                                          color: AppTheme.amberWarning,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Documents unverified. Tap to verify with AI to go online.',
+                                            style: TextStyle(
+                                              color: isDark ? Colors.amber.shade200 : AppTheme.amberWarning,
+                                              fontSize: layout.fontSize(11),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        const Icon(
+                                          Icons.chevron_right,
+                                          color: AppTheme.amberWarning,
+                                          size: 16,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                               const SizedBox(height: 10),
                               Row(
                                 children: [

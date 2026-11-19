@@ -65,10 +65,12 @@ class FcmService {
     try {
       final messaging = FirebaseMessaging.instance;
 
-      // iOS prompts here; Android 13+ needs POST_NOTIFICATIONS, which the native
-      // channel requests. A denial is not fatal — the token is still worth
-      // registering so notifications work once the user enables them.
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      // Permission is NOT requested here. Launching the OS notification prompt
+      // on startup would fire it over the map without a preceding disclosure
+      // (Google Play Prominent Disclosure policy). It is requested later via
+      // PermissionDisclosures.ensureNotifications — after a ride is booked or
+      // the driver goes online. The token is still registered now so pushes
+      // work as soon as the user allows them.
 
       // Without this, an iOS app in the foreground shows nothing at all.
       await messaging.setForegroundNotificationPresentationOptions(

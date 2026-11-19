@@ -48,6 +48,10 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             let ok = (status == .authorizedWhenInUse || status == .authorizedAlways)
             result(ok)
 
+        case "checkBackgroundLocationPermission":
+            let status = locationManager.authorizationStatus
+            result(status == .authorizedAlways)
+
         case "requestLocationPermissions":
             let status = locationManager.authorizationStatus
             if status == .notDetermined {
@@ -65,6 +69,25 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                 }
             } else {
                 result(status == .authorizedWhenInUse || status == .authorizedAlways)
+            }
+
+        case "requestBackgroundLocationPermission":
+            let status = locationManager.authorizationStatus
+            if status == .authorizedAlways {
+                result(true)
+            } else {
+                pendingPermissionRequests.append(result)
+                locationManager.requestAlwaysAuthorization()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 15.0) { [weak self] in
+                    guard let self = self else { return }
+                    if !self.pendingPermissionRequests.isEmpty {
+                        let pending = self.pendingPermissionRequests
+                        self.pendingPermissionRequests.removeAll()
+                        let s = self.locationManager.authorizationStatus
+                        let authorized = (s == .authorizedAlways)
+                        for r in pending { r(authorized) }
+                    }
+                }
             }
 
         case "getCurrentLocation":
@@ -92,9 +115,8 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             let id = UUID()
             pendingLocationRequests.append((id: id, result: result))
 
-            if status == .notDetermined {
-                locationManager.requestWhenInUseAuthorization()
-            }
+            // Authorization is only requested via "requestLocationPermissions",
+            // which the app calls right after its in-app disclosure.
             locationManager.startUpdatingLocation()
             if status == .authorizedWhenInUse || status == .authorizedAlways {
                 locationManager.requestLocation()
@@ -134,10 +156,9 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
                     channel1?.invokeMethod("onLocationUpdate", arguments: payload)
                     channel2?.invokeMethod("onLocationUpdate", arguments: payload)
                 }
-            } else if status == .notDetermined {
-                locationManager.requestWhenInUseAuthorization()
-                locationManager.startUpdatingLocation()
             }
+            // .notDetermined: do nothing. Authorization is requested only via
+            // "requestLocationPermissions" right after the in-app disclosure.
             result(true)
 
         case "stopLocationUpdates":

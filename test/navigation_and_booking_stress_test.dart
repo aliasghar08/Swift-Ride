@@ -61,7 +61,8 @@ void main() {
 
       // Verify Social auth buttons
       expect(find.text('Continue with Google'), findsOneWidget);
-      expect(find.text('Continue with Apple'), findsOneWidget);
+      // Apple sign-in is iOS/macOS only; test host defaults to Android.
+      expect(find.text('Continue with Apple'), findsNothing);
     });
   });
 

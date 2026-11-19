@@ -26,6 +26,10 @@ class LocationService {
 
   Future<bool> checkPermission() async => false;
   Future<bool> requestPermission() async => false;
+  Future<bool?> permissionStatus() async => null;
+  Future<bool> checkBackgroundPermission() async => false;
+  Future<bool> requestBackgroundPermission() async => false;
+  Future<bool?> backgroundPermissionStatus() async => null;
 
   Future<LocationFetchResult> fetchCurrentPositionDetailed() async =>
       const LocationFetchResult(LocationFetchStatus.error);

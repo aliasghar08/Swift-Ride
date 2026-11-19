@@ -128,7 +128,7 @@ class SharedTripViewModel extends ChangeNotifier {
   bool get isCopied => _isCopied;
   bool get hasToken => token != null && token!.isNotEmpty;
 
-  String get shareUrl => 'https://swiftride.app/track?token=${token ?? ''}';
+  String get shareUrl => 'https://swift-ride-5ab75.web.app/track?token=${token ?? ''}';
 
   /// Loads the shared trip. Surfaces an honest error when the link is missing,
   /// invalid or expired.

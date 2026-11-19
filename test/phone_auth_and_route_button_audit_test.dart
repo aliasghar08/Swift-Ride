@@ -510,7 +510,38 @@ void main() {
       expect(authProvider.isAuthenticated, isTrue);
       expect(authProvider.currentUser.authProvider, equals('google'));
       expect(authProvider.currentUser.email, isNotNull);
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Continue with Apple is hidden on Android', (tester) async {
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final authProvider = AuthProvider();
+      addTearDown(authProvider.dispose);
+
+      await tester.pumpWidget(
+        CustomMultiProvider(
+          providers: [
+            (child) => CustomChangeNotifierProvider<AuthProvider>(
+                  notifier: authProvider,
+                  child: child,
+                ),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            home: const PhoneAuthScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue with Google'), findsOneWidget);
+      expect(find.text('Continue with Apple'), findsNothing);
+      expect(find.byKey(const Key('continue_with_apple_btn')), findsNothing);
+      expect(AuthService.smsUnavailableMessage, isNot(contains('Apple')));
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     test('AuthService and AuthProvider replace Error code:39 with user-friendly actionable prompt', () async {
       expect(AuthService(), isNotNull);

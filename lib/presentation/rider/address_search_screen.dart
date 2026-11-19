@@ -10,6 +10,7 @@ import '../../domain/models/location_point_model.dart';
 import '../../providers/location_provider.dart';
 import '../../services/coordinate_parser.dart';
 import '../../services/map_service.dart';
+import '../common/prominent_disclosure_dialog.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
 
@@ -635,6 +636,8 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
               double lat = loc.latitude;
               double lng = loc.longitude;
               if (!loc.hasRealFix) {
+                await PermissionDisclosures.ensureForegroundLocation(context);
+                if (!context.mounted) return;
                 final fix = await loc.waitForFirstFix(
                   timeout: const Duration(seconds: 4),
                 );

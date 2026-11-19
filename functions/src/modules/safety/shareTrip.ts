@@ -52,7 +52,7 @@ export const shareTrip = onCall(
     return {
       success: true,
       shareToken,
-      shareUrl: `https://swiftride.app/track?token=${shareToken}`,
+      shareUrl: `https://swift-ride-5ab75.web.app/track?token=${shareToken}`,
     };
   }
 );

@@ -12,6 +12,16 @@ import 'firestore/firestore_user_service.dart';
 /// Supports OTP verification, auto-retrieval, resend token management,
 /// and graceful fallback for uninitialized Firebase environments (e.g. unit/widget tests).
 class AuthService {
+  /// User-facing SMS failure message. Only mentions Apple sign-in on Apple
+  /// platforms, since Sign in with Apple is not offered on Android.
+  static String get smsUnavailableMessage {
+    final isApplePlatform = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final alternatives = isApplePlatform ? 'Google or Apple' : 'Google';
+    return 'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with $alternatives below.';
+  }
+
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
   AuthService._internal();
@@ -150,7 +160,7 @@ class AuthService {
               (e.message?.contains('39') == true) ||
               (e.message?.contains('17499') == true)) {
             onError(
-              'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.',
+              smsUnavailableMessage,
             );
             return;
           }
@@ -192,7 +202,7 @@ class AuthService {
       final errStr = e.toString();
       if (errStr.contains('39') || errStr.contains('17499') || errStr.contains('Error code:39')) {
         onError(
-          'Unable to send SMS to this number. Please turn off any VPN, wait 15 minutes before retrying, or continue with Google or Apple below.',
+          smsUnavailableMessage,
         );
         return;
       }

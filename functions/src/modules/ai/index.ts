@@ -26,3 +26,7 @@ export {
   routeOptimizer,
   processRouteOptimization,
 } from './routeOptimizer';
+
+export {
+  verifyDriverDocument,
+} from './verifyDriverDocument';

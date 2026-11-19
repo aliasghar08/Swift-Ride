@@ -110,6 +110,36 @@ class LocationProvider extends ChangeNotifier {
     return fix;
   }
 
+  /// Whether foreground location permission is currently granted.
+  Future<bool> hasPermission() => _locationService.checkPermission();
+
+  /// `null` when no native location platform is available (unit tests).
+  Future<bool?> permissionStatus() => _locationService.permissionStatus();
+
+  /// Launches the OS runtime location prompt. Call ONLY from the "Continue"
+  /// button of the in-app prominent disclosure (see PermissionDisclosures).
+  Future<bool> requestPermission() async {
+    final granted = await _locationService.requestPermission();
+    if (granted) {
+      // Kick an immediate fix now that we are allowed to read GPS.
+      unawaited(_locationService.startLiveTracking());
+    }
+    return granted;
+  }
+
+  /// Whether background ("all the time") location permission is currently granted.
+  Future<bool> hasBackgroundPermission() =>
+      _locationService.checkBackgroundPermission();
+
+  /// `null` when no native location platform is available (unit tests).
+  Future<bool?> backgroundPermissionStatus() =>
+      _locationService.backgroundPermissionStatus();
+
+  /// Launches the OS background location permission prompt. Call ONLY from the
+  /// "Continue" button of the in-app background location prominent disclosure.
+  Future<bool> requestBackgroundPermission() =>
+      _locationService.requestBackgroundPermission();
+
   void startBroadcaster() {
     _locationService.startBroadcasting();
     _isBroadcasting = true;

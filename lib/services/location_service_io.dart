@@ -122,9 +122,50 @@ class LocationService {
     return res ?? false; // fail closed
   }
 
+  /// Like [checkPermission] but returns `null` when no native location
+  /// handler exists (e.g. headless unit tests), so callers can avoid showing
+  /// a permission disclosure that could never lead to an OS prompt.
+  Future<bool?> permissionStatus() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+        NativeChannelConstants.methodCheckLocationPermissions,
+      );
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> requestPermission() async {
     final res = await _invokeSafe<bool>(
       NativeChannelConstants.methodRequestLocationPermissions,
+    );
+    return res ?? false;
+  }
+
+  Future<bool> checkBackgroundPermission() async {
+    final res = await _invokeSafe<bool>(
+      NativeChannelConstants.methodCheckBackgroundLocationPermission,
+    );
+    return res ?? false;
+  }
+
+  Future<bool?> backgroundPermissionStatus() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+        NativeChannelConstants.methodCheckBackgroundLocationPermission,
+      );
+    } on MissingPluginException {
+      return null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> requestBackgroundPermission() async {
+    final res = await _invokeSafe<bool>(
+      NativeChannelConstants.methodRequestBackgroundLocationPermission,
     );
     return res ?? false;
   }
@@ -146,12 +187,12 @@ class LocationService {
   }
 
   Future<LocationFetchResult> _doFetchCurrentPositionDetailed() async {
-    var hasPermission = await checkPermission();
+    // Never launch the OS permission prompt from here. It must only be shown
+    // right after the in-app prominent disclosure (PermissionDisclosures),
+    // per Google Play's Prominent Disclosure & Consent policy.
+    final hasPermission = await checkPermission();
     if (!hasPermission) {
-      hasPermission = await requestPermission();
-      if (!hasPermission) {
-        return const LocationFetchResult(LocationFetchStatus.permissionDenied);
-      }
+      return const LocationFetchResult(LocationFetchStatus.permissionDenied);
     }
 
     final res = await _invokeMapSafe(
@@ -218,11 +259,10 @@ class LocationService {
       );
     }
 
-    // Ensure location permission is requested before waiting for fix
+    // Permission is requested only via the in-app disclosure flow. Without
+    // it there is nothing to wait for.
     final hasPerm = await checkPermission();
-    if (!hasPerm) {
-      await requestPermission();
-    }
+    if (!hasPerm) return null;
 
     final completer = Completer<NativeLocationPoint?>();
     late StreamSubscription<LocationUpdate> sub;

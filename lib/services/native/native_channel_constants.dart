@@ -15,6 +15,8 @@ class NativeChannelConstants {
   static const String methodGetCurrentLocation = 'getCurrentLocation';
   static const String methodCheckLocationPermissions = 'checkLocationPermissions';
   static const String methodRequestLocationPermissions = 'requestLocationPermissions';
+  static const String methodCheckBackgroundLocationPermission = 'checkBackgroundLocationPermission';
+  static const String methodRequestBackgroundLocationPermission = 'requestBackgroundLocationPermission';
   static const String methodStartLocationUpdates = 'startLocationUpdates';
   static const String methodStopLocationUpdates = 'stopLocationUpdates';
   static const String methodReverseGeocode = 'reverseGeocode';

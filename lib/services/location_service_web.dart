@@ -71,6 +71,11 @@ class LocationService {
     }
   }
 
+  Future<bool?> permissionStatus() => checkPermission();
+  Future<bool> checkBackgroundPermission() async => checkPermission();
+  Future<bool?> backgroundPermissionStatus() => checkPermission();
+  Future<bool> requestBackgroundPermission() async => requestPermission();
+
   Future<bool> requestPermission() async {
     debugPrint('[WEB] requestPermission: called');
     final r = await fetchCurrentPositionDetailed();

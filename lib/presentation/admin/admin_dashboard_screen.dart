@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/models/driver_profile_model.dart';
+import '../../domain/models/driver_document_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
 import '../../providers/admin_provider.dart';
@@ -505,6 +506,19 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               children: [
                 SizedBox(
                   height: layout.touchTarget(38),
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showDriverDocumentsModal(layout.context, driver, adminProv),
+                    icon: const Icon(Icons.document_scanner_rounded, size: 14),
+                    label: const Text('Inspect AI Docs', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.accentCyan,
+                      side: BorderSide(color: AppTheme.accentCyan.withValues(alpha: 0.5)),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  height: layout.touchTarget(38),
                   child: OutlinedButton(
                     // Rejecting an application is irreversible from this
                     // screen, so it is confirmed rather than fired on one tap.
@@ -653,6 +667,255 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showDriverDocumentsModal(
+    BuildContext context,
+    DriverProfile driver,
+    AdminProvider adminProv,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.75,
+          minChildSize: 0.4,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (sheetContext, scrollController) {
+            return FutureBuilder<List<DriverDocumentModel>>(
+              future: adminProv.fetchDriverDocuments(driver.userId),
+              builder: (context, snapshot) {
+                return Column(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.verified_user_rounded, color: AppTheme.accentCyan, size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'AI Document Verification',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 16,
+                                    color: c.textPrimary,
+                                  ),
+                                ),
+                                Text(
+                                  'Driver: ${driver.userId} • Plate: ${driver.vehicle.plate}',
+                                  style: TextStyle(fontSize: 12, color: c.textMuted),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(),
+                    Expanded(
+                      child: Builder(
+                        builder: (context) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  'Failed to load documents: ${snapshot.error}',
+                                  style: const TextStyle(color: AppTheme.sunsetCoral),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            );
+                          }
+                          final docs = snapshot.data ?? [];
+                          if (docs.isEmpty) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.inventory_2_outlined, size: 48, color: c.textMuted),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No documents uploaded yet by this driver.',
+                                      style: TextStyle(color: c.textMuted, fontSize: 13),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.separated(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: docs.length,
+                            separatorBuilder: (_, _) => const SizedBox(height: 12),
+                            itemBuilder: (context, i) {
+                              final doc = docs[i];
+                              final statusColor = doc.status == DocVerificationStatus.verified
+                                  ? AppTheme.emeraldGreen
+                                  : doc.status == DocVerificationStatus.needsReview
+                                      ? AppTheme.amberWarning
+                                      : doc.status == DocVerificationStatus.rejected
+                                          ? AppTheme.sunsetCoral
+                                          : Colors.grey;
+
+                              return Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: statusColor.withValues(alpha: 0.35),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            doc.type.displayName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: statusColor.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            doc.status.code,
+                                            style: TextStyle(
+                                              color: statusColor,
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.auto_awesome, color: AppTheme.accentCyan, size: 14),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'AI Match: ${(doc.confidence * 100).toStringAsFixed(0)}%',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 12,
+                                            color: AppTheme.accentCyan,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (doc.summary.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        doc.summary,
+                                        style: TextStyle(fontSize: 11.5, color: c.textMuted),
+                                      ),
+                                    ],
+                                    if (doc.extractedFields.hasAnyField) ...[
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: c.border.withValues(alpha: 0.5)),
+                                        ),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            if (doc.extractedFields.fullName != null)
+                                              _buildDocDetail('Name', doc.extractedFields.fullName!),
+                                            if (doc.extractedFields.idNumber != null)
+                                              _buildDocDetail('Doc / CNIC #', doc.extractedFields.idNumber!),
+                                            if (doc.extractedFields.expiryDate != null)
+                                              _buildDocDetail('Expiry Date', doc.extractedFields.expiryDate!),
+                                            if (doc.extractedFields.vehiclePlate != null)
+                                              _buildDocDetail('Plate #', doc.extractedFields.vehiclePlate!),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDocDetail(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

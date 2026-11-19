@@ -69,3 +69,32 @@ export const getAdminRides = onCall(
     return { success: true, count: rides.length, rides };
   }
 );
+
+const GetDriverDocumentsSchema = z.object({
+  driverId: z.string().min(1),
+});
+
+export const getDriverDocuments = onCall(
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
+  async (request) => {
+    assertHasToken(request);
+    const data = validateInput(GetDriverDocumentsSchema, request.data);
+
+    const docsSnap = await db
+      .collection(APP_CONSTANTS.COLLECTIONS.DRIVERS)
+      .doc(data.driverId)
+      .collection('documents')
+      .get();
+
+    const documents = docsSnap.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    return {
+      success: true,
+      driverId: data.driverId,
+      documents,
+    };
+  }
+);

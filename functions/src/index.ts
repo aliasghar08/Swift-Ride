@@ -39,7 +39,7 @@ export { getRoute, getAutocomplete, getPlaceDetails, reverseGeocode } from './mo
 export { triggerSos, resolveSos, shareTrip, getSharedTrip } from './modules/safety';
 
 // 7. Admin Module
-export { getDashboardStats, verifyDriver, getAdminRides } from './modules/admin';
+export { getDashboardStats, verifyDriver, getAdminRides, getDriverDocuments } from './modules/admin';
 
 // 8. Firestore Reactive Triggers
 export {
@@ -67,4 +67,5 @@ export {
   predictVehicleMaintenance,
   weeklyMaintenanceSchedule,
   routeOptimizer,
+  verifyDriverDocument,
 } from './modules/ai';

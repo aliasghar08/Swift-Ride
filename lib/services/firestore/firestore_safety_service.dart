@@ -31,7 +31,7 @@ class FirestoreSafetyService {
     if (Firebase.apps.isEmpty) return null;
 
     final fallbackToken = IdGenerator.generateId(prefix: 'share_');
-    final fallbackUrl = 'https://swiftride.app/track?token=$fallbackToken';
+    final fallbackUrl = 'https://swift-ride-5ab75.web.app/track?token=$fallbackToken';
 
     // 1. Attempt Cloud Function with baseline auth guarantee
     try {
@@ -49,7 +49,7 @@ class FirestoreSafetyService {
       final token = data['shareToken'] as String?;
       if (token != null && token.isNotEmpty) {
         return (data['shareUrl'] as String?) ??
-            'https://swiftride.app/track?token=$token';
+            'https://swift-ride-5ab75.web.app/track?token=$token';
       }
     } on FirebaseFunctionsException catch (e) {
       debugPrint('[FirestoreSafetyService] shareTrip callable failed: ${e.code} ${e.message}');

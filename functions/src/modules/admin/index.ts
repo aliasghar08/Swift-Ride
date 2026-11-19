@@ -1,2 +1,2 @@
 export { getDashboardStats } from './getDashboardStats';
-export { verifyDriver, getAdminRides } from './verifyDriver';
+export { verifyDriver, getAdminRides, getDriverDocuments } from './verifyDriver';

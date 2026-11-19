@@ -23,6 +23,7 @@ import '../../services/firestore/firestore_user_service.dart';
 import '../../services/map_service.dart';
 import '../../services/coordinate_parser.dart';
 
+import '../common/prominent_disclosure_dialog.dart';
 import '../common/confirm_action.dart';
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
@@ -133,6 +134,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             setState(() => _waitingForGps = false);
           }
         });
+      }
+
+      // Google Play Prominent Disclosure: the in-app disclosure is shown
+      // first, and the OS location prompt only launches from its "Continue".
+      if (!locProv.hasRealFix) {
+        await PermissionDisclosures.ensureForegroundLocation(context);
+        if (!mounted) return;
       }
 
       // Await precise first fix in background without blocking initial UI
@@ -1139,7 +1147,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   backgroundColor: AppTheme.primaryNavy,
                   foregroundColor: AppTheme.accentCyan,
                   child: const Icon(Icons.my_location, size: 20),
-                  onPressed: () {
+                  onPressed: () async {
                     setState(() {
                       _userMovedMap = false;
                     });
@@ -1150,6 +1158,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           CustomChangeNotifierProvider.read<LocationProvider>(
                             context,
                           );
+                      if (!loc.hasRealFix) {
+                        await PermissionDisclosures.ensureForegroundLocation(
+                          context,
+                        );
+                        if (!mounted) return;
+                      }
                       _userCustomPickup = false;
                       if (loc.hasRealFix) {
                         _viewModel.initializeFromCoordinates(
@@ -2353,6 +2367,15 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                         rideProv: rideProv,
                                         riderId: activeRiderId,
                                       );
+                                      if (ok && mounted) {
+                                        // Notification permission is deferred
+                                        // until after booking and preceded by
+                                        // its own disclosure dialog.
+                                        await PermissionDisclosures.ensureNotifications(
+                                          this.context,
+                                        );
+                                        return;
+                                      }
                                       if (!mounted || !context.mounted || ok) return;
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(

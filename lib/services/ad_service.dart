@@ -13,6 +13,9 @@ class AdService {
   AdService._();
   static final AdService instance = AdService._();
 
+  static const String liveAndroidBannerId = 'ca-app-pub-9402443776639153/2568735153';
+  static const String liveAndroidInterstitialId = 'ca-app-pub-9402443776639153/3739839885';
+
   bool _initialized = false;
   bool get isInitialized => _initialized;
 
@@ -32,8 +35,8 @@ class AdService {
     }
   }
 
-  /// Official Google test Ad Unit IDs during development;
-  /// replace with production AdMob Ad Unit IDs for release builds.
+  /// Official Google test Ad Unit IDs during development (to prevent invalid traffic strikes);
+  /// live AdMob Ad Unit IDs in release mode.
   String get bannerAdUnitId {
     if (kDebugMode) {
       return Platform.isAndroid
@@ -41,8 +44,8 @@ class AdService {
           : 'ca-app-pub-3940256099942544/2934735716';
     }
     return Platform.isAndroid
-        ? 'ca-app-pub-3940256099942544/6300978111' // Replace with prod Android Banner ID
-        : 'ca-app-pub-3940256099942544/2934735716'; // Replace with prod iOS Banner ID
+        ? liveAndroidBannerId
+        : 'ca-app-pub-3940256099942544/2934735716';
   }
 
   String get interstitialAdUnitId {
@@ -52,8 +55,8 @@ class AdService {
           : 'ca-app-pub-3940256099942544/4411468910';
     }
     return Platform.isAndroid
-        ? 'ca-app-pub-3940256099942544/1033173712' // Replace with prod Android Interstitial ID
-        : 'ca-app-pub-3940256099942544/4411468910'; // Replace with prod iOS Interstitial ID
+        ? liveAndroidInterstitialId
+        : 'ca-app-pub-3940256099942544/4411468910';
   }
 
   /// Preloads a post-trip interstitial ad in the background.

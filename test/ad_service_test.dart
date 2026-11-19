@@ -14,6 +14,9 @@ void main() {
 
       expect(service.interstitialAdUnitId, isNotEmpty);
       expect(service.interstitialAdUnitId, contains('ca-app-pub-3940256099942544/'));
+
+      expect(AdService.liveAndroidBannerId, 'ca-app-pub-9402443776639153/2568735153');
+      expect(AdService.liveAndroidInterstitialId, 'ca-app-pub-9402443776639153/3739839885');
     });
 
     test('showPostRideInterstitial invokes onDismissed safely when no ad is loaded', () {

@@ -159,7 +159,7 @@ void main() {
       ]);
       expect(driverProv.hasPassedAiVerification, isFalse);
 
-      // Both CNIC Front and Driving License verified -> true
+      // CNIC Front and Driving License without Vehicle Registration -> still false
       driverProv.setDocumentsForTesting([
         const DriverDocumentModel(
           id: 'CNIC_FRONT',
@@ -172,6 +172,29 @@ void main() {
           type: DriverDocumentType.drivingLicense,
           status: DocVerificationStatus.verified,
           confidence: 0.88,
+        ),
+      ]);
+      expect(driverProv.hasPassedAiVerification, isFalse);
+
+      // CNIC Front, Driving License, and Vehicle Registration all verified -> true
+      driverProv.setDocumentsForTesting([
+        const DriverDocumentModel(
+          id: 'CNIC_FRONT',
+          type: DriverDocumentType.cnicFront,
+          status: DocVerificationStatus.verified,
+          confidence: 0.92,
+        ),
+        const DriverDocumentModel(
+          id: 'DRIVING_LICENSE',
+          type: DriverDocumentType.drivingLicense,
+          status: DocVerificationStatus.verified,
+          confidence: 0.88,
+        ),
+        const DriverDocumentModel(
+          id: 'VEHICLE_REGISTRATION',
+          type: DriverDocumentType.vehicleRegistration,
+          status: DocVerificationStatus.verified,
+          confidence: 0.90,
         ),
       ]);
       expect(driverProv.hasPassedAiVerification, isTrue);

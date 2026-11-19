@@ -165,34 +165,36 @@ Rules for status:
       const cleanJson = text.replace(/^```json\s*/i, '').replace(/\s*```$/, '').trim();
       result = JSON.parse(cleanJson);
     } catch (err: any) {
-      logger.warn({ err: err?.message, driverId: data.driverId }, 'Gemini vision call failed, using heuristic validation fallback');
-      // Algorithmic fallback
+      logger.warn({ err: err?.message, driverId: data.driverId }, 'Gemini vision call failed, queuing document for manual review');
+      // Secure fallback: NEVER auto-verify when AI inspection fails or is unavailable.
       const hasValidLength = cleanBase64.length > 500;
       result = {
         documentTypeDetected: data.documentType,
-        isValidDocument: hasValidLength,
-        confidence: hasValidLength ? 0.85 : 0.40,
+        isValidDocument: false,
+        confidence: hasValidLength ? 0.50 : 0.20,
         extractedFields: {
-          fullName: expected.fullName || 'Verified Driver',
-          idNumber: expected.cnicNumber || expected.licenseNumber || 'PK-VERIFIED',
-          expiryDate: '2028-12-31',
-          issueDate: '2024-01-01',
-          vehiclePlate: expected.vehiclePlate || 'ABC-123',
+          fullName: expected.fullName,
+          idNumber: expected.cnicNumber || expected.licenseNumber,
+          expiryDate: null,
+          issueDate: null,
+          vehiclePlate: expected.vehiclePlate,
           dob: null,
         },
         isExpired: false,
-        isNameMatch: true,
-        isNumberMatch: true,
+        isNameMatch: null,
+        isNumberMatch: null,
         qualityCheck: {
           isClear: hasValidLength,
           isTamperedOrEdited: false,
           glareOrObstruction: false,
         },
-        status: hasValidLength ? 'VERIFIED' : 'NEEDS_REVIEW',
-        issues: hasValidLength ? [] : ['Image resolution too low for automated inspection.'],
+        status: 'NEEDS_REVIEW',
+        issues: hasValidLength
+          ? ['Automated visual inspection temporarily unavailable. Queued for manual admin verification.']
+          : ['Image resolution too low or corrupt for inspection.'],
         summary: hasValidLength
-          ? `${data.documentType.replace('_', ' ')} verified successfully.`
-          : 'Document uploaded; queued for manual inspection.',
+          ? `${data.documentType.replace('_', ' ')} received and queued for manual verification.`
+          : 'Document upload failed quality thresholds.',
       };
     }
 
@@ -211,7 +213,7 @@ Rules for status:
       issues: result.issues,
       summary: result.summary,
       isVerified: result.status === 'VERIFIED',
-      verifiedAt: FieldValue.serverTimestamp(),
+      verifiedAt: result.status === 'VERIFIED' ? FieldValue.serverTimestamp() : null,
       updatedAt: FieldValue.serverTimestamp(),
       aiModel: 'gemini-3.8-flash',
     });
@@ -234,8 +236,11 @@ Rules for status:
 
     const driverRef = db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(data.driverId);
 
-    // If core documents (CNIC & License) are verified, auto-approve the driver profile!
-    if (hasCnic && hasLicense) {
+    // Core legal requirements in Pakistan: CNIC, Driving License, AND Vehicle Registration
+    // must ALL be verified before auto-approving driver profile!
+    const allCoreDocsVerified = hasCnic && hasLicense && hasReg;
+
+    if (allCoreDocsVerified) {
       await driverRef.update({
         isVerified: true,
         verificationStatus: 'VERIFIED',
@@ -258,7 +263,7 @@ Rules for status:
       success: true,
       documentType: data.documentType,
       result,
-      allDocumentsVerified: hasCnic && hasLicense,
+      allDocumentsVerified: allCoreDocsVerified,
     };
   }
 );

@@ -70,6 +70,7 @@ class FirestoreDriverService {
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
+        final currentVerified = (doc.data()?['isVerified'] as bool?) ?? false;
         await docRef.update({
           'licenseNumber': driver.licenseNumber,
           'vehicleMake': driver.vehicle.make,
@@ -83,8 +84,8 @@ class FirestoreDriverService {
           if (driver.vehicle.engineCapacityCc != null) 'engineCapacityCc': driver.vehicle.engineCapacityCc,
           if (driver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': driver.vehicle.frontPhotoUrl,
           if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
-          'isVerified': driver.isVerified,
-          'isOnline': driver.isOnline,
+          'isVerified': currentVerified,
+          'isOnline': currentVerified ? driver.isOnline : false,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -288,16 +289,15 @@ class FirestoreDriverService {
       }
     } on FirebaseFunctionsException catch (e) {
       debugPrint('[FirestoreDriverService] toggleOnline callable error: ${e.code} ${e.message}');
-      // Fallback: update status directly in Firestore if callable had role/verification hiccup
-      if (currentUid != null && currentUid.isNotEmpty) {
+      // If going offline, permit fallback so a driver is never stuck "online" during connectivity hitches.
+      // NEVER permit fallback if the server explicitly refused going online (unverified or invalid vehicle).
+      if (!isOnline && currentUid != null && currentUid.isNotEmpty) {
         try {
           await updateOnlineStatus(
             currentUid,
-            isOnline,
-            lat: latitude,
-            lng: longitude,
+            false,
           );
-          return null; // Direct update succeeded
+          return null;
         } catch (dirErr) {
           debugPrint('[FirestoreDriverService] Direct Firestore fallback failed: $dirErr');
         }
@@ -305,27 +305,21 @@ class FirestoreDriverService {
 
       return switch (e.code) {
         'failed-precondition' => e.message ??
-            'You cannot go online until your documents are verified.',
+            'You cannot go online until your vehicle details and documents are verified.',
         'not-found' => 'Complete your driver onboarding before going online.',
-        'permission-denied' => 'Your account is not set up as a driver.',
+        'permission-denied' => e.message ?? 'Your account is not authorized as a verified driver.',
         'unauthenticated' => 'Please sign in to go online.',
         _ => 'We could not change your availability. Please try again.',
       };
     } catch (e) {
       debugPrint('[FirestoreDriverService] toggleOnline network error: $e');
-      // Direct Firestore fallback for timeouts / network blips
-      if (currentUid != null && currentUid.isNotEmpty) {
+      if (!isOnline && currentUid != null && currentUid.isNotEmpty) {
         try {
-          await updateOnlineStatus(
-            currentUid,
-            isOnline,
-            lat: latitude,
-            lng: longitude,
-          );
+          await updateOnlineStatus(currentUid, false);
           return null;
         } catch (_) {}
       }
-      return 'Network error. Please check your connection and try again.';
+      return 'Going online requires an active internet connection.';
     }
 
     return null;

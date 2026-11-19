@@ -128,7 +128,7 @@ class DriverProvider extends ChangeNotifier {
   bool get isUploadingDoc => _isUploadingDoc;
   String? get docError => _docError;
 
-  /// Whether the driver's CNIC and Driving License are AI-verified.
+  /// Whether the driver's CNIC, Driving License, and Vehicle Registration are verified.
   bool get hasPassedAiVerification {
     final hasCnic = _documents.any(
       (d) => (d.type == DriverDocumentType.cnicFront || d.type == DriverDocumentType.cnicBack) && d.isVerified,
@@ -136,7 +136,10 @@ class DriverProvider extends ChangeNotifier {
     final hasLicense = _documents.any(
       (d) => d.type == DriverDocumentType.drivingLicense && d.isVerified,
     );
-    return (hasCnic && hasLicense) || _driverProfile.isVerified;
+    final hasReg = _documents.any(
+      (d) => d.type == DriverDocumentType.vehicleRegistration && d.isVerified,
+    );
+    return (hasCnic && hasLicense && hasReg) || _driverProfile.isVerified;
   }
 
   /// Whether the driver has entered complete legal & visual vehicle information

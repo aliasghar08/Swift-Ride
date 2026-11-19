@@ -31,11 +31,24 @@ export const submitOffer = onCall(
       throw new HttpsError('failed-precondition', 'Ride is no longer open for offers.');
     }
 
-    // Check if driver profile is verified
+    // Check if driver profile exists, is verified, and active
     const driverDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(driver.uid).get();
+    if (!driverDoc.exists) {
+      throw new HttpsError('failed-precondition', 'Please complete your driver onboarding profile first.');
+    }
+
     const driverData = driverDoc.data();
-    if (driverData && driverData.isVerified === false) {
-      throw new HttpsError('permission-denied', 'Driver profile is pending verification.');
+    if (driverData?.isVerified !== true) {
+      throw new HttpsError('permission-denied', 'Driver profile is pending document verification.');
+    }
+
+    if (driverData?.status === 'banned' || driverData?.isSuspended === true) {
+      throw new HttpsError('permission-denied', 'Your driver account is suspended.');
+    }
+
+    const plate = driverData?.vehiclePlate;
+    if (!plate || plate === 'SWIFT-101' || plate === 'ABC-1234' || !driverData?.vehicleMake) {
+      throw new HttpsError('failed-precondition', 'Please configure your vehicle details before submitting offers.');
     }
 
     const offerRef = db.collection(APP_CONSTANTS.COLLECTIONS.RIDE_OFFERS).doc();
@@ -46,10 +59,10 @@ export const submitOffer = onCall(
       etaMinutes: data.etaMinutes || 5,
       driverRating: driverData?.rating || 5.0,
       vehicleInfo: {
-        make: driverData?.vehicleMake || 'Toyota',
-        model: driverData?.vehicleModel || 'Camry',
-        plate: driverData?.vehiclePlate || 'ABC-1234',
-        color: driverData?.vehicleColor || 'Silver',
+        make: driverData.vehicleMake,
+        model: driverData.vehicleModel || 'Vehicle',
+        plate: driverData.vehiclePlate,
+        color: driverData.vehicleColor || 'Standard',
       },
       status: 'PENDING',
       createdAt: FieldValue.serverTimestamp(),

@@ -215,6 +215,8 @@ service cloud.firestore {
           isValidDriver(request.resource.data) &&
           // Cannot modify verification or subscription status without admin/functions
           request.resource.data.isVerified == resource.data.isVerified &&
+          // Driver cannot go online if not verified
+          (request.resource.data.isOnline == false || resource.data.isVerified == true) &&
           areImmutableFieldsUnchanged(['createdAt', 'userId'])));
       allow delete: if isAdmin();
 
@@ -239,10 +241,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() &&
         isValidRide(request.resource.data) &&
         isValidStatusTransition(resource.data.status, request.resource.data.status) &&
-        (resource.data.riderId == request.auth.uid ||
-         resource.data.driverId == request.auth.uid ||
-         (resource.data.status == 'REQUESTED' && request.resource.data.driverId == request.auth.uid) ||
-         isAdmin()) &&
+        (isAdmin() ||
+         resource.data.riderId == request.auth.uid ||
+         (resource.data.driverId == request.auth.uid && resource.data.status != 'REQUESTED')) &&
         areImmutableFieldsUnchanged(['riderId', 'createdAt']);
       allow delete: if isAdmin();
     }
@@ -252,7 +253,9 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() &&
         request.resource.data.driverId == request.auth.uid &&
-        isValidOffer(request.resource.data);
+        isValidOffer(request.resource.data) &&
+        exists(/databases/$(database)/documents/drivers/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.isVerified == true;
       allow update: if isAuthenticated() &&
         isValidOffer(request.resource.data) &&
         (resource.data.driverId == request.auth.uid ||

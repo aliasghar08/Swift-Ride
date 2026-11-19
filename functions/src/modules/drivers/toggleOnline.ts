@@ -59,6 +59,13 @@ export const toggleOnline = onCall(
     }
 
     const driverData = driverDoc.data();
+    if (data.isOnline && (driverData?.status === 'banned' || driverData?.isSuspended === true)) {
+      throw new HttpsError(
+        'permission-denied',
+        'Your driver account is suspended. Please contact support.'
+      );
+    }
+
     const isVerified = driverData?.isVerified === true;
     const plate = driverData?.vehiclePlate;
     const hasValidVehicle = Boolean(

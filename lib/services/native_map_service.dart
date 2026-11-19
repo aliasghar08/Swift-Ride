@@ -231,10 +231,13 @@ class Marker {
       identical(this, other) ||
       other is Marker &&
           runtimeType == other.runtimeType &&
-          markerId == other.markerId;
+          markerId == other.markerId &&
+          position == other.position &&
+          rotation == other.rotation &&
+          infoWindow.title == other.infoWindow.title;
 
   @override
-  int get hashCode => markerId.hashCode;
+  int get hashCode => Object.hash(markerId, position, rotation, infoWindow.title);
 }
 
 /// Identifier for map polylines.
@@ -331,10 +334,13 @@ class Polyline {
       identical(this, other) ||
       other is Polyline &&
           runtimeType == other.runtimeType &&
-          polylineId == other.polylineId;
+          polylineId == other.polylineId &&
+          listEquals(points, other.points) &&
+          color == other.color &&
+          width == other.width;
 
   @override
-  int get hashCode => polylineId.hashCode;
+  int get hashCode => Object.hash(polylineId, points.length, color, width);
 }
 
 /// Identifier for map circles.

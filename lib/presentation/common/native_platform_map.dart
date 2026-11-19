@@ -102,10 +102,10 @@ class _NativePlatformMapState extends State<NativePlatformMap> {
   void didUpdateWidget(NativePlatformMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_controller != null) {
-      if (oldWidget.markers != widget.markers) {
+      if (!setEquals(oldWidget.markers, widget.markers)) {
         _controller!.setMarkers(widget.markers);
       }
-      if (oldWidget.polylines != widget.polylines) {
+      if (!setEquals(oldWidget.polylines, widget.polylines)) {
         _controller!.setPolylines(widget.polylines);
       }
     }

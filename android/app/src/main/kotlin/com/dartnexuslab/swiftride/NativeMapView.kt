@@ -39,6 +39,7 @@ class NativeMapView(
 
     private var googleMap: GoogleMap? = null
     private val markers = mutableMapOf<String, Marker>()
+    private val markerHues = mutableMapOf<String, Float>()
     private val polylines = mutableMapOf<String, Polyline>()
 
     private val initialLat = (args?.get("initialLat") as? Number)?.toDouble() ?: 31.2785
@@ -141,8 +142,7 @@ class NativeMapView(
             "setMarkers" -> {
                 val markerList = call.argument<List<Map<String, Any>>>("markers") ?: emptyList()
                 if (map != null) {
-                    markers.values.forEach { it.remove() }
-                    markers.clear()
+                    val incomingIds = mutableSetOf<String>()
 
                     for (item in markerList) {
                         val id = item["id"] as? String ?: continue
@@ -151,23 +151,61 @@ class NativeMapView(
                         val title = item["title"] as? String
                         val colorHue = (item["hue"] as? Number)?.toFloat() ?: BitmapDescriptorFactory.HUE_RED
                         val rotation = (item["rotation"] as? Number)?.toFloat() ?: 0.0f
+                        val newPosition = LatLng(lat, lng)
 
-                        val markerOptions = MarkerOptions()
-                            .position(LatLng(lat, lng))
-                            .title(title)
-                            .icon(BitmapDescriptorFactory.defaultMarker(colorHue))
-                            .rotation(rotation)
-                            .anchor(0.5f, 0.5f)
+                        incomingIds.add(id)
 
-                        val marker = map.addMarker(markerOptions)
-                        if (marker != null) {
-                            markers[id] = marker
+                        val existing = markers[id]
+                        if (existing != null) {
+                            // In-place update to prevent flicker/texture re-allocation
+                            if (existing.position != newPosition) {
+                                existing.position = newPosition
+                            }
+                            if (existing.rotation != rotation) {
+                                existing.rotation = rotation
+                            }
+                            if (existing.title != title) {
+                                existing.title = title
+                            }
+                            val prevHue = markerHues[id]
+                            if (prevHue != null && prevHue != colorHue) {
+                                existing.setIcon(BitmapDescriptorFactory.defaultMarker(colorHue))
+                                markerHues[id] = colorHue
+                            }
+                        } else {
+                            val markerOptions = MarkerOptions()
+                                .position(newPosition)
+                                .title(title)
+                                .icon(BitmapDescriptorFactory.defaultMarker(colorHue))
+                                .rotation(rotation)
+                                .anchor(0.5f, 0.5f)
+
+                            val marker = map.addMarker(markerOptions)
+                            if (marker != null) {
+                                markers[id] = marker
+                                markerHues[id] = colorHue
+                            }
                         }
                     }
+
+                    // Remove stale markers not in the new list
+                    val staleIds = markers.keys.filter { it !in incomingIds }
+                    for (staleId in staleIds) {
+                        markers.remove(staleId)?.remove()
+                        markerHues.remove(staleId)
+                    }
+
                     result.success(true)
                 } else {
                     result.success(false)
                 }
+            }
+
+            "clearMarkers" -> {
+                markers.values.forEach { it.remove() }
+                markers.clear()
+                markerHues.clear()
+                result.success(true)
             }
 
             "setPolylines" -> {
@@ -242,6 +280,11 @@ class NativeMapView(
     override fun dispose() {
         channel.setMethodCallHandler(null)
         try {
+            markers.values.forEach { it.remove() }
+            markers.clear()
+            markerHues.clear()
+            polylines.values.forEach { it.remove() }
+            polylines.clear()
             mapView.onPause()
             mapView.onStop()
             mapView.onDestroy()

@@ -32,6 +32,7 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
   private var mapView: GMSMapView
   private var channel: FlutterMethodChannel
   private var markers = [String: GMSMarker]()
+  private var markerHues = [String: Double]()
   private var polylines = [String: GMSPolyline]()
 
   private var initialLat: Double = 31.2785
@@ -151,8 +152,7 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
         return
       }
 
-      for (_, m) in markers { m.map = nil }
-      markers.removeAll()
+      var incomingIds = Set<String>()
 
       for item in list {
         guard let id = item["id"] as? String,
@@ -161,19 +161,56 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
           continue
         }
 
-        let marker = GMSMarker(position: CLLocationCoordinate2D(latitude: lat, longitude: lng))
-        marker.title = item["title"] as? String
-        marker.groundAnchor = CGPoint(x: 0.5, y: 0.5)
-
-        if let rotation = item["rotation"] as? Double {
-          marker.rotation = rotation
-        }
-
+        incomingIds.insert(id)
+        let targetCoord = CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        let rotation = item["rotation"] as? Double ?? 0.0
+        let title = item["title"] as? String
         let hue = item["hue"] as? Double ?? 0.0
-        marker.icon = GMSMarker.markerImage(with: UIColor(hue: CGFloat(hue / 360.0), saturation: 1.0, brightness: 1.0, alpha: 1.0))
-        marker.map = mapView
-        markers[id] = marker
+
+        if let existing = markers[id] {
+          // Update in-place to prevent flicker/texture tear
+          CATransaction.begin()
+          CATransaction.setDisableActions(true)
+          if existing.position.latitude != targetCoord.latitude || existing.position.longitude != targetCoord.longitude {
+            existing.position = targetCoord
+          }
+          if existing.rotation != rotation {
+            existing.rotation = rotation
+          }
+          if existing.title != title {
+            existing.title = title
+          }
+          if let prevHue = markerHues[id], prevHue != hue {
+            existing.icon = GMSMarker.markerImage(with: UIColor(hue: CGFloat(hue / 360.0), saturation: 1.0, brightness: 1.0, alpha: 1.0))
+            markerHues[id] = hue
+          }
+          CATransaction.commit()
+        } else {
+          let marker = GMSMarker(position: targetCoord)
+          marker.title = title
+          marker.groundAnchor = CGPoint(x: 0.5, y: 0.5)
+          marker.rotation = rotation
+          marker.icon = GMSMarker.markerImage(with: UIColor(hue: CGFloat(hue / 360.0), saturation: 1.0, brightness: 1.0, alpha: 1.0))
+          marker.map = mapView
+          markers[id] = marker
+          markerHues[id] = hue
+        }
       }
+
+      // Remove stale markers not in the new list
+      let staleIds = markers.keys.filter { !incomingIds.contains($0) }
+      for staleId in staleIds {
+        markers[staleId]?.map = nil
+        markers.removeValue(forKey: staleId)
+        markerHues.removeValue(forKey: staleId)
+      }
+
+      result(true)
+
+    case "clearMarkers":
+      for (_, m) in markers { m.map = nil }
+      markers.removeAll()
+      markerHues.removeAll()
       result(true)
 
     case "setPolylines":
@@ -238,5 +275,14 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  deinit {
+    channel.setMethodCallHandler(nil)
+    for (_, m) in markers { m.map = nil }
+    markers.removeAll()
+    markerHues.removeAll()
+    for (_, p) in polylines { p.map = nil }
+    polylines.removeAll()
   }
 }

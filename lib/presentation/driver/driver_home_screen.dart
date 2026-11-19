@@ -400,7 +400,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Below cost floor of PKR ${costFloor.toInt()} (Fuel + Wear + 35%). You may operate at a loss.',
+                                  'Below cost floor of PKR ${costFloor.toInt()} (Fuel + Wear + 18%). You may operate at a loss.',
                                   style: TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w600,

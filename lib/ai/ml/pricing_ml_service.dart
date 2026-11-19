@@ -134,15 +134,15 @@ class PricingMLService {
         : trafficMultiplier.clamp(1.0, 1.75);
 
     // Resolve vehicle tier and baseline km/L based on car model
-    double resolvedTier = 2.0; // Economy Car default (Alto / Cultus)
-    double resolvedKmL = 13.5;
+    double resolvedTier = 3.0; // Compact Car default (Cultus / WagonR)
+    double resolvedKmL = 13.0;
 
     if (vehicleType == VehicleType.bike) {
       resolvedTier = 0.0;
-      resolvedKmL = 38.0;
+      resolvedKmL = 44.0;
     } else if (vehicleType == VehicleType.rikshaw) {
       resolvedTier = 1.0;
-      resolvedKmL = 22.0;
+      resolvedKmL = 23.0;
     } else {
       if (carModel != null && carModel.isNotEmpty) {
         final m = carModel.toLowerCase();
@@ -154,13 +154,13 @@ class PricingMLService {
             m.contains('sedan') ||
             m.contains('alsvin') ||
             m.contains('elantra')) {
-          resolvedTier = 3.0;
+          resolvedTier = 4.0;
           resolvedKmL = 10.0;
         } else if (m.contains('alto') || m.contains('mira') || m.contains('mehran') || m.contains('660')) {
           resolvedTier = 2.0;
           resolvedKmL = 15.5;
         } else {
-          resolvedTier = 2.0;
+          resolvedTier = 3.0;
           resolvedKmL = 13.0; // Cultus / WagonR
         }
       }
@@ -188,26 +188,47 @@ class PricingMLService {
         ];
         _interpreter!.run(input, output);
         final rawBid = output[0][0];
-        if (rawBid > 50.0 && !rawBid.isNaN && !rawBid.isInfinite) {
-          return (rawBid / 5.0).round() * 5.0;
+        final calibratedBid = rawBid * 0.68;
+        if (calibratedBid > 40.0 && !calibratedBid.isNaN && !calibratedBid.isInfinite) {
+          final rounded = (calibratedBid / 5.0).round() * 5.0;
+          final minFloor = resolvedTier == 0.0
+              ? 40.0
+              : (resolvedTier == 1.0
+                  ? 60.0
+                  : (resolvedTier == 2.0 ? 90.0 : (resolvedTier == 3.0 ? 100.0 : 120.0)));
+          return math.max(minFloor, rounded.toDouble());
         }
       } catch (e) {
         debugPrint('[PricingMLService] Inference error ($e), using calibrated fallback.');
       }
     }
 
-    // Calibrated algorithmic fallback modeled after real Pakistan peer-to-peer ride market dynamics
+    // Calibrated algorithmic fallback targeting 35%-45% driver net margin with 2% fee
     final baseFare = resolvedTier == 0.0
-        ? 75.0
-        : (resolvedTier == 1.0 ? 130.0 : (resolvedTier == 2.0 ? 210.0 : 280.0));
+        ? 45.0
+        : (resolvedTier == 1.0
+            ? 80.0
+            : (resolvedTier == 2.0
+                ? 100.0
+                : (resolvedTier == 3.0 ? 110.0 : 130.0)));
     final kmRate = resolvedTier == 0.0
-        ? 28.0
-        : (resolvedTier == 1.0 ? 45.0 : (resolvedTier == 2.0 ? 62.0 : 82.0));
+        ? 15.0
+        : (resolvedTier == 1.0
+            ? 25.0
+            : (resolvedTier == 2.0
+                ? 33.0
+                : (resolvedTier == 3.0 ? 37.0 : 47.0)));
     final fuelFactor = resolvedTier >= 2.0 ? math.pow(14.0 / resolvedKmL, 0.35).clamp(0.9, 1.3) : 1.0;
     final rawCalc = (baseFare + (safeDist * kmRate * fuelFactor)) * validTraffic;
-    final rainAdjustment = validRain > 0.5 ? 25.0 : 0.0;
+    final rainAdjustment = validRain > 0.5 ? 20.0 : 0.0;
     final rounded = ((rawCalc + rainAdjustment) / 5.0).round() * 5.0;
-    final minFloor = resolvedTier == 0.0 ? 70.0 : (resolvedTier == 1.0 ? 120.0 : 210.0);
+    final minFloor = resolvedTier == 0.0
+        ? 40.0
+        : (resolvedTier == 1.0
+            ? 60.0
+            : (resolvedTier == 2.0
+                ? 90.0
+                : (resolvedTier == 3.0 ? 100.0 : 120.0)));
     return math.max(minFloor, rounded.toDouble());
   }
 
@@ -320,6 +341,7 @@ class PricingMLService {
 
         if (predictedFuelLiters > 0 && predictedMaintPkr > 0 && predictedFarePkr > 40.0) {
           modelRan = true;
+          predictedFarePkr = predictedFarePkr * 0.68;
         }
       } catch (e) {
         debugPrint('[PricingMLService] Multi-output inference notice: $e. Falling back to calibrated physics.');
@@ -342,33 +364,46 @@ class PricingMLService {
       predictedMaintPkr = (validDist * baseWearRate * roadWearMult * congestionWearMult).clamp(2.0, 5000.0);
 
       final baseFare = resolvedTier == 0.0
-          ? 70.0
+          ? 45.0
           : (resolvedTier == 1.0
-              ? 120.0
-              : (resolvedTier == 2.0 ? 180.0 : (resolvedTier == 3.0 ? 210.0 : 250.0)));
+              ? 80.0
+              : (resolvedTier == 2.0
+                  ? 100.0
+                  : (resolvedTier == 3.0 ? 110.0 : 130.0)));
       final kmRate = resolvedTier == 0.0
-          ? 22.0
+          ? 15.0
           : (resolvedTier == 1.0
-              ? 34.0
-              : (resolvedTier == 2.0 ? 46.0 : (resolvedTier == 3.0 ? 52.0 : 60.0)));
+              ? 25.0
+              : (resolvedTier == 2.0
+                  ? 32.0
+                  : (resolvedTier == 3.0 ? 36.0 : 46.0)));
       final minRate = resolvedTier == 0.0
-          ? 2.0
+          ? 0.3
           : (resolvedTier == 1.0
-              ? 3.0
-              : (resolvedTier == 2.0 ? 4.5 : (resolvedTier == 3.0 ? 5.5 : 7.0)));
-      final acSurcharge = effectiveAc ? 1.08 : 1.0;
-      final seatBoost = clampedSeats > 1 ? (1.0 + (clampedSeats - 1) * 0.05) : 1.0;
+              ? 0.5
+              : (resolvedTier == 2.0
+                  ? 0.5
+                  : (resolvedTier == 3.0 ? 0.6 : 1.0)));
+      final acSurcharge = effectiveAc ? 1.065 : 1.0;
+      final seatBoost = clampedSeats > 1 ? (1.0 + (clampedSeats - 1) * 0.04) : 1.0;
       final rawFare = ((baseFare + (validDist * kmRate) + (validDur * minRate)) * acSurcharge) * seatBoost;
       final fuelCostEst = predictedFuelLiters * validFuelPrice;
-      final directCostFloor = (fuelCostEst + predictedMaintPkr) * 1.35;
-      final safeFare = math.max(rawFare, directCostFloor);
+      final directCostFloor = (fuelCostEst + predictedMaintPkr) * 1.18;
+      final minFloor = resolvedTier == 0.0
+          ? 40.0
+          : (resolvedTier == 1.0
+              ? 60.0
+              : (resolvedTier == 2.0 ? 90.0 : (resolvedTier == 3.0 ? 100.0 : 120.0)));
+      final safeFare = math.max(rawFare, math.max(directCostFloor, minFloor));
       predictedFarePkr = ((safeFare / 5.0).round() * 5.0).toDouble();
     }
 
     // Clean rounding and secondary calculations
-    final roundedFare = ((predictedFarePkr / 5.0).round() * 5.0).toDouble();
     final fuelCost = ((predictedFuelLiters * validFuelPrice) * 10).round() / 10.0;
     final maintenanceCost = (predictedMaintPkr * 10).round() / 10.0;
+    final costFloor = (fuelCost + maintenanceCost) * 1.18;
+    final effectiveFare = math.max(predictedFarePkr, costFloor);
+    final roundedFare = ((effectiveFare / 5.0).round() * 5.0).toDouble();
     final serviceFee = ((roundedFare * 0.02) * 10).round() / 10.0; // SwiftRide 2% Commission
     final driverTotalExpenses = ((fuelCost + maintenanceCost + serviceFee) * 10).round() / 10.0;
     final driverNetProfit = math.max(0.0, ((roundedFare - driverTotalExpenses) * 10).round() / 10.0);

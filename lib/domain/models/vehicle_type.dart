@@ -280,7 +280,7 @@ extension VehicleTypeX on VehicleType {
       case VehicleType.car:
         return 80.0;
       case VehicleType.rikshaw:
-        return 50.0;
+        return 60.0;
       case VehicleType.bike:
         return 40.0;
     }

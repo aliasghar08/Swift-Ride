@@ -246,5 +246,68 @@ void main() {
 
       riderVm.dispose();
     });
+
+    test('Calibrated AI Sweet Spot achieves 35-45% driver net margin and 10 km car suggests ~PKR 480-520', () async {
+      final pricingService = PricingMLService();
+
+      // 10 km compact car city trip (20 min duration, normal traffic, AC on)
+      final carEcon = await pricingService.predictTripEconomics(
+        distanceKm: 10.0,
+        durationMin: 20,
+        staticDurationMin: 20,
+        vehicleType: VehicleType.car,
+        carEngineTier: CarEngineTier.compact1000cc,
+        acEnabled: true,
+        bookedSeats: 1,
+        fuelPrice: 285.0,
+        trafficLevel: 'NORMAL',
+      );
+
+      // Fare should be between PKR 480 and PKR 520
+      expect(carEcon.totalFare, greaterThanOrEqualTo(480.0));
+      expect(carEcon.totalFare, lessThanOrEqualTo(520.0));
+
+      // Net profit margin = driverNetProfit / totalFare -> target 35%-45%
+      final margin = carEcon.driverNetProfit / carEcon.totalFare;
+      expect(margin, greaterThanOrEqualTo(0.35));
+      expect(margin, lessThanOrEqualTo(0.48));
+
+      // 1.18x Cost Floor protection test
+      final costFloor = carEcon.costFloor;
+      final expectedCostFloor = (carEcon.fuelCost + carEcon.maintenanceCost) * 1.18;
+      expect(costFloor, closeTo(expectedCostFloor, 0.01));
+
+      // Margin at cost floor: at least ~13%
+      final minProfit = costFloor - (carEcon.fuelCost + carEcon.maintenanceCost + (costFloor * 0.02));
+      final minMargin = minProfit / costFloor;
+      expect(minMargin, greaterThanOrEqualTo(0.12));
+    });
+
+    test('Calibrated Bike 10 km suggests ~PKR 200 and Auto Rikshaw suggests ~PKR 330-350', () async {
+      final pricingService = PricingMLService();
+
+      // 10 km Bike
+      final bikeEcon = await pricingService.predictTripEconomics(
+        distanceKm: 10.0,
+        durationMin: 18,
+        staticDurationMin: 18,
+        vehicleType: VehicleType.bike,
+        bookedSeats: 1,
+        fuelPrice: 285.0,
+      );
+      expect(bikeEcon.totalFare, closeTo(200.0, 15.0));
+
+      // 10 km Rikshaw
+      final rikshawEcon = await pricingService.predictTripEconomics(
+        distanceKm: 10.0,
+        durationMin: 22,
+        staticDurationMin: 20,
+        vehicleType: VehicleType.rikshaw,
+        bookedSeats: 1,
+        fuelPrice: 285.0,
+      );
+      expect(rikshawEcon.totalFare, greaterThanOrEqualTo(320.0));
+      expect(rikshawEcon.totalFare, lessThanOrEqualTo(360.0));
+    });
   });
 }

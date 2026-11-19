@@ -26,7 +26,7 @@ void main() {
       expect(VehicleType.rikshaw.title, contains('Rikshaw'));
       expect(VehicleType.rikshaw.seats, equals(2));
       expect(VehicleType.rikshaw.fareMultiplier, equals(0.70));
-      expect(VehicleType.rikshaw.minFare, equals(50.0));
+      expect(VehicleType.rikshaw.minFare, equals(60.0));
 
       expect(VehicleType.car.averageMileageKmPerL, equals(10.0));
       expect(VehicleType.rikshaw.averageMileageKmPerL, equals(22.0));
@@ -47,7 +47,7 @@ void main() {
       // Floor test with small base fare
       const smallCarFare = 50.0;
       expect(VehicleType.bike.calculateFare(smallCarFare), equals(40.0)); // minFare is 40
-      expect(VehicleType.rikshaw.calculateFare(smallCarFare), equals(50.0)); // minFare is 50
+      expect(VehicleType.rikshaw.calculateFare(smallCarFare), equals(60.0)); // minFare is 60
     });
 
     test('VehicleType fromString parses diverse inputs', () {

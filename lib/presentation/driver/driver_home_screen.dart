@@ -37,6 +37,7 @@ import 'widgets/driver_analytics_drawer.dart';
 import 'widgets/driver_name_dialog.dart';
 import 'driver_verification_screen.dart';
 import '../../domain/models/user_role.dart';
+import '../../services/ad_service.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -3179,6 +3180,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 );
 
                 if (!mounted || changeResult == null) return;
+                AdService.instance.showPostRideInterstitial();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(

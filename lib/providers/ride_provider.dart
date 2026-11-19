@@ -636,6 +636,20 @@ class RideProvider extends ChangeNotifier {
     );
   }
 
+  /// Clears the active completed ride reference after the rider reviews their receipt.
+  void dismissCompletedRide() {
+    _rideSub?.cancel();
+    _rideSub = null;
+    _offersSub?.cancel();
+    _offersSub = null;
+    _sosSub?.cancel();
+    _sosSub = null;
+    _activeOffers = [];
+    _activeSos = null;
+    _currentRide = null;
+    notifyListeners();
+  }
+
   /// Loads the first page of persisted ride history for [userId].
   /// Supports both riders and drivers with optional status filtering.
   Future<void> loadRideHistory(

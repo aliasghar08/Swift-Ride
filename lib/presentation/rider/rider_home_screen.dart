@@ -35,6 +35,8 @@ import 'address_search_screen.dart';
 import 'route_preview_screen.dart';
 import '../widgets/trip_economics_sheet.dart';
 import '../auth/phone_auth_screen.dart';
+import '../common/ad_banner_widget.dart';
+import '../../services/ad_service.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -1072,6 +1074,24 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           authProv: authProv,
                           locProv: locProv,
                         ),
+                ),
+
+              // Subtle AdMob Banner docked at bottom of the idle destination search screen
+              if (currentRide == null &&
+                  !_isPinningOnMap &&
+                  !_viewModel.isPinMode &&
+                  _viewModel.dropoffLocation == null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: SafeArea(
+                    top: false,
+                    child: Padding(
+                      padding: EdgeInsets.only(bottom: layout.scale(8)),
+                      child: const AdBannerWidget(),
+                    ),
+                  ),
                 ),
 
               CustomConsumer<SafetyCheckProvider>(
@@ -2348,6 +2368,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             ),
                           ),
                         ),
+                        const SizedBox(height: 12),
+                        const AdBannerWidget(),
                       ],
                     ),
                   ),
@@ -2733,115 +2755,212 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               ),
               SizedBox(height: layout.scale(10)),
             ],
-            StaggeredEntryWidget(
-              index: 2,
-              child: Row(
-                children: [
-                  SizedBox(
-                    height: layout.touchTarget(48),
-                    width: layout.touchTarget(48),
-                    child: IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.emeraldGreen.withValues(
-                          alpha: 0.15,
+            if (ride.status == RideStatus.completed) ...[
+              SizedBox(height: layout.scale(12)),
+              Container(
+                padding: EdgeInsets.all(layout.scale(14)),
+                decoration: BoxDecoration(
+                  color: AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppTheme.emeraldGreen,
+                          size: 24,
                         ),
-                        foregroundColor: AppTheme.emeraldGreen,
-                      ),
-                      icon: const Icon(Icons.phone),
-                      tooltip: 'Call Driver',
-                      onPressed: () => _showCallDriverSheet(context, layout),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: layout.touchTarget(48),
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.share, size: 16),
-                        label: const Text('Share Trip'),
-                        onPressed: () async {
-                          final url = await _viewModel.generateShareLink(
-                            safetyProv: safetyProv,
-                            rideProv: rideProv,
-                          );
-                          if (url != null) {
-                            await Clipboard.setData(ClipboardData(text: url));
-                          }
-                          if (!mounted || !context.mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                url != null
-                                    ? 'Trip share link copied to clipboard:\n$url'
-                                    : 'We could not create a share link. Check your connection and try again.',
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Trip Completed! (سفر مکمل)',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(14),
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.of(context).textPrimary,
+                                ),
                               ),
-                              backgroundColor: url != null
-                                  ? AppTheme.primaryBlue
-                                  : AppTheme.sunsetCoral,
-                              duration: const Duration(seconds: 4),
-                              action: url != null
-                                  ? SnackBarAction(
-                                      label: 'COPIED',
-                                      textColor: AppTheme.accentCyan,
-                                      onPressed: () {},
-                                    )
-                                  : null,
-                            ),
-                          );
-                        },
-                      ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'You arrived at your destination safely.',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(11.5),
+                                  color: AppColors.of(context).textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Total Paid Fare:',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(12),
+                            color: AppColors.of(context).textSecondary,
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(ride.acceptedFare ?? ride.offeredFare),
+                          style: TextStyle(
+                            fontSize: layout.fontSize(16),
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.emeraldGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: layout.scale(14)),
+              SizedBox(
+                height: layout.touchTarget(48),
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.emeraldGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  PulsingGlowWidget(
-                    glowColor: AppTheme.sunsetCoral,
-                    minSpread: 1.0,
-                    maxSpread: 5.0,
-                    child: SizedBox(
+                  onPressed: () {
+                    rideProv.dismissCompletedRide();
+                    AdService.instance.showPostRideInterstitial();
+                  },
+                  child: const Text(
+                    'Trip Receipt Done (مکمل)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              StaggeredEntryWidget(
+                index: 2,
+                child: Row(
+                  children: [
+                    SizedBox(
                       height: layout.touchTarget(48),
                       width: layout.touchTarget(48),
                       child: IconButton(
                         style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.sunsetCoral.withValues(
-                            alpha: 0.18,
+                          backgroundColor: AppTheme.emeraldGreen.withValues(
+                            alpha: 0.15,
                           ),
-                          foregroundColor: AppTheme.sunsetCoral,
+                          foregroundColor: AppTheme.emeraldGreen,
                         ),
-                        icon: const Icon(Icons.warning_amber_rounded),
-                        tooltip: 'Emergency SOS',
-                        onPressed: () => _showSosDialog(
+                        icon: const Icon(Icons.phone),
+                        tooltip: 'Call Driver',
+                        onPressed: () => _showCallDriverSheet(context, layout),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: SizedBox(
+                        height: layout.touchTarget(48),
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.share, size: 16),
+                          label: const Text('Share Trip'),
+                          onPressed: () async {
+                            final url = await _viewModel.generateShareLink(
+                              safetyProv: safetyProv,
+                              rideProv: rideProv,
+                            );
+                            if (url != null) {
+                              await Clipboard.setData(ClipboardData(text: url));
+                            }
+                            if (!mounted || !context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  url != null
+                                      ? 'Trip share link copied to clipboard:\n$url'
+                                      : 'We could not create a share link. Check your connection and try again.',
+                                ),
+                                backgroundColor: url != null
+                                    ? AppTheme.primaryBlue
+                                    : AppTheme.sunsetCoral,
+                                duration: const Duration(seconds: 4),
+                                action: url != null
+                                    ? SnackBarAction(
+                                        label: 'COPIED',
+                                        textColor: AppTheme.accentCyan,
+                                        onPressed: () {},
+                                      )
+                                    : null,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    PulsingGlowWidget(
+                      glowColor: AppTheme.sunsetCoral,
+                      minSpread: 1.0,
+                      maxSpread: 5.0,
+                      child: SizedBox(
+                        height: layout.touchTarget(48),
+                        width: layout.touchTarget(48),
+                        child: IconButton(
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppTheme.sunsetCoral.withValues(
+                              alpha: 0.18,
+                            ),
+                            foregroundColor: AppTheme.sunsetCoral,
+                          ),
+                          icon: const Icon(Icons.warning_amber_rounded),
+                          tooltip: 'Emergency SOS',
+                          onPressed: () => _showSosDialog(
+                            context,
+                            safetyProv,
+                            ride.id,
+                            authProv.currentUser.id,
+                            locProv.latitude,
+                            locProv.longitude,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: layout.touchTarget(48),
+                      width: layout.touchTarget(48),
+                      child: IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.grey.shade200,
+                          foregroundColor: Colors.black87,
+                        ),
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Cancel Ride',
+                        onPressed: () => _showCancelRideSheet(
                           context,
-                          safetyProv,
-                          ride.id,
-                          authProv.currentUser.id,
-                          locProv.latitude,
-                          locProv.longitude,
+                          ride,
+                          rideProv,
+                          layout,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  SizedBox(
-                    height: layout.touchTarget(48),
-                    width: layout.touchTarget(48),
-                    child: IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.black87,
-                      ),
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Cancel Ride',
-                      onPressed: () => _showCancelRideSheet(
-                        context,
-                        ride,
-                        rideProv,
-                        layout,
-                      ),
-                    ),
-                  ),
                   ],
                 ),
               ),
+            ],
             ],
           ),
         ),

@@ -19,6 +19,7 @@ import 'providers/safety_provider.dart';
 import 'presentation/auth/phone_auth_screen.dart';
 import 'services/fcm_service.dart';
 import 'services/fuel_price_service.dart';
+import 'services/ad_service.dart';
 import 'services/native/native_storage_service.dart';
 import 'ai/ai.dart';
 
@@ -71,6 +72,9 @@ Future<void> main() async {
 
     // Fetch live fuel rates from internet on app launch (OGRA Pakistan feed)
     FuelPriceService().fetchLivePrices();
+
+    // Initialize Google AdMob with safe fallback for testing
+    await AdService.instance.initialize();
   } catch (e) {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }

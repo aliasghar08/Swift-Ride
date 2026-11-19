@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../services/driver_khata_service.dart';
+import '../../common/ad_banner_widget.dart';
 import '../../view_models/responsive_layout_helper.dart';
 
 /// Modal bottom sheet displaying the Driver's Daily Financial Ledger ("Khata").
@@ -286,6 +287,8 @@ class DriverKhataSheet extends StatelessWidget {
                   child: const Text('Back to Driving (واپس جائیں)'),
                 ),
               ),
+              const SizedBox(height: 12),
+              const AdBannerWidget(),
             ],
           ),
         );

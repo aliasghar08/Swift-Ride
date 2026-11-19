@@ -68,6 +68,7 @@ We do not sell, rent, or trade your personal data to third parties. We share dat
 We partner with trusted infrastructure providers governed by confidentiality and data processing agreements:
 - **Google Cloud Platform & Firebase:** Secure cloud infrastructure providing Firebase Authentication, Cloud Firestore, Cloud Functions, and Firebase App Check[cite: 10].
 - **Google Maps Platform:** Geospatial mapping, autocomplete, and routing services[cite: 10].
+- **Google AdMob:** Delivers contextual and personalized in-app advertising on select non-intrusive screens (such as idle destination search and post-trip completion receipts). AdMob may process device identifiers and ad interactions in accordance with Google's Advertising Privacy Policy. Ads are strictly prohibited and disabled during active driver navigation, fare negotiation, and emergency SOS flows.
 - **Crashlytics / Firebase Analytics:** Anonymous application crash telemetry.
 
 ### C. Legal Requirements

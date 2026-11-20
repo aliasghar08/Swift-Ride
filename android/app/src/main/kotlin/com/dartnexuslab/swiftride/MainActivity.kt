@@ -18,6 +18,7 @@ import android.speech.tts.TextToSpeech
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -39,6 +40,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private var nativeLocationService: NativeLocationService? = null
     private var nativeMapService: NativeMapService? = null
+
+    override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+    }
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -360,6 +366,24 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
                         }
                     }
                 }
+                "shareText" -> {
+                    val text = call.argument<String>("text") ?: ""
+                    val title = call.argument<String>("title") ?: "Share via"
+                    try {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, text)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        val chooser = Intent.createChooser(shareIntent, title).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        startActivity(chooser)
+                        result.success(true)
+                    } catch (_: Exception) {
+                        result.success(false)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -455,6 +479,7 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         tts?.shutdown()
+        nativeLocationService?.onDestroy()
         super.onDestroy()
     }
 }

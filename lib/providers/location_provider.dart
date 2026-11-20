@@ -7,6 +7,8 @@ import '../domain/models/location_point_model.dart';
 import '../services/coordinate_parser.dart';
 import '../services/map_service.dart';
 
+enum LocationTrackingMode { idle, balanced, highAccuracy }
+
 /// Streams live driver coordinates, calculates heading rotations, and drives
 /// map animations. Also exposes [hasRealFix] so the UI can distinguish "still
 /// waiting for GPS" from "we have coordinates to show".
@@ -23,6 +25,7 @@ class LocationProvider extends ChangeNotifier {
   String _address = '';
   double _lastGeotaggedLat = 0.0;
   double _lastGeotaggedLng = 0.0;
+  LocationTrackingMode _trackingMode = LocationTrackingMode.balanced;
 
   /// Invoked on every location update. The driver cockpit uses this to publish
   /// telemetry to the backend while a trip is active.
@@ -140,8 +143,50 @@ class LocationProvider extends ChangeNotifier {
   Future<bool> requestBackgroundPermission() =>
       _locationService.requestBackgroundPermission();
 
-  void startBroadcaster() {
-    _locationService.startBroadcasting();
+  LocationTrackingMode get trackingMode => _trackingMode;
+
+  /// Sets adaptive GPS polling mode to preserve battery.
+  /// Use [LocationTrackingMode.highAccuracy] during active trips or online driver navigation;
+  /// use [LocationTrackingMode.balanced] during idle map browsing or rider destination entry.
+  void setTrackingMode(LocationTrackingMode mode) {
+    if (_trackingMode == mode) return;
+    _trackingMode = mode;
+    if (_isBroadcasting) {
+      if (mode == LocationTrackingMode.idle) {
+        _locationService.stopLiveTracking();
+      } else {
+        _locationService.startLiveTracking(
+          mode: mode == LocationTrackingMode.highAccuracy
+              ? 'high_accuracy'
+              : 'balanced',
+        );
+      }
+    }
+  }
+
+  /// Pauses continuous satellite tracking when the app is obscured/backgrounded.
+  void pauseTracking() {
+    _locationService.stopLiveTracking();
+  }
+
+  /// Resumes adaptive tracking when returning to foreground.
+  void resumeTracking() {
+    if (_trackingMode != LocationTrackingMode.idle && _isBroadcasting) {
+      _locationService.startLiveTracking(
+        mode: _trackingMode == LocationTrackingMode.highAccuracy
+            ? 'high_accuracy'
+            : 'balanced',
+      );
+    }
+  }
+
+  void startBroadcaster({LocationTrackingMode mode = LocationTrackingMode.balanced}) {
+    _trackingMode = mode;
+    _locationService.startLiveTracking(
+      mode: mode == LocationTrackingMode.highAccuracy
+          ? 'high_accuracy'
+          : 'balanced',
+    );
     _isBroadcasting = true;
     notifyListeners();
   }

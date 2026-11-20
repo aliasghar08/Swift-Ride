@@ -43,8 +43,30 @@ class NativePlatformMap extends StatefulWidget {
   State<NativePlatformMap> createState() => _NativePlatformMapState();
 }
 
-class _NativePlatformMapState extends State<NativePlatformMap> {
+class _NativePlatformMapState extends State<NativePlatformMap> with WidgetsBindingObserver {
   NativeMapController? _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_controller == null) return;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      _controller!.onPause();
+    } else if (state == AppLifecycleState.resumed) {
+      _controller!.onResume();
+    }
+  }
 
   Map<String, dynamic> get _creationParams => {
         'initialLat': widget.initialCenter.latitude,

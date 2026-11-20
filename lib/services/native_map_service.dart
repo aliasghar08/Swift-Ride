@@ -545,6 +545,24 @@ class NativeMapController {
     }
   }
 
+  Future<void> onPause() async {
+    try {
+      await _channel.invokeMethod('onPause');
+    } catch (_) {}
+  }
+
+  Future<void> onResume() async {
+    try {
+      await _channel.invokeMethod('onResume');
+    } catch (_) {}
+  }
+
+  Future<void> onLowMemory() async {
+    try {
+      await _channel.invokeMethod('onLowMemory');
+    } catch (_) {}
+  }
+
   void dispose() {}
 }
 

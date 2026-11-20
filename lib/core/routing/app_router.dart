@@ -75,6 +75,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
         // Load the real driver profile and earnings. The cockpit previously
         // showed a fabricated driver with invented takings.
         driverProv.loadForUser(auth.currentUser.id);
+      } else {
+        // Cancel active driver snapshot streams immediately when in Rider mode
+        rideProv.stopWatchingAvailableRides();
       }
       // Restore an in-flight trip after a relaunch, so backgrounding the app
       // mid-ride does not lose the live trip.

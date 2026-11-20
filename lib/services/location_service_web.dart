@@ -211,8 +211,12 @@ class LocationService {
     return r.point;
   }
 
-  Future<void> startLiveTracking() async {
+  Future<void> startLiveTracking({String mode = 'balanced'}) async {
     _startWatch();
+  }
+
+  void stopLiveTracking() {
+    stopBroadcasting();
   }
 
   void _startWatch() {

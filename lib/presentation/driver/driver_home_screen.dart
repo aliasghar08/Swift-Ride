@@ -7,6 +7,7 @@ import '../../core/theme/design_tokens.dart';
 import '../common/ai_consent_dialog.dart';
 import '../common/confirm_action.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/geohash_util.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -55,6 +56,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   LocationProvider? _locProv;
   RideProvider? _rideProv;
   DateTime _lastTelemetryPublish = DateTime.fromMillisecondsSinceEpoch(0);
+  double _lastPublishedLat = 0.0;
+  double _lastPublishedLng = 0.0;
   GoogleMapController? _mapController;
   bool _isMapPanned = false;
   bool _is3DNavigationMode = true;
@@ -65,7 +68,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   String? _riderPhoneForRiderId;
 
   /// Native GPS arrives far more often than we need to write, so throttle.
-  static const Duration _telemetryInterval = Duration(seconds: 5);
+  static const Duration _telemetryInterval = Duration(seconds: 4);
 
   @override
   void initState() {
@@ -110,12 +113,22 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   /// Sends the driver's real position to the backend while a trip is active
   /// and smoothly follows the vehicle in 3D perspective mode.
+  /// Throttled by both distance (>= 10m) and time (>= 4s) to avoid redundant radio wakeups.
   void _publishTelemetry(double latitude, double longitude, double heading) {
     final activeRide = _rideProv?.activeRide;
     if (activeRide != null) {
       final now = DateTime.now();
-      if (now.difference(_lastTelemetryPublish) >= _telemetryInterval) {
+      final distMeters = _lastPublishedLat == 0.0
+          ? 999.0
+          : GeohashUtil.distanceKm(_lastPublishedLat, _lastPublishedLng, latitude, longitude) * 1000.0;
+      final timeElapsed = now.difference(_lastTelemetryPublish) >= _telemetryInterval;
+
+      // Throttle: upload if driver moved >= 10 meters OR if >= 4s elapsed AND moved >= 2m
+      if ((distMeters >= 10.0 && now.difference(_lastTelemetryPublish) >= const Duration(seconds: 2)) ||
+          (timeElapsed && distMeters >= 2.0)) {
         _lastTelemetryPublish = now;
+        _lastPublishedLat = latitude;
+        _lastPublishedLng = longitude;
         _rideService.publishDriverLocation(
           latitude: latitude,
           longitude: longitude,

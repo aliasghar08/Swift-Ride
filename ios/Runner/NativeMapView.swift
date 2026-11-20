@@ -272,6 +272,15 @@ class NativeMapView: NSObject, FlutterPlatformView, GMSMapViewDelegate {
         result(false)
       }
 
+    case "onPause":
+      result(true)
+
+    case "onResume":
+      result(true)
+
+    case "onLowMemory":
+      result(true)
+
     default:
       result(FlutterMethodNotImplemented)
     }

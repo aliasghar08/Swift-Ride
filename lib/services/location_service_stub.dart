@@ -40,7 +40,9 @@ class LocationService {
     Duration timeout = const Duration(seconds: 15),
   }) async => null;
 
-  Future<void> startLiveTracking() async {}
+  Future<void> startLiveTracking({String mode = 'balanced'}) async {}
+
+  void stopLiveTracking() {}
 
   void startBroadcasting({
     Duration interval = const Duration(seconds: 3),

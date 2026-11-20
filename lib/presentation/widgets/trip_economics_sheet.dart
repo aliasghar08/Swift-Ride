@@ -153,8 +153,12 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final vType = _econ.vehicleType;
 
-    return Container(
-      decoration: BoxDecoration(
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Container(
+          decoration: BoxDecoration(
         color: isDark ? const Color(0xFF131927) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         boxShadow: [
@@ -327,7 +331,9 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
+                        Wrap(
+                          spacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text(
                               'LIVE PETROL PRICE: ',
@@ -846,7 +852,9 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildFormulaStep({

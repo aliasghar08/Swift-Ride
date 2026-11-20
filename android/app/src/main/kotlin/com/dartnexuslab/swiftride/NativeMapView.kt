@@ -287,6 +287,21 @@ class NativeMapView(
                 }
             }
 
+            "onPause" -> {
+                try { mapViewInstance?.onPause() } catch (_: Exception) {}
+                result.success(true)
+            }
+
+            "onResume" -> {
+                try { mapViewInstance?.onResume() } catch (_: Exception) {}
+                result.success(true)
+            }
+
+            "onLowMemory" -> {
+                try { mapViewInstance?.onLowMemory() } catch (_: Exception) {}
+                result.success(true)
+            }
+
             else -> result.notImplemented()
         }
     }

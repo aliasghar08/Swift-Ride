@@ -14,6 +14,9 @@ import android.os.Looper
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
+import com.google.android.gms.location.LocationCallback
+import com.google.android.gms.location.LocationRequest
+import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -35,6 +38,9 @@ class NativeLocationService(
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(activity)
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var locationCallback: LocationCallback? = null
+    private var primaryChannel: MethodChannel? = null
+    private var altChannel: MethodChannel? = null
 
     companion object {
         const val PERMISSION_REQUEST_CODE = 1001
@@ -44,8 +50,12 @@ class NativeLocationService(
 
         fun registerWith(messenger: BinaryMessenger, activity: Activity): NativeLocationService {
             val service = NativeLocationService(activity)
-            MethodChannel(messenger, PRIMARY_CHANNEL).setMethodCallHandler(service)
-            MethodChannel(messenger, ALT_CHANNEL).setMethodCallHandler(service)
+            val pChan = MethodChannel(messenger, PRIMARY_CHANNEL)
+            val aChan = MethodChannel(messenger, ALT_CHANNEL)
+            service.primaryChannel = pChan
+            service.altChannel = aChan
+            pChan.setMethodCallHandler(service)
+            aChan.setMethodCallHandler(service)
             return service
         }
     }
@@ -144,7 +154,14 @@ class NativeLocationService(
                 fetchCurrentLocation(result)
             }
 
-            "startLocationUpdates", "stopLocationUpdates" -> {
+            "startLocationUpdates" -> {
+                val mode = call.argument<String>("mode") ?: "balanced"
+                startContinuousUpdates(mode)
+                result.success(true)
+            }
+
+            "stopLocationUpdates" -> {
+                stopContinuousUpdates()
                 result.success(true)
             }
 
@@ -406,5 +423,45 @@ class NativeLocationService(
             "timestamp" to loc.time.toDouble(),
             "isMock" to if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) loc.isMock else false
         )
+    }
+
+    private fun startContinuousUpdates(mode: String) {
+        if (!hasLocationPermission()) return
+        stopContinuousUpdates()
+
+        val isHighAccuracy = mode == "high_accuracy"
+        val interval = if (isHighAccuracy) 2000L else 12000L
+        val minDistance = if (isHighAccuracy) 5f else 20f
+        val priority = if (isHighAccuracy) Priority.PRIORITY_HIGH_ACCURACY else Priority.PRIORITY_BALANCED_POWER_ACCURACY
+
+        val request = LocationRequest.Builder(priority, interval)
+            .setMinUpdateIntervalMillis(interval / 2)
+            .setMinUpdateDistanceMeters(minDistance)
+            .build()
+
+        val callback = object : LocationCallback() {
+            override fun onLocationResult(locationResult: LocationResult) {
+                val loc = locationResult.lastLocation ?: return
+                val payload = serializeLocation(loc)
+                primaryChannel?.invokeMethod("onLocationUpdate", payload)
+                altChannel?.invokeMethod("onLocationUpdate", payload)
+            }
+        }
+        locationCallback = callback
+
+        try {
+            fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
+        } catch (_: SecurityException) {} catch (_: Exception) {}
+    }
+
+    private fun stopContinuousUpdates() {
+        locationCallback?.let {
+            try { fusedClient.removeLocationUpdates(it) } catch (_: Exception) {}
+        }
+        locationCallback = null
+    }
+
+    fun onDestroy() {
+        stopContinuousUpdates()
     }
 }

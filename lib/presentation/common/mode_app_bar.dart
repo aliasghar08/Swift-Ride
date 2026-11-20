@@ -264,11 +264,14 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
         final user = auth.currentUser;
         final isUserSignedIn = auth.isAuthenticated || user.phone.isNotEmpty;
         return SafeArea(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(ctx).size.height * 0.85,
-            ),
-            child: SingleChildScrollView(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: 520,
+                maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+              ),
+              child: SingleChildScrollView(
               padding: EdgeInsets.all(layout.scale(20)),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -625,7 +628,8 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
             ),
           ),
         ),
-      );
+      ),
+    );
       },
     );
   }

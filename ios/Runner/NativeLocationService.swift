@@ -137,13 +137,18 @@ public class NativeLocationService: NSObject, CLLocationManagerDelegate {
             }
 
         case "startLocationUpdates":
+            let mode = (call.arguments as? [String: Any])?["mode"] as? String ?? "balanced"
+            let isHighAccuracy = (mode == "high_accuracy")
+            locationManager.desiredAccuracy = isHighAccuracy ? kCLLocationAccuracyBest : kCLLocationAccuracyNearestTenMeters
+            locationManager.distanceFilter = isHighAccuracy ? 5.0 : 20.0
+
             let status = locationManager.authorizationStatus
             if status == .authorizedAlways {
                 if let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String],
                    modes.contains("location") {
-                    locationManager.allowsBackgroundLocationUpdates = true
+                    locationManager.allowsBackgroundLocationUpdates = isHighAccuracy
                     if #available(iOS 11.0, *) {
-                        locationManager.showsBackgroundLocationIndicator = true
+                        locationManager.showsBackgroundLocationIndicator = isHighAccuracy
                     }
                 }
             }

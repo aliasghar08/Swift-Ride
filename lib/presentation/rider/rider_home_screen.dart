@@ -751,7 +751,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     _mapCenterLocation = coords;
                     _cameraIdleDebounce?.cancel();
                     final seq = ++_pinReverseGeocodeSeq;
-                    _cameraIdleDebounce = Timer(const Duration(milliseconds: 300), () async {
+                    _cameraIdleDebounce = Timer(const Duration(milliseconds: 400), () async {
                       if (!mounted) return;
                       try {
                         final address = await MapService.instance.reverseGeocode(
@@ -3523,16 +3523,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       builder: (ctx) {
         final c = AppColors.of(ctx);
         return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              layout.horizontalPadding,
-              0,
-              layout.horizontalPadding,
-              layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 16,
-            ),
-            child: GlassContainer(
-              borderRadius: 28,
-              blur: 24,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  layout.horizontalPadding,
+                  0,
+                  layout.horizontalPadding,
+                  layout.safePadding.bottom > 0 ? layout.safePadding.bottom + 8 : 16,
+                ),
+                child: GlassContainer(
+                  borderRadius: 28,
+                  blur: 24,
               backgroundColor: c.surface,
               padding: const EdgeInsets.all(22),
               child: Column(
@@ -3735,10 +3739,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
-  }
+  },
+);
+}
 
   Widget _buildOfferCard(
     ResponsiveLayoutHelper layout,
@@ -3867,9 +3873,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: GlassContainer(
+      builder: (ctx) => Align(
+        alignment: Alignment.bottomCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: GlassContainer(
           borderRadius: 28,
           blur: 24,
           padding: const EdgeInsets.all(20),
@@ -3913,8 +3923,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  ),
+);
+}
 
   Widget _paymentOption(
     BuildContext context,
@@ -4268,27 +4280,32 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         ride.status == RideStatus.inProgress;
     final displayFare = (ride.acceptedFare ?? ride.offeredFare).toInt();
 
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.of(context).surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetCtx) {
-        final c = AppColors.of(sheetCtx);
-        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
-        return StatefulBuilder(
-          builder: (sheetCtx, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: layout.scale(20),
-                  right: layout.scale(20),
-                  top: layout.scale(14),
-                  bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + layout.scale(18),
-                ),
-                child: SingleChildScrollView(
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: AppColors.of(context).surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (sheetCtx) {
+          final c = AppColors.of(sheetCtx);
+          final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+          return StatefulBuilder(
+            builder: (sheetCtx, setSheetState) {
+              return SafeArea(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 520),
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        left: layout.scale(20),
+                        right: layout.scale(20),
+                        top: layout.scale(14),
+                        bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + layout.scale(18),
+                      ),
+                      child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4596,12 +4613,17 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         );
       },
     );
+  },
+);
+  } finally {
+    customNoteController.dispose();
   }
+}
 
   void _showSignInPromptDialog(BuildContext context) {
     showDialog(

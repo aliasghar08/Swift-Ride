@@ -556,7 +556,10 @@ class RiderViewModel extends ChangeNotifier {
   }
 
   void _recalculateRouteIfPossible() {
-    autoFetchRoute();
+    _routeDebounce?.cancel();
+    _routeDebounce = Timer(const Duration(milliseconds: 400), () {
+      autoFetchRoute();
+    });
   }
 
   void selectRoute(int index) {

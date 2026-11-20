@@ -242,6 +242,26 @@ import Network
            UIApplication.shared.canOpenURL(url) {
           UIApplication.shared.open(url, options: [:]) { result($0) }
         } else { result(false) }
+      case "shareText":
+        if let args = call.arguments as? [String: Any],
+           let text = args["text"] as? String,
+           !text.isEmpty {
+          let activityVC = UIActivityViewController(activityItems: [text], applicationActivities: nil)
+          if let rootVC = UIApplication.shared.delegate?.window??.rootViewController {
+            if let popover = activityVC.popoverPresentationController {
+              popover.sourceView = rootVC.view
+              popover.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
+              popover.permittedArrowDirections = []
+            }
+            rootVC.present(activityVC, animated: true) {
+              result(true)
+            }
+          } else {
+            result(false)
+          }
+        } else {
+          result(false)
+        }
       default:
         result(FlutterMethodNotImplemented)
       }

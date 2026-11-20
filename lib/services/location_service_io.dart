@@ -295,10 +295,13 @@ class LocationService {
     return completer.future;
   }
 
-  Future<void> startLiveTracking() async {
-    await _invokeSafe(NativeChannelConstants.methodStartLocationUpdates);
+  Future<void> startLiveTracking({String mode = 'balanced'}) async {
+    await _invokeSafe(
+      NativeChannelConstants.methodStartLocationUpdates,
+      {'mode': mode},
+    );
 
-    // Fetch immediately so callers do not wait 4s for the first tick
+    // Fetch immediately so callers do not wait for the first native tick
     fetchCurrentPositionDetailed().then((r) {
       if (r.isOk) {
         _locationStreamController.add(
@@ -314,8 +317,14 @@ class LocationService {
       }
     });
 
+    // Gentle heartbeat fallback (12s for balanced/idle, 3s for high accuracy)
+    // rather than aggressive 4s polling, saving substantial battery & CPU.
+    final interval = mode == 'high_accuracy'
+        ? const Duration(seconds: 3)
+        : const Duration(seconds: 12);
+
     _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+    _pollingTimer = Timer.periodic(interval, (_) async {
       final r = await fetchCurrentPositionDetailed();
       if (r.isOk) {
         _locationStreamController.add(

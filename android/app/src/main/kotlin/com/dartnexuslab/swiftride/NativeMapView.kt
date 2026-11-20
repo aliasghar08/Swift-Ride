@@ -33,7 +33,8 @@ class NativeMapView(
     args: Map<String, Any?>?
 ) : PlatformView, MethodChannel.MethodCallHandler, OnMapReadyCallback {
 
-    private val mapView: MapView = MapView(context)
+    private val containerView: View
+    private var mapViewInstance: MapView? = null
     private val channel: MethodChannel =
         MethodChannel(messenger, "com.swiftride.app/native_map_view_$viewId")
 
@@ -52,15 +53,28 @@ class NativeMapView(
     init {
         channel.setMethodCallHandler(this)
         try {
-            MapsInitializer.initialize(context)
-        } catch (_: Exception) {}
-        mapView.onCreate(null)
-        mapView.onStart()
-        mapView.onResume()
-        mapView.getMapAsync(this)
+            MapsInitializer.initialize(context, MapsInitializer.Renderer.LATEST) { }
+        } catch (_: Exception) {
+            try {
+                MapsInitializer.initialize(context)
+            } catch (_: Exception) {}
+        }
+
+        var mv: MapView? = null
+        try {
+            mv = MapView(context)
+            mv.onCreate(null)
+            mv.onStart()
+            mv.onResume()
+            mv.getMapAsync(this)
+        } catch (e: Exception) {
+            android.util.Log.e("NativeMapView", "Failed to initialize MapView: ${e.message}", e)
+        }
+        mapViewInstance = mv
+        containerView = mv ?: View(context)
     }
 
-    override fun getView(): View = mapView
+    override fun getView(): View = containerView
 
     override fun onMapReady(map: GoogleMap) {
         googleMap = map
@@ -285,9 +299,10 @@ class NativeMapView(
             markerHues.clear()
             polylines.values.forEach { it.remove() }
             polylines.clear()
-            mapView.onPause()
-            mapView.onStop()
-            mapView.onDestroy()
+            mapViewInstance?.onPause()
+            mapViewInstance?.onStop()
+            mapViewInstance?.onDestroy()
+            mapViewInstance = null
         } catch (_: Exception) {}
     }
 }

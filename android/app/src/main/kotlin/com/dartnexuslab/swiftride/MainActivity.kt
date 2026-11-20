@@ -51,8 +51,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
-            tts?.language = Locale.US
-            isTtsReady = true
+            try {
+                tts?.language = Locale.US
+                isTtsReady = true
+            } catch (_: Exception) {}
         }
     }
 
@@ -423,29 +425,31 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NotificationManager::class.java)
+            try {
+                val nm = getSystemService(NotificationManager::class.java)
 
-            nm?.createNotificationChannel(
-                NotificationChannel(
-                    "swiftride_alerts",
-                    "SwiftRide Alerts",
-                    NotificationManager.IMPORTANCE_HIGH
-                ).apply {
-                    description = "Critical ride updates and safety alerts"
-                }
-            )
+                nm?.createNotificationChannel(
+                    NotificationChannel(
+                        "swiftride_alerts",
+                        "SwiftRide Alerts",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Critical ride updates and safety alerts"
+                    }
+                )
 
-            nm?.createNotificationChannel(
-                NotificationChannel(
-                    "swiftride_emergency",
-                    "Emergency SOS",
-                    NotificationManager.IMPORTANCE_MAX
-                ).apply {
-                    description = "Emergency SOS broadcasts. Do not disable."
-                    enableVibration(true)
-                    setShowBadge(true)
-                }
-            )
+                nm?.createNotificationChannel(
+                    NotificationChannel(
+                        "swiftride_emergency",
+                        "Emergency SOS",
+                        NotificationManager.IMPORTANCE_MAX
+                    ).apply {
+                        description = "Emergency SOS broadcasts. Do not disable."
+                        enableVibration(true)
+                        setShowBadge(true)
+                    }
+                )
+            } catch (_: Exception) {}
         }
     }
 

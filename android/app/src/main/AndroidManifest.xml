@@ -16,7 +16,15 @@
     <application
         android:label="Swift Ride"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true">
+
+        <!-- Disable Impeller on Android to prevent native Vulkan/Mali GPU driver
+             crashes on budget devices (Infinix Hot series, Xiaomi Redmi, MediaTek chips) -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
 
         <!-- Google Maps Android API Key
              Injected at build time from android/local.properties (git-ignored) or the

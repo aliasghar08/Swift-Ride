@@ -26,8 +26,22 @@ import 'ai/ai.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Guard all global Flutter/framework errors so UI exceptions don't crash the engine
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('[FlutterError] ${details.exceptionAsString()}');
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[PlatformDispatcherError] $error');
+    return true; // Handled, prevent hard crash
+  };
+
   if (!kIsWeb) {
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    try {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    } catch (fcmErr) {
+      debugPrint('[FCM] Background handler registration notice: $fcmErr');
+    }
   }
 
   try {
@@ -35,13 +49,16 @@ Future<void> main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
-    // --- NEW: Ensure an authenticated session exists for Cloud Functions ---
-    // This prevents the 'unauthenticated' HttpsError when calling getAutocomplete
+    // Non-blocking anonymous auth: ensure we do NOT block runApp() on network calls,
+    // which causes watchdog ANRs / startup crashes on budget Infinix/Xiaomi devices with slow mobile data.
     if (FirebaseAuth.instance.currentUser == null) {
-      debugPrint('[Auth] No active session found. Signing in anonymously...');
-      await FirebaseAuth.instance.signInAnonymously();
+      debugPrint('[Auth] No active session found. Triggering background anonymous auth...');
+      FirebaseAuth.instance.signInAnonymously().then((_) {
+        debugPrint('[Auth] Background anonymous sign-in completed');
+      }).catchError((authErr) {
+        debugPrint('[Auth] Background anonymous sign-in notice (non-fatal): $authErr');
+      });
     }
-    // -----------------------------------------------------------------------
 
     if (!kIsWeb) {
       FirebaseFirestore.instance.settings = const Settings(
@@ -70,19 +87,23 @@ Future<void> main() async {
       debugPrint('[AppCheck] Non-fatal App Check initialization notice: $appCheckError');
     }
 
-    // Fetch live fuel rates from internet on app launch (OGRA Pakistan feed)
+    // Fetch live fuel rates asynchronously in background (OGRA Pakistan feed)
     FuelPriceService().fetchLivePrices();
 
-    // Initialize Google AdMob with safe fallback for testing
-    await AdService.instance.initialize();
+    // Initialize Google AdMob safely in background without blocking runApp()
+    AdService.instance.initialize().catchError((adErr) {
+      debugPrint('[AdMob] AdService background init notice: $adErr');
+    });
   } catch (e) {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }
 
   String startRoute = '/login';
   try {
-    await AiConsentDialog.isConsentGranted();
-    final cachedProfile = await NativeStorageService().getString('cached_user_profile');
+    await AiConsentDialog.isConsentGranted().timeout(const Duration(milliseconds: 500));
+    final cachedProfile = await NativeStorageService()
+        .getString('cached_user_profile')
+        .timeout(const Duration(milliseconds: 500));
     if (cachedProfile != null && cachedProfile.isNotEmpty) {
       final hasVerifiedPhone = cachedProfile.contains('"phone":"+') ||
           cachedProfile.contains('"phone": "+') ||

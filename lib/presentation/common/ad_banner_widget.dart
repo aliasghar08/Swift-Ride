@@ -41,11 +41,15 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     }
 
     if (AdService.instance.isInitialized) {
+      debugPrint('[AdBannerWidget] AdService already initialized; loading banner immediately.');
       _loadBanner();
     } else {
-      // Wait for deferred AdMob initialization so Chromium WebView never blocks cold startup
+      debugPrint('[AdBannerWidget] Waiting for background AdService initialization before creating banner...');
       _deferTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted) _loadBanner();
+        if (mounted) {
+          debugPrint('[AdBannerWidget] Defer timer expired; triggering banner load.');
+          _loadBanner();
+        }
       });
     }
   }
@@ -55,8 +59,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
       if (!AdService.instance.isInitialized) {
-        // Ensure MobileAds.instance.initialize() has completed on its background thread
-        // before creating an AdView (WebView) on the UI thread, preventing main-thread ANRs.
+        debugPrint('[AdBannerWidget] AdService not yet initialized; requesting initialization now.');
         AdService.instance.initialize().then((_) {
           if (mounted && AdService.instance.isInitialized) {
             _createBannerAd();
@@ -73,16 +76,18 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
   void _createBannerAd() {
     if (kIsWeb || !mounted || _bannerAd != null) return;
     try {
+      debugPrint('[AdBannerWidget] Creating BannerAd with adUnitId: ${AdService.instance.bannerAdUnitId}');
       _bannerAd = BannerAd(
         adUnitId: AdService.instance.bannerAdUnitId,
         size: AdSize.banner,
         request: const AdRequest(),
         listener: BannerAdListener(
-          onAdLoaded: (_) {
+          onAdLoaded: (ad) {
+            debugPrint('[AdBannerWidget] Banner ad loaded successfully (${ad.responseInfo?.responseId}). Rendering widget.');
             if (mounted) setState(() => _isLoaded = true);
           },
           onAdFailedToLoad: (ad, error) {
-            debugPrint('[AdBannerWidget] Banner failed to load: ${error.message}');
+            debugPrint('[AdBannerWidget] Banner failed to load: code=${error.code}, message=${error.message}');
             ad.dispose();
             _bannerAd = null;
             if (mounted) setState(() => _isLoaded = false);

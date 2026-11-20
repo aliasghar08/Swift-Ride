@@ -76,7 +76,9 @@ Future<void> main() async {
   // Defer non-critical background services until 3 seconds after the first frame has rendered,
   // ensuring Chromium WebView (AdMob) and HTTP scraping never contend with cold startup.
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    debugPrint('[Main] First UI frame rendered successfully. Scheduling background services in 3s...');
     Future.delayed(const Duration(seconds: 3), () {
+      debugPrint('[Main] Triggering deferred FuelPriceService & AdService background initialization...');
       FuelPriceService().fetchLivePrices();
       AdService.instance.initialize().catchError((adErr) {
         debugPrint('[AdMob] AdService background init notice: $adErr');

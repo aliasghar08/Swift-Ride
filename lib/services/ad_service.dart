@@ -23,16 +23,23 @@ class AdService {
   InterstitialAd? _postRideInterstitial;
   bool _isLoadingInterstitial = false;
 
-  /// Initializes the Google Mobile Ads SDK safely.
+  /// Initializes the Google Mobile Ads SDK safely in the background.
   Future<void> initialize() async {
     if (kIsWeb || _initialized || _initializing) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
       _initializing = true;
-      await MobileAds.instance.initialize();
+      debugPrint('[AdService] Starting background MobileAds initialization...');
+      final initStatus = await MobileAds.instance.initialize();
       _initialized = true;
+      debugPrint('[AdService] MobileAds initialized successfully. Adapters count: ${initStatus.adapterStatuses.length}');
+      initStatus.adapterStatuses.forEach((key, status) {
+        debugPrint('[AdService] Adapter [$key]: state=${status.state}, desc=${status.description}');
+      });
+
       // Delay interstitial preloading by 10 seconds so it never contends with initial app interaction
       Future.delayed(const Duration(seconds: 10), () {
+        debugPrint('[AdService] Triggering background preloading of post-ride interstitial ad...');
         loadPostRideInterstitial();
       });
     } catch (e) {
@@ -69,11 +76,13 @@ class AdService {
   /// Preloads a post-trip interstitial ad in the background.
   void loadPostRideInterstitial() {
     if (!_initialized || kIsWeb || _isLoadingInterstitial || _postRideInterstitial != null) {
+      debugPrint('[AdService] Skip interstitial load: initialized=$_initialized, loading=$_isLoadingInterstitial, ready=${_postRideInterstitial != null}');
       return;
     }
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
       _isLoadingInterstitial = true;
+      debugPrint('[AdService] Loading interstitial ad (Unit ID: $interstitialAdUnitId)...');
 
       InterstitialAd.load(
         adUnitId: interstitialAdUnitId,
@@ -82,14 +91,17 @@ class AdService {
           onAdLoaded: (ad) {
             _isLoadingInterstitial = false;
             _postRideInterstitial = ad;
+            debugPrint('[AdService] Interstitial ad loaded successfully into memory.');
             _postRideInterstitial?.fullScreenContentCallback =
                 FullScreenContentCallback(
               onAdDismissedFullScreenContent: (ad) {
+                debugPrint('[AdService] Interstitial ad dismissed by user. Disposing and reloading.');
                 ad.dispose();
                 _postRideInterstitial = null;
                 loadPostRideInterstitial();
               },
               onAdFailedToShowFullScreenContent: (ad, error) {
+                debugPrint('[AdService] Interstitial ad failed to show: ${error.message}. Reloading.');
                 ad.dispose();
                 _postRideInterstitial = null;
                 loadPostRideInterstitial();
@@ -99,7 +111,7 @@ class AdService {
           onAdFailedToLoad: (error) {
             _isLoadingInterstitial = false;
             _postRideInterstitial = null;
-            debugPrint('[AdService] Interstitial failed to load: ${error.message}');
+            debugPrint('[AdService] Interstitial failed to load: code=${error.code}, message=${error.message}');
           },
         ),
       );
@@ -112,6 +124,7 @@ class AdService {
   /// Displays the post-ride completion interstitial if preloaded.
   void showPostRideInterstitial({VoidCallback? onDismissed}) {
     if (_postRideInterstitial != null) {
+      debugPrint('[AdService] Displaying preloaded post-ride interstitial ad.');
       final ad = _postRideInterstitial!;
       if (onDismissed != null) {
         final prevCallback = ad.fullScreenContentCallback;
@@ -129,6 +142,7 @@ class AdService {
       ad.show();
       _postRideInterstitial = null;
     } else {
+      debugPrint('[AdService] No interstitial preloaded; proceeding immediately without ad.');
       onDismissed?.call();
     }
   }

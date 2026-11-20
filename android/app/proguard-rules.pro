@@ -43,3 +43,7 @@
 -keep class org.tensorflow.lite.** { *; }
 -dontwarn org.tensorflow.lite.**
 
+# 7. Google Play Core / Deferred Components
+-dontwarn com.google.android.play.core.**
+
+

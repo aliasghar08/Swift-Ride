@@ -16,16 +16,16 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
 import android.view.WindowManager
+import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
-import androidx.core.view.WindowCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.util.Locale
 import java.util.UUID
 
-class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
+class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
     private val paymentChannel = "com.swiftride.app/payment"
     private val safetyChannel = "com.swiftride.app/safety"
     private val deviceChannel = "com.swiftride.app/device"
@@ -42,8 +42,8 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
     private var nativeMapService: NativeMapService? = null
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
     }
 
     override fun onRequestPermissionsResult(
@@ -164,11 +164,11 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             when (call.method) {
                 "setKeepScreenOn" -> {
                     val keepOn = call.argument<Boolean>("keepOn") ?: true
-                    activity?.runOnUiThread {
+                    runOnUiThread {
                         if (keepOn) {
-                            activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         } else {
-                            activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                         }
                     }
                     result.success(true)

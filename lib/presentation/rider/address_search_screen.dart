@@ -13,7 +13,7 @@ import '../../services/map_service.dart';
 import '../common/prominent_disclosure_dialog.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
-import '../common/ad_banner_widget.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 
 /// Hybrid signal returned when rider chooses to select location on map.
 /// Inherits from [LocationPoint] for compatibility with [Navigator.push<LocationPoint>]
@@ -284,7 +284,7 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
     return Scaffold(
       backgroundColor: c.canvas,
-      bottomNavigationBar: const SafeArea(top: false, child: AdBannerWidget()),
+      bottomNavigationBar: const ReservedBottomAdBar(),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

@@ -10,7 +10,7 @@ import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
-import '../common/ad_banner_widget.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 
 /// Screen displaying the user's historical trips with complete location, route,
 /// fare, and timestamp metadata queried via Firestore composite indexes.
@@ -78,7 +78,7 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
 
     return Scaffold(
       backgroundColor: c.mapChrome,
-      bottomNavigationBar: const SafeArea(top: false, child: AdBannerWidget()),
+      bottomNavigationBar: const ReservedBottomAdBar(),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,

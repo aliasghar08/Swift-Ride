@@ -13,6 +13,7 @@ import '../../presentation/common/shared_trip_screen.dart';
 import '../../ai/ai.dart';
 import '../../presentation/auth/phone_auth_screen.dart';
 import '../../presentation/rider/ride_history_screen.dart';
+import '../../presentation/common/reserved_bottom_ad_bar.dart';
 
 /// The central shell displaying the active role view (Rider, Driver, or Admin)
 /// with the persistent top ModeAppBar.
@@ -115,6 +116,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         return Scaffold(
           appBar: const ModeAppBar(title: 'SwiftRide'),
           body: activeView,
+          bottomNavigationBar: const ReservedBottomAdBar(),
         );
       },
     );

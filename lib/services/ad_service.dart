@@ -16,6 +16,9 @@ class AdService {
   static const String liveAndroidBannerId = 'ca-app-pub-9402443776639153/2568735153';
   static const String liveAndroidInterstitialId = 'ca-app-pub-9402443776639153/3739839885';
 
+  static const String testAndroidBannerId = 'ca-app-pub-3940256099942544/6300978111';
+  static const String testAndroidInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
+
   bool _initialized = false;
   bool _initializing = false;
   bool get isInitialized => _initialized;

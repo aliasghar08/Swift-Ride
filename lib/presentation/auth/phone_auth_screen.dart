@@ -9,6 +9,7 @@ import '../../core/provider/custom_provider.dart';
 import '../../core/routing/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/utils/phone_number_formatter.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
@@ -307,12 +308,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     if (cleaned == '5550100001' || cleaned == '5550100002') {
       return '+1$cleaned';
     }
-    if (cleaned.startsWith('0')) {
-      cleaned = cleaned.substring(1);
-    }
-    if (cleaned.startsWith('92')) {
-      cleaned = cleaned.substring(2);
-    }
+    cleaned = PhoneNumberFormatter.clean(cleaned);
     return '+92$cleaned';
   }
 
@@ -1123,8 +1119,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                       _handlePhoneInputChanged();
                     },
                     inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(11),
+                      const PhoneNumberFormatter(),
                     ],
                     style: TextStyle(
                       fontSize: layout.fontSize(15),

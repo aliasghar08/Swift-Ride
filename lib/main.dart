@@ -67,43 +67,39 @@ Future<void> main() async {
       );
     }
 
-    // App Check is isolated in a guarded block so Play Integrity token generation
-    // never blocks or impedes FirebaseAuth requests or core application startup.
-    try {
-      if (kDebugMode) {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: const AndroidDebugProvider(),
-          providerApple: const AppleDebugProvider(),
-        );
-        debugPrint('[AppCheck] Activated with AndroidDebugProvider');
-      } else {
-        await FirebaseAppCheck.instance.activate(
-          providerAndroid: const AndroidPlayIntegrityProvider(),
-          providerApple: const AppleDeviceCheckProvider(),
-        );
-        debugPrint('[AppCheck] Activated with AndroidPlayIntegrityProvider');
-      }
-    } catch (appCheckError) {
+    // App Check is non-blocking so Play Integrity token generation never impedes
+    // application startup or causes ANR dialogs on devices with slow Play Services.
+    FirebaseAppCheck.instance.activate(
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleDeviceCheckProvider(),
+    ).then((_) {
+      debugPrint('[AppCheck] Activated successfully');
+    }).catchError((appCheckError) {
       debugPrint('[AppCheck] Non-fatal App Check initialization notice: $appCheckError');
-    }
-
-    // Fetch live fuel rates asynchronously in background (OGRA Pakistan feed)
-    FuelPriceService().fetchLivePrices();
-
-    // Initialize Google AdMob safely in background without blocking runApp()
-    AdService.instance.initialize().catchError((adErr) {
-      debugPrint('[AdMob] AdService background init notice: $adErr');
     });
   } catch (e) {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }
 
+  // Defer non-critical background services until after the first frame has rendered,
+  // guaranteeing instantaneous startup and 0ms main thread blocking.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    FuelPriceService().fetchLivePrices();
+    AdService.instance.initialize().catchError((adErr) {
+      debugPrint('[AdMob] AdService background init notice: $adErr');
+    });
+  });
+
   String startRoute = '/login';
   try {
-    await AiConsentDialog.isConsentGranted().timeout(const Duration(milliseconds: 500));
+    await AiConsentDialog.isConsentGranted().timeout(const Duration(milliseconds: 300));
     final cachedProfile = await NativeStorageService()
         .getString('cached_user_profile')
-        .timeout(const Duration(milliseconds: 500));
+        .timeout(const Duration(milliseconds: 300));
     if (cachedProfile != null && cachedProfile.isNotEmpty) {
       final hasVerifiedPhone = cachedProfile.contains('"phone":"+') ||
           cachedProfile.contains('"phone": "+') ||

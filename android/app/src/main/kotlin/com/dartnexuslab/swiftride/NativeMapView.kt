@@ -53,7 +53,7 @@ class NativeMapView(
     init {
         channel.setMethodCallHandler(this)
         try {
-            MapsInitializer.initialize(context, MapsInitializer.Renderer.LATEST) { }
+            MapsInitializer.initialize(context, MapsInitializer.Renderer.LEGACY) { }
         } catch (_: Exception) {
             try {
                 MapsInitializer.initialize(context)

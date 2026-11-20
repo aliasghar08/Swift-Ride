@@ -55,6 +55,18 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
         nativeLocationService?.handleRequestPermissionsResult(requestCode, grantResults)
     }
 
+    private fun ensureTts(onReady: () -> Unit) {
+        if (isTtsReady && tts != null) {
+            onReady()
+            return
+        }
+        if (tts == null) {
+            try {
+                tts = TextToSpeech(applicationContext, this)
+            } catch (_: Exception) {}
+        }
+    }
+
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             try {
@@ -66,10 +78,6 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-
-        try {
-            tts = TextToSpeech(this, this)
-        } catch (_: Exception) {}
 
         createNotificationChannel()
 
@@ -413,8 +421,10 @@ class MainActivity : FlutterActivity(), TextToSpeech.OnInitListener {
             when (call.method) {
                 "speakText" -> {
                     val text = call.argument<String>("text") ?: ""
-                    if (isTtsReady && text.isNotBlank()) {
-                        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "swiftride_tts_${System.currentTimeMillis()}")
+                    if (text.isNotBlank()) {
+                        ensureTts {
+                            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "swiftride_tts_${System.currentTimeMillis()}")
+                        }
                     }
                     result.success(true)
                 }

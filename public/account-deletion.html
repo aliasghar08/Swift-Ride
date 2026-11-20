@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account & Data Deletion - SwiftRide</title>
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2563EB;
+      --navy: #0B192C;
+      --card-bg: #1E293B;
+      --accent-cyan: #06B6D4;
+      --accent-green: #10B981;
+      --accent-red: #EF4444;
+      --text-main: #F1F5F9;
+      --text-muted: #94A3B8;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0B132B;
+      color: var(--text-main);
+      line-height: 1.7;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 48px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    .header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #F87171;
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #FFFFFF 0%, #CBD5E1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .meta {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-top: 36px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    h2::before {
+      content: "";
+      display: inline-block;
+      width: 4px;
+      height: 20px;
+      background: var(--accent-red);
+      border-radius: 2px;
+    }
+
+    p {
+      margin-bottom: 16px;
+      color: #CBD5E1;
+      font-size: 15px;
+    }
+
+    ul, ol {
+      margin-bottom: 20px;
+      padding-left: 24px;
+      color: #CBD5E1;
+      font-size: 15px;
+    }
+
+    li {
+      margin-bottom: 10px;
+    }
+
+    .step-box {
+      background: rgba(30, 41, 59, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      margin: 20px 0;
+    }
+
+    .step-box h3 {
+      font-size: 17px;
+      color: #F8FAFC;
+      margin-bottom: 12px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(30, 41, 59, 0.9);
+      color: #F8FAFC;
+      font-weight: 700;
+    }
+
+    td {
+      background: rgba(15, 23, 42, 0.4);
+      color: #CBD5E1;
+    }
+
+    .contact-card {
+      background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%);
+      border: 1px solid rgba(37, 99, 235, 0.3);
+      border-radius: 14px;
+      padding: 24px;
+      margin-top: 36px;
+    }
+
+    .contact-card a {
+      color: #60A5FA;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .contact-card a:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      margin-top: 48px;
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .footer a {
+      color: #60A5FA;
+      text-decoration: none;
+      margin: 0 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">Google Play & App Store Compliance</div>
+      <h1>Account & Data Deletion Policy</h1>
+      <div class="meta">
+        <strong>SwiftRide</strong> (`com.dartnexuslab.swiftride`) • Published by DartNexusLab • Updated November 2026
+      </div>
+    </div>
+
+    <h2>1. Overview</h2>
+    <p>
+      At <strong>SwiftRide</strong> (operated by <strong>DartNexusLab</strong>), we respect your privacy and provide you with complete control over your personal data. In compliance with Google Play Store and Apple App Store user data protection requirements, you may delete your SwiftRide account and all associated personal data at any time.
+    </p>
+
+    <h2>2. How to Delete Your Account</h2>
+
+    <div class="step-box">
+      <h3>Method 1: Instant In-App Deletion (Recommended)</h3>
+      <ol>
+        <li>Open the <strong>SwiftRide</strong> app on your Android or iOS device.</li>
+        <li>Ensure you are logged into your account.</li>
+        <li>Tap your <strong>Profile avatar</strong> in the top-right corner of the Home Screen.</li>
+        <li>Scroll down to the bottom of the profile sheet and tap <span style="color: #EF4444; font-weight: 700;">Delete Account</span>.</li>
+        <li>Read the warning prompt and confirm by tapping <strong>Delete My Account Permanently</strong>.</li>
+        <li>Your account credentials, profile, authentication records, and device tokens will be permanently erased immediately.</li>
+      </ol>
+    </div>
+
+    <div class="step-box">
+      <h3>Method 2: Web / Email Deletion Request (If App is Uninstalled)</h3>
+      <p>If you no longer have the SwiftRide app installed on your smartphone, you can request manual account deletion:</p>
+      <ol>
+        <li>Send an email to: <a href="mailto:aliasgharinnocent@yahoo.com" style="color: #60A5FA; font-weight: 700;">aliasgharinnocent@yahoo.com</a></li>
+        <li>Subject: <strong>Account Deletion Request - SwiftRide</strong></li>
+        <li>Provide your registered mobile phone number (with country code, e.g., <code>+92 300 1234567</code>).</li>
+        <li>Our team will verify ownership via an SMS confirmation code sent to that number.</li>
+        <li>Upon verification, all account records are permanently purged within <strong>7 business days</strong>.</li>
+      </ol>
+    </div>
+
+    <h2>3. Data Categories That Are Permanently Deleted</h2>
+    <p>When your account is deleted, the following data is permanently purged from our servers (Firebase Authentication, Cloud Firestore, Realtime Database, and Cloud Storage):</p>
+    <ul>
+      <li><strong>User Authentication:</strong> Phone number credentials, UID, encrypted authorization tokens.</li>
+      <li><strong>Profile Data:</strong> Full name, profile photo, email address, role (Rider or Driver).</li>
+      <li><strong>Driver Verification Records (Drivers only):</strong> Vehicle registration, CNIC / ID document images, driver license images, vehicle make and model.</li>
+      <li><strong>Location & GPS History:</strong> Saved locations, active driver GPS coordinates, trip telemetry.</li>
+      <li><strong>Device Tokens & Messaging:</strong> Firebase Cloud Messaging (FCM) tokens, in-app chat history.</li>
+      <li><strong>Active Offers & Bids:</strong> Pending fare proposals and active booking drafts.</li>
+    </ul>
+
+    <h2>4. Data Retention Policy</h2>
+    <p>In accordance with statutory tax and financial accounting requirements in Pakistan:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Data Category</th>
+          <th>Reason for Retention</th>
+          <th>Retention Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Financial Transaction Receipts</strong></td>
+          <td>Legal accounting and statutory tax reporting requirements.</td>
+          <td>Retained in anonymized audit tables for up to 90 days, then permanently purged.</td>
+        </tr>
+        <tr>
+          <td><strong>Security & Fraud Prevention Logs</strong></td>
+          <td>Preventing banned users from creating unauthorized accounts after serious safety infractions.</td>
+          <td>Restricted one-way cryptographic hash with zero public or marketing access.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="contact-card">
+      <h3 style="color: #FFFFFF; font-size: 18px; margin-bottom: 8px;">Need Assistance?</h3>
+      <p style="margin-bottom: 8px;">If you have any questions regarding your data or account deletion, reach out to our team:</p>
+      <p>Email: <a href="mailto:aliasgharinnocent@yahoo.com">aliasgharinnocent@yahoo.com</a></p>
+      <p>Address: Jhang, Punjab, Pakistan</p>
+    </div>
+
+    <div class="footer">
+      <a href="privacy-policy.html">Privacy Policy</a> • 
+      <a href="marketing.html">About SwiftRide</a> • 
+      <a href="account-deletion.html">Account Deletion</a>
+      <p style="margin-top: 12px;">© 2026 DartNexusLab. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>

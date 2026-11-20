@@ -195,9 +195,13 @@ class _RealMapViewState extends State<RealMapView> {
     super.initState();
     _currentCenter = widget.initialCenter;
 
-    MapMarkerIcons.ensureLoaded().then((_) {
-      if (mounted) setState(() {});
-    });
+    // Native Android & iOS PlatformViews use native marker descriptors directly;
+    // avoid 4 GPU picture.toImage() PNG encodings on Frame 0 during mobile cold start.
+    if (kIsWeb) {
+      MapMarkerIcons.ensureLoaded().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   @override

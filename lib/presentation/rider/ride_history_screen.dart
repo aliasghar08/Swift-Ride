@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -80,20 +81,32 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         flexibleSpace: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                color: c.surface.withValues(alpha: 0.85),
-                border: Border(
-                  bottom: BorderSide(
-                    color: c.border.withValues(alpha: isDark ? 0.3 : 0.6),
-                    width: 1,
+          child: defaultTargetPlatform != TargetPlatform.android
+              ? BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: c.surface.withValues(alpha: 0.85),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: c.border.withValues(alpha: isDark ? 0.3 : 0.6),
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : Container(
+                  decoration: BoxDecoration(
+                    color: c.surface.withValues(alpha: 0.96),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: c.border.withValues(alpha: isDark ? 0.3 : 0.6),
+                        width: 1,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          ),
         ),
         title: Text(
           isDriver ? 'Driver Trip History' : 'My Ride History',

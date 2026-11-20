@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/provider/custom_provider.dart';
@@ -33,6 +34,26 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final c = AppColors.of(context);
 
+    final useBlur = defaultTargetPlatform != TargetPlatform.android;
+    final barBg = Container(
+      decoration: BoxDecoration(
+        color: useBlur ? c.mapChrome : c.surface.withValues(alpha: 0.96),
+        border: Border(
+          bottom: BorderSide(
+            color: c.border.withValues(alpha: isDark ? 0.5 : 0.8),
+            width: 1,
+          ),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+    );
+
     return AppBar(
       automaticallyImplyLeading: false,
       toolbarHeight: 62,
@@ -40,27 +61,12 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: Colors.transparent,
       elevation: 0,
       flexibleSpace: ClipRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            decoration: BoxDecoration(
-              color: c.mapChrome,
-              border: Border(
-                bottom: BorderSide(
-                  color: c.border.withValues(alpha: isDark ? 0.5 : 0.8),
-                  width: 1,
-                ),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
-                  blurRadius: 12,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: useBlur
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                child: barBg,
+              )
+            : barBg,
       ),
       title: LayoutBuilder(
         builder: (context, constraints) {

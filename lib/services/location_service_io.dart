@@ -141,7 +141,11 @@ class LocationService {
     final res = await _invokeSafe<bool>(
       NativeChannelConstants.methodRequestLocationPermissions,
     );
-    return res ?? false;
+    final granted = res ?? false;
+    if (granted && _isBroadcasting) {
+      unawaited(startLiveTracking());
+    }
+    return granted;
   }
 
   Future<bool> checkBackgroundPermission() async {
@@ -296,6 +300,9 @@ class LocationService {
   }
 
   Future<void> startLiveTracking({String mode = 'balanced'}) async {
+    final hasPerm = await checkPermission();
+    if (!hasPerm) return;
+
     await _invokeSafe(
       NativeChannelConstants.methodStartLocationUpdates,
       {'mode': mode},

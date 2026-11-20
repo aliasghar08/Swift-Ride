@@ -11,7 +11,6 @@ import 'providers/location_provider.dart';
 import 'providers/ride_provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider; // <-- ADDED IMPORT
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
@@ -47,18 +46,7 @@ Future<void> main() async {
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    );
-
-    // Non-blocking anonymous auth: ensure we do NOT block runApp() on network calls,
-    // which causes watchdog ANRs / startup crashes on budget Infinix/Xiaomi devices with slow mobile data.
-    if (FirebaseAuth.instance.currentUser == null) {
-      debugPrint('[Auth] No active session found. Triggering background anonymous auth...');
-      FirebaseAuth.instance.signInAnonymously().then((_) {
-        debugPrint('[Auth] Background anonymous sign-in completed');
-      }).catchError((authErr) {
-        debugPrint('[Auth] Background anonymous sign-in notice (non-fatal): $authErr');
-      });
-    }
+    ).timeout(const Duration(milliseconds: 2500));
 
     if (!kIsWeb) {
       FirebaseFirestore.instance.settings = const Settings(
@@ -85,12 +73,14 @@ Future<void> main() async {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }
 
-  // Defer non-critical background services until after the first frame has rendered,
-  // guaranteeing instantaneous startup and 0ms main thread blocking.
+  // Defer non-critical background services until 3 seconds after the first frame has rendered,
+  // ensuring Chromium WebView (AdMob) and HTTP scraping never contend with cold startup.
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    FuelPriceService().fetchLivePrices();
-    AdService.instance.initialize().catchError((adErr) {
-      debugPrint('[AdMob] AdService background init notice: $adErr');
+    Future.delayed(const Duration(seconds: 3), () {
+      FuelPriceService().fetchLivePrices();
+      AdService.instance.initialize().catchError((adErr) {
+        debugPrint('[AdMob] AdService background init notice: $adErr');
+      });
     });
   });
 

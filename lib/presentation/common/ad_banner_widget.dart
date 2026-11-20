@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,16 +23,35 @@ class AdBannerWidget extends StatefulWidget {
 
 class _AdBannerWidgetState extends State<AdBannerWidget> {
   BannerAd? _bannerAd;
+  Timer? _deferTimer;
   bool _isLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _loadBanner();
+    _scheduleLoadBanner();
+  }
+
+  void _scheduleLoadBanner() {
+    if (kIsWeb) return;
+    try {
+      if (!Platform.isAndroid && !Platform.isIOS) return;
+    } catch (_) {
+      return;
+    }
+
+    if (AdService.instance.isInitialized) {
+      _loadBanner();
+    } else {
+      // Wait for deferred AdMob initialization so Chromium WebView never blocks cold startup
+      _deferTimer = Timer(const Duration(seconds: 4), () {
+        if (mounted) _loadBanner();
+      });
+    }
   }
 
   void _loadBanner() {
-    if (kIsWeb) return;
+    if (kIsWeb || !mounted) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
 
@@ -57,6 +77,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
 
   @override
   void dispose() {
+    _deferTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }

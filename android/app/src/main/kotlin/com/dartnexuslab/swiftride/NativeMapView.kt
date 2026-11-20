@@ -3,6 +3,7 @@ package com.dartnexuslab.swiftride
 import android.content.Context
 import android.graphics.Color
 import android.view.View
+import android.widget.FrameLayout
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.MapView
@@ -33,8 +34,9 @@ class NativeMapView(
     args: Map<String, Any?>?
 ) : PlatformView, MethodChannel.MethodCallHandler, OnMapReadyCallback {
 
-    private val containerView: View
+    private val containerView: FrameLayout = FrameLayout(context)
     private var mapViewInstance: MapView? = null
+    private var isDisposed = false
     private val channel: MethodChannel =
         MethodChannel(messenger, "com.swiftride.app/native_map_view_$viewId")
 
@@ -52,6 +54,18 @@ class NativeMapView(
 
     init {
         channel.setMethodCallHandler(this)
+        containerView.setBackgroundColor(if (isDark) Color.parseColor("#0D1321") else Color.parseColor("#E5E9F0"))
+        // Defer heavy Google Play Services Chimera Dynamite MapView creation until after
+        // Flutter renders Frame 1, avoiding main-thread startup ANRs on budget OEM devices.
+        containerView.postDelayed({
+            if (!isDisposed) {
+                initMapViewAsync(context)
+            }
+        }, 120L)
+    }
+
+    private fun initMapViewAsync(context: Context) {
+        if (isDisposed || mapViewInstance != null) return
         try {
             MapsInitializer.initialize(context, MapsInitializer.Renderer.LEGACY) { }
         } catch (_: Exception) {
@@ -60,18 +74,23 @@ class NativeMapView(
             } catch (_: Exception) {}
         }
 
-        var mv: MapView? = null
         try {
-            mv = MapView(context)
+            val mv = MapView(context)
             mv.onCreate(null)
             mv.onStart()
             mv.onResume()
+            containerView.addView(
+                mv,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
             mv.getMapAsync(this)
+            mapViewInstance = mv
         } catch (e: Exception) {
             android.util.Log.e("NativeMapView", "Failed to initialize MapView: ${e.message}", e)
         }
-        mapViewInstance = mv
-        containerView = mv ?: View(context)
     }
 
     override fun getView(): View = containerView
@@ -307,6 +326,7 @@ class NativeMapView(
     }
 
     override fun dispose() {
+        isDisposed = true
         channel.setMethodCallHandler(null)
         try {
             markers.values.forEach { it.remove() }
@@ -314,10 +334,12 @@ class NativeMapView(
             markerHues.clear()
             polylines.values.forEach { it.remove() }
             polylines.clear()
+            containerView.removeAllViews()
             mapViewInstance?.onPause()
             mapViewInstance?.onStop()
             mapViewInstance?.onDestroy()
             mapViewInstance = null
+            googleMap = null
         } catch (_: Exception) {}
     }
 }

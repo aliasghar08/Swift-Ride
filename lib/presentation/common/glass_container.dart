@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 
@@ -38,12 +39,44 @@ class GlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeIsDark = Theme.of(context).brightness == Brightness.dark;
     final resolvedIsDark = isDark ?? themeIsDark;
+    // Bypass BackdropFilter on Android to prevent EGL/FBO framebuffer readback deadlocks
+    // when compositing FlutterOverlaySurface over hardware PlatformViews (Google Maps) on Mali GPUs.
+    final useBlur = blur > 0 && defaultTargetPlatform != TargetPlatform.android;
     final effectiveBg = backgroundColor ??
-        (resolvedIsDark ? AppTheme.glassDarkBackground : AppTheme.glassLightBackground);
+        (useBlur
+            ? (resolvedIsDark ? AppTheme.glassDarkBackground : AppTheme.glassLightBackground)
+            : (resolvedIsDark ? const Color(0xF0141B2D) : const Color(0xF5FFFFFF)));
     final effectiveBorder = borderColor ??
         (resolvedIsDark ? AppTheme.glassDarkBorder : AppTheme.glassLightBorder);
     final effectiveShadows = shadows ??
         (resolvedIsDark ? AppTheme.darkElevation : AppTheme.premiumElevation);
+
+    final innerContent = Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: effectiveBg,
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: effectiveBorder,
+          width: 1.2,
+        ),
+        gradient: gradient ??
+            LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: resolvedIsDark
+                  ? [
+                      Colors.white.withValues(alpha: 0.05),
+                      Colors.white.withValues(alpha: 0.01),
+                    ]
+                  : [
+                      Colors.white.withValues(alpha: 0.65),
+                      Colors.white.withValues(alpha: 0.25),
+                    ],
+            ),
+      ),
+      child: child,
+    );
 
     return Container(
       width: width,
@@ -55,35 +88,12 @@ class GlassContainer extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(borderRadius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: effectiveBg,
-              borderRadius: BorderRadius.circular(borderRadius),
-              border: Border.all(
-                color: effectiveBorder,
-                width: 1.2,
-              ),
-              gradient: gradient ??
-                  LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: resolvedIsDark
-                        ? [
-                            Colors.white.withValues(alpha: 0.05),
-                            Colors.white.withValues(alpha: 0.01),
-                          ]
-                        : [
-                            Colors.white.withValues(alpha: 0.65),
-                            Colors.white.withValues(alpha: 0.25),
-                          ],
-                  ),
-            ),
-            child: child,
-          ),
-        ),
+        child: useBlur
+            ? BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: innerContent,
+              )
+            : innerContent,
       ),
     );
   }

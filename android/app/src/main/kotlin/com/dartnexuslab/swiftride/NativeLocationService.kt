@@ -24,6 +24,8 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Modular native Android Location and Geocoding service.
@@ -37,6 +39,8 @@ class NativeLocationService(
 
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(activity)
+    private val geocodeExecutor = Executors.newCachedThreadPool()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var pendingPermissionResult: MethodChannel.Result? = null
     private var locationCallback: LocationCallback? = null
     private var primaryChannel: MethodChannel? = null
@@ -346,69 +350,85 @@ class NativeLocationService(
     }
 
     private fun reverseGeocode(lat: Double, lng: Double, result: MethodChannel.Result) {
-        try {
-            val geocoder = Geocoder(activity, Locale.getDefault())
-            val formatAddress: (Address) -> String = { addr ->
-                val parts = mutableListOf<String>()
-                val streetNumber = addr.subThoroughfare?.trim() ?: ""
-                val streetName = addr.thoroughfare?.trim() ?: ""
-                val premises = addr.premises?.trim() ?: ""
-                val feature = addr.featureName?.trim() ?: ""
+        val fallbackStr = String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng)
+        val completed = AtomicBoolean(false)
 
-                val plotOrHouse = when {
-                    streetNumber.isNotEmpty() && streetName.isNotEmpty() -> {
-                        val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
-                        "$prefix, $streetName"
-                    }
-                    streetNumber.isNotEmpty() -> {
-                        if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
-                    }
-                    streetName.isNotEmpty() -> streetName
-                    else -> ""
+        val finishOnMain: (String) -> Unit = { resolved ->
+            if (completed.compareAndSet(false, true)) {
+                mainHandler.post {
+                    try {
+                        result.success(resolved)
+                    } catch (_: Exception) {}
                 }
-
-                if (premises.isNotEmpty() && premises != streetNumber && premises != streetName) {
-                    parts.add(premises)
-                }
-                if (feature.isNotEmpty() &&
-                    feature != streetNumber &&
-                    feature != streetName &&
-                    feature != addr.subLocality &&
-                    feature != addr.locality &&
-                    !feature.matches(Regex("^[A-Za-z0-9]{4,8}\\+[A-Za-z0-9]{2,5}$")) &&
-                    !parts.contains(feature)
-                ) {
-                    parts.add(feature)
-                }
-                if (plotOrHouse.isNotEmpty() && !parts.contains(plotOrHouse)) {
-                    parts.add(plotOrHouse)
-                }
-
-                addr.subLocality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
-                addr.locality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
-
-                if (parts.isNotEmpty()) parts.joinToString(", ") else (addr.getAddressLine(0) ?: String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
             }
+        }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                geocoder.getFromLocation(lat, lng, 1) { addresses ->
-                    if (!addresses.isNullOrEmpty()) {
-                        result.success(formatAddress(addresses[0]))
-                    } else {
-                        result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
-                    }
+        // Strict 3-second timeout guard so hung OEM Geocoder services never stall Dart
+        mainHandler.postDelayed({
+            finishOnMain(fallbackStr)
+        }, 3_000L)
+
+        geocodeExecutor.execute {
+            try {
+                if (!Geocoder.isPresent()) {
+                    finishOnMain(fallbackStr)
+                    return@execute
                 }
-            } else {
+                val geocoder = Geocoder(activity.applicationContext, Locale.getDefault())
                 @Suppress("DEPRECATION")
                 val addresses = geocoder.getFromLocation(lat, lng, 1)
                 if (!addresses.isNullOrEmpty()) {
-                    result.success(formatAddress(addresses[0]))
+                    val addr = addresses[0]
+                    val parts = mutableListOf<String>()
+                    val streetNumber = addr.subThoroughfare?.trim() ?: ""
+                    val streetName = addr.thoroughfare?.trim() ?: ""
+                    val premises = addr.premises?.trim() ?: ""
+                    val feature = addr.featureName?.trim() ?: ""
+
+                    val plotOrHouse = when {
+                        streetNumber.isNotEmpty() && streetName.isNotEmpty() -> {
+                            val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
+                            "$prefix, $streetName"
+                        }
+                        streetNumber.isNotEmpty() -> {
+                            if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
+                        }
+                        streetName.isNotEmpty() -> streetName
+                        else -> ""
+                    }
+
+                    if (premises.isNotEmpty() && premises != streetNumber && premises != streetName) {
+                        parts.add(premises)
+                    }
+                    if (feature.isNotEmpty() &&
+                        feature != streetNumber &&
+                        feature != streetName &&
+                        feature != addr.subLocality &&
+                        feature != addr.locality &&
+                        !feature.matches(Regex("^[A-Za-z0-9]{4,8}\\+[A-Za-z0-9]{2,5}$")) &&
+                        !parts.contains(feature)
+                    ) {
+                        parts.add(feature)
+                    }
+                    if (plotOrHouse.isNotEmpty() && !parts.contains(plotOrHouse)) {
+                        parts.add(plotOrHouse)
+                    }
+
+                    addr.subLocality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
+                    addr.locality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
+
+                    val formatted = if (parts.isNotEmpty()) {
+                        parts.joinToString(", ")
+                    } else {
+                        addr.getAddressLine(0) ?: fallbackStr
+                    }
+                    finishOnMain(formatted)
                 } else {
-                    result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
+                    finishOnMain(fallbackStr)
                 }
+            } catch (_: Exception) {
+                finishOnMain(fallbackStr)
             }
-        } catch (e: Exception) {
-            result.success(String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng))
         }
     }
 

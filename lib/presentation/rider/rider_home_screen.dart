@@ -108,7 +108,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   void initState() {
     super.initState();
     _viewModel = RiderViewModel();
-    MapMarkers.ensureOriginDot();
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final locProv = CustomChangeNotifierProvider.of<LocationProvider>(

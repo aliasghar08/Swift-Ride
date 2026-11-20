@@ -35,7 +35,6 @@ import 'address_search_screen.dart';
 import 'route_preview_screen.dart';
 import '../widgets/trip_economics_sheet.dart';
 import '../auth/phone_auth_screen.dart';
-import '../common/ad_banner_widget.dart';
 import '../../services/ad_service.dart';
 import '../../ai/ai.dart';
 
@@ -1075,23 +1074,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         ),
                 ),
 
-              // Subtle AdMob Banner docked at bottom of the idle destination search screen
-              if (currentRide == null &&
-                  !_isPinningOnMap &&
-                  !_viewModel.isPinMode &&
-                  _viewModel.dropoffLocation == null)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: layout.scale(8)),
-                      child: const AdBannerWidget(),
-                    ),
-                  ),
-                ),
+              // Subtle AdMob Banner is rendered only inside DriverKhataSheet and post-ride
+              // interstitials so RiderHomeScreen never stacks two concurrent Android
+              // PlatformViews (Google Maps + AdMob WebView) at the same time on Mali GPUs.
 
               CustomConsumer<SafetyCheckProvider>(
                 builder: (context, safetyCheck, _) {
@@ -2367,8 +2352,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        const AdBannerWidget(),
                       ],
                     ),
                   ),

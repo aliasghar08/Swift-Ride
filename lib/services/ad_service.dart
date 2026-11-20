@@ -17,6 +17,7 @@ class AdService {
   static const String liveAndroidInterstitialId = 'ca-app-pub-9402443776639153/3739839885';
 
   bool _initialized = false;
+  bool _initializing = false;
   bool get isInitialized => _initialized;
 
   InterstitialAd? _postRideInterstitial;
@@ -24,14 +25,20 @@ class AdService {
 
   /// Initializes the Google Mobile Ads SDK safely.
   Future<void> initialize() async {
-    if (kIsWeb) return;
+    if (kIsWeb || _initialized || _initializing) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
+      _initializing = true;
       await MobileAds.instance.initialize();
       _initialized = true;
-      loadPostRideInterstitial();
+      // Delay interstitial preloading by 10 seconds so it never contends with initial app interaction
+      Future.delayed(const Duration(seconds: 10), () {
+        loadPostRideInterstitial();
+      });
     } catch (e) {
       debugPrint('[AdService] MobileAds initialization skipped or failed: $e');
+    } finally {
+      _initializing = false;
     }
   }
 

@@ -16,11 +16,13 @@
 -allowaccessmodification
 -repackageclasses ''
 
-# 4. Google Mobile Ads (AdMob)
--keep public class com.google.android.gms.ads.initialization.InitializationStatus { *; }
--keep public class com.google.android.gms.ads.initialization.OnInitializationCompleteListener { *; }
+# 4. Google Mobile Ads (AdMob) & UMP Consent SDK
+-keep class com.google.android.gms.ads.** { *; }
+-keep class com.google.ads.** { *; }
+-keep class com.google.android.ump.** { *; }
 -dontwarn com.google.android.gms.ads.**
 -dontwarn com.google.android.gms.internal.ads.**
+-dontwarn com.google.android.ump.**
 
 # 5. TensorFlow Lite
 -keep class org.tensorflow.lite.** { *; }

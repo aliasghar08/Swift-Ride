@@ -37,10 +37,16 @@
             android:name="com.google.android.geo.API_KEY"
             android:value="${googleMapsApiKey}"/>
 
-        <!-- Google AdMob Android App ID -->
+        <!-- Google AdMob Android App ID & Startup Optimization Flags -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-9402443776639153~2101831296"/>
+        <meta-data
+            android:name="com.google.android.gms.ads.flag.OPTIMIZE_INITIALIZATION"
+            android:value="true"/>
+        <meta-data
+            android:name="com.google.android.gms.ads.flag.OPTIMIZE_AD_LOADING"
+            android:value="true"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

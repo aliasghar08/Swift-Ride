@@ -54,7 +54,25 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     if (kIsWeb || !mounted) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
+      if (!AdService.instance.isInitialized) {
+        // Ensure MobileAds.instance.initialize() has completed on its background thread
+        // before creating an AdView (WebView) on the UI thread, preventing main-thread ANRs.
+        AdService.instance.initialize().then((_) {
+          if (mounted && AdService.instance.isInitialized) {
+            _createBannerAd();
+          }
+        });
+        return;
+      }
+      _createBannerAd();
+    } catch (e) {
+      debugPrint('[AdBannerWidget] Banner load error: $e');
+    }
+  }
 
+  void _createBannerAd() {
+    if (kIsWeb || !mounted || _bannerAd != null) return;
+    try {
       _bannerAd = BannerAd(
         adUnitId: AdService.instance.bannerAdUnitId,
         size: AdSize.banner,
@@ -66,12 +84,13 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
           onAdFailedToLoad: (ad, error) {
             debugPrint('[AdBannerWidget] Banner failed to load: ${error.message}');
             ad.dispose();
+            _bannerAd = null;
             if (mounted) setState(() => _isLoaded = false);
           },
         ),
       )..load();
     } catch (e) {
-      debugPrint('[AdBannerWidget] Banner load error: $e');
+      debugPrint('[AdBannerWidget] Banner create error: $e');
     }
   }
 

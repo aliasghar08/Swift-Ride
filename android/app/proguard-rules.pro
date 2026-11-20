@@ -12,9 +12,29 @@
 # 2. SwiftRide Native Platform Entry Points (JNI & MethodChannels)
 -keep class com.dartnexuslab.swiftride.** { *; }
 
-# 3. Aggressive R8 Optimization & Repackaging for Third-Party Dependencies
--allowaccessmodification
--repackageclasses ''
+# 3. AndroidX Startup, Room & WorkManager (Required by Google Mobile Ads / AdMob)
+# Note: Do NOT use -repackageclasses because Room and WorkManager use reflection
+# to look up generated *_Impl database classes by package and class name.
+-keep class androidx.startup.** { *; }
+-keep class * extends androidx.startup.Initializer { *; }
+
+-keep class * extends androidx.room.RoomDatabase { *; }
+-keep class androidx.room.** { *; }
+-keep class **_Impl extends androidx.room.RoomDatabase {
+    public <init>(...);
+}
+-dontwarn androidx.room.paging.**
+
+-keep class androidx.work.** { *; }
+-keep class androidx.work.impl.** { *; }
+-keep class androidx.work.impl.WorkDatabase { *; }
+-keep class androidx.work.impl.WorkDatabase_Impl {
+    public <init>(...);
+}
+-keep class * extends androidx.work.Worker { *; }
+-keep class * extends androidx.work.ListenableWorker { *; }
+-keep class * extends androidx.work.InputMerger { *; }
+-keep class androidx.work.WorkManagerInitializer { *; }
 
 # 4. Google Mobile Ads (AdMob) & UMP Consent SDK
 -keep class com.google.android.gms.ads.** { *; }

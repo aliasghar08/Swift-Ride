@@ -454,11 +454,26 @@ class AuthProvider extends ChangeNotifier {
       if (_currentUser.phone.isNotEmpty &&
           _currentUser.fullName.isNotEmpty &&
           _currentUser.fullName != 'Guest User') {
-        await _firestoreUserService.saveUser(_currentUser);
+        try {
+          await _firestoreUserService.saveUser(_currentUser).timeout(
+            const Duration(milliseconds: 1000),
+            onTimeout: () => null,
+          );
+        } catch (e) {
+          debugPrint('[AuthProvider] Could not save user profile prior to logout: $e');
+        }
       }
-      await _authService.signOut();
-      unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
-      unawaited(_storage.remove(_cachedProfileKey));
+      try {
+        await _authService.signOut();
+      } catch (e) {
+        debugPrint('[AuthProvider] Error in authService.signOut: $e');
+      }
+      try {
+        unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
+      } catch (_) {}
+      try {
+        unawaited(_storage.remove(_cachedProfileKey));
+      } catch (_) {}
       _verificationId = null;
       _resendToken = null;
       _currentUser = AppUser(
@@ -472,9 +487,15 @@ class AuthProvider extends ChangeNotifier {
       );
       _activeRole = UserRole.rider;
       _signOutGeneration++;
-      unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
-      unawaited(_storage.setString('active_user_role', 'rider'));
-      unawaited(_initAnonymousSession());
+      try {
+        unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
+      } catch (_) {}
+      try {
+        unawaited(_storage.setString('active_user_role', 'rider'));
+      } catch (_) {}
+      try {
+        unawaited(_initAnonymousSession());
+      } catch (_) {}
     } catch (e) {
       _authError = e.toString();
     } finally {

@@ -620,13 +620,23 @@ class AuthService {
         if (isGoogleUser) {
           try {
             await GoogleSignIn().signOut().timeout(
-              const Duration(milliseconds: 150),
+              const Duration(milliseconds: 300),
+              onTimeout: () => null,
+            );
+          } catch (_) {}
+          try {
+            await GoogleSignIn().disconnect().timeout(
+              const Duration(milliseconds: 300),
               onTimeout: () => null,
             );
           } catch (_) {}
         }
       }
-      await _auth?.signOut();
+      try {
+        await _auth?.signOut();
+      } catch (e) {
+        debugPrint('[AuthService] Error signing out of FirebaseAuth: $e');
+      }
     } catch (e) {
       debugPrint('[AuthService] Error signing out: $e');
     }

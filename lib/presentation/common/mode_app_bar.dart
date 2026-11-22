@@ -646,7 +646,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                   onTap: () async {
-                    final navigator = Navigator.of(context, rootNavigator: true);
+                    final rootNavigator = Navigator.of(context, rootNavigator: true);
                     final messenger = ScaffoldMessenger.maybeOf(context);
                     Navigator.pop(ctx);
                     await auth.signOut();
@@ -659,7 +659,8 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                         duration: Duration(seconds: 2),
                       ),
                     );
-                    navigator.pushAndRemoveUntil(
+                    final nav = AppRouter.navigatorKey.currentState ?? rootNavigator;
+                    nav.pushAndRemoveUntil(
                       AppRouter.smoothRoute(
                         const PhoneAuthScreen(),
                         settings: const RouteSettings(name: '/login'),

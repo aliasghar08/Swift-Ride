@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/routing/app_router.dart';
@@ -297,20 +298,59 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: layout.scale(24),
-                      backgroundColor: AppTheme.primaryBlue.withValues(
-                        alpha: 0.15,
-                      ),
-                      child: Text(
-                        user.fullName.isNotEmpty
-                            ? user.fullName[0].toUpperCase()
-                            : 'U',
-                        style: const TextStyle(
-                          color: AppTheme.primaryBlue,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 20,
-                        ),
+                    GestureDetector(
+                      onTap: () async {
+                        try {
+                          final picker = ImagePicker();
+                          final picked = await picker.pickImage(
+                            source: ImageSource.gallery,
+                            maxWidth: 1024,
+                            maxHeight: 1024,
+                            imageQuality: 85,
+                          );
+                          if (picked != null) {
+                            final bytes = await picked.readAsBytes();
+                            final mimeType = picked.path.endsWith('.png') ? 'image/png' : 'image/jpeg';
+                            await auth.uploadProfilePhoto(bytes, mimeType: mimeType);
+                          }
+                        } catch (_) {}
+                      },
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: layout.scale(24),
+                            backgroundColor: AppTheme.primaryBlue.withValues(
+                              alpha: 0.15,
+                            ),
+                            backgroundImage: user.photoUrl != null && user.photoUrl!.isNotEmpty
+                                ? NetworkImage(user.photoUrl!)
+                                : null,
+                            child: user.photoUrl == null || user.photoUrl!.isEmpty
+                                ? Text(
+                                    user.fullName.isNotEmpty
+                                        ? user.fullName[0].toUpperCase()
+                                        : 'U',
+                                    style: const TextStyle(
+                                      color: AppTheme.primaryBlue,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 20,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.primaryBlue,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.camera_alt, size: 10, color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 14),

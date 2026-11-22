@@ -30,6 +30,7 @@ const VerifyDriverDocumentSchema = z.object({
   imageBase64: z.string().min(10),
   mimeType: z.string().default('image/jpeg'),
   expectedData: ExpectedDataSchema.optional(),
+  downloadUrl: z.string().url().optional(),
 });
 
 export interface DocumentVerificationResult {
@@ -215,11 +216,27 @@ Rules for status:
       extractedFields: result.extractedFields,
       issues: result.issues,
       summary: result.summary,
+      downloadUrl: data.downloadUrl || null,
       isVerified: result.status === 'VERIFIED',
       verifiedAt: result.status === 'VERIFIED' ? FieldValue.serverTimestamp() : null,
       updatedAt: FieldValue.serverTimestamp(),
       aiModel: 'gemini-3.8-flash',
     });
+
+    // Update vehicle front/interior photo on driver profile if applicable
+    if (data.downloadUrl) {
+      if (data.documentType === 'VEHICLE_FRONT') {
+        await db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(data.driverId).set(
+          { vehicle: { frontPhotoUrl: data.downloadUrl }, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true }
+        );
+      } else if (data.documentType === 'VEHICLE_INTERIOR') {
+        await db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(data.driverId).set(
+          { vehicle: { interiorPhotoUrl: data.downloadUrl }, updatedAt: FieldValue.serverTimestamp() },
+          { merge: true }
+        );
+      }
+    }
 
     // Extract or infer gender from official documents (CNIC / Driving License)
     let detectedGender: 'female' | 'male' | null = null;

@@ -7,6 +7,8 @@ class ChatMessageModel {
   final String text;
   final DateTime createdAt;
   final DateTime? readAt;
+  final String? mediaUrl;
+  final String? mediaType; // 'image' | 'video' | 'audio'
 
   const ChatMessageModel({
     required this.id,
@@ -15,9 +17,12 @@ class ChatMessageModel {
     required this.text,
     required this.createdAt,
     this.readAt,
+    this.mediaUrl,
+    this.mediaType,
   });
 
   bool get isRead => readAt != null;
+  bool get hasMedia => mediaUrl != null && mediaUrl!.isNotEmpty;
 
   ChatMessageModel copyWith({
     String? id,
@@ -26,6 +31,8 @@ class ChatMessageModel {
     String? text,
     DateTime? createdAt,
     DateTime? readAt,
+    String? mediaUrl,
+    String? mediaType,
   }) {
     return ChatMessageModel(
       id: id ?? this.id,
@@ -34,6 +41,8 @@ class ChatMessageModel {
       text: text ?? this.text,
       createdAt: createdAt ?? this.createdAt,
       readAt: readAt ?? this.readAt,
+      mediaUrl: mediaUrl ?? this.mediaUrl,
+      mediaType: mediaType ?? this.mediaType,
     );
   }
 
@@ -44,6 +53,8 @@ class ChatMessageModel {
       'text': text,
       'createdAt': Timestamp.fromDate(createdAt),
       if (readAt != null) 'readAt': Timestamp.fromDate(readAt!),
+      if (mediaUrl != null && mediaUrl!.isNotEmpty) 'mediaUrl': mediaUrl,
+      if (mediaType != null && mediaType!.isNotEmpty) 'mediaType': mediaType,
     };
   }
 
@@ -66,6 +77,8 @@ class ChatMessageModel {
       text: map['text']?.toString() ?? '',
       createdAt: parseTime(map['createdAt']),
       readAt: map['readAt'] != null ? parseTime(map['readAt']) : null,
+      mediaUrl: map['mediaUrl'] as String?,
+      mediaType: map['mediaType'] as String?,
     );
   }
 }

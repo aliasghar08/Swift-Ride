@@ -237,6 +237,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       final resultDoc = await driverProv.uploadAndVerifyDocument(
         type: type,
         imageBase64: base64Image,
+        rawBytes: bytes,
         mimeType: mimeType,
         expectedData: expected,
       );

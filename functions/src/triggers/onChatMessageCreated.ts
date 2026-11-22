@@ -30,14 +30,20 @@ export const onChatMessageCreated = onDocumentCreated(
         ? (ride.driverName || 'Your Driver')
         : (ride.riderName || 'Your Rider');
 
+    const notificationBody =
+      msg.text && msg.text.trim().length > 0
+        ? msg.text
+        : (msg.mediaType === 'image' ? '📷 Photo' : (msg.mediaType === 'video' ? '🎥 Video' : '📎 Attachment'));
+
     await sendPushToUser(recipientUid, {
       title: `Message from ${senderLabel}`,
-      body: msg.text,
+      body: notificationBody,
       type: 'NEW_CHAT_MESSAGE',
       rideId,
       extraData: {
         messageId: event.params.messageId,
         senderRole: msg.senderRole,
+        ...(msg.mediaUrl ? { mediaUrl: msg.mediaUrl } : {}),
       },
     });
   }

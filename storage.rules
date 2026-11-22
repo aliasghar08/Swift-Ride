@@ -1,6 +1,8 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+
+    // Helper functions
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -9,18 +11,84 @@ service firebase.storage {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Driver documents and vehicle photos
-    match /drivers/{driverId}/{allPaths=**} {
-      allow read: if isAuthenticated() && (isOwner(driverId) || request.auth.token.admin == true);
-      allow write: if isAuthenticated() && isOwner(driverId) &&
-        request.resource.size < 10 * 1024 * 1024 && // Max 10MB
-        request.resource.contentType.matches('image/.*|application/pdf');
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Public avatars and vehicle photos for rider inspection
-    match /public/{allPaths=**} {
+    function isImage() {
+      return request.resource.contentType.matches('image/(jpeg|png|webp|heic|heif|gif)');
+    }
+
+    function isVideo() {
+      return request.resource.contentType.matches('video/(mp4|quicktime|webm|3gpp|x-msvideo)');
+    }
+
+    function isAudio() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+
+    function isDocument() {
+      return request.resource.contentType.matches('image/.*|application/pdf');
+    }
+
+    // 1. User Profiles & Avatars
+    // Accessible by all authenticated riders and drivers for mutual identification
+    match /users/{userId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isAuthenticated() && request.resource.size < 5 * 1024 * 1024;
+      allow write: if isOwner(userId)
+        && request.resource.size < 10 * 1024 * 1024 // 10MB limit
+        && isImage();
+    }
+
+    // 2. Sensitive Driver Documents (CNIC Front/Back, Driving License, Vehicle Registration)
+    // Read only by the driver themselves or platform administrators for KYC compliance
+    match /drivers/{driverId}/documents/{documentName} {
+      allow read: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+      allow write: if isAuthenticated() && (isOwner(driverId) || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024 // 15MB limit
+        && isDocument();
+    }
+
+    // 3. Driver Vehicle Visual Inspection Photos (Front with registration plate, Interior cabin & seats)
+    // Read by authenticated riders and drivers during booking & rides; write by the driver
+    match /drivers/{driverId}/vehicle/{photoName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isOwner(driverId) || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024 // 15MB limit
+        && isImage();
+    }
+
+    // Fallback for nested driver assets
+    match /drivers/{driverId}/{allPaths=**} {
+      allow read: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+      allow write: if isAuthenticated() && (isOwner(driverId) || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024
+        && (isDocument() || isVideo());
+    }
+
+    // 4. In-App Ride Chat Media (Photos, Location Snapshots, Voice Notes, Short Videos)
+    // Read by authenticated participants; write by authenticated sender with size & type constraints
+    match /rides/{rideId}/chat/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+        && request.resource.size < 25 * 1024 * 1024 // 25MB limit
+        && (isImage() || isVideo() || isAudio());
+    }
+
+    // 5. Safety Incident & Emergency SOS Evidence (Photos, Dashcam Video Clips, Audio Recordings)
+    // Read by platform safety team, participants, or emergency contacts; write by authenticated user
+    match /safety_events/{eventId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+        && request.resource.size < 50 * 1024 * 1024 // 50MB limit
+        && (isImage() || isVideo() || isAudio() || isDocument());
+    }
+
+    // 6. Public Static Assets (Badges, brand icons, vehicle category illustrations)
+    match /public/{allPaths=**} {
+      allow read: if true;
+      allow write: if isAdmin()
+        && request.resource.size < 10 * 1024 * 1024;
     }
   }
 }

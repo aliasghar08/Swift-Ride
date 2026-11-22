@@ -4,6 +4,7 @@ import '../domain/models/driver_profile_model.dart';
 import '../domain/models/driver_document_model.dart';
 import '../domain/models/vehicle_info_model.dart';
 import '../services/driver_service.dart';
+import '../services/firebase_storage_service.dart';
 import '../services/firestore/firestore_driver_service.dart';
 
 /// Zero-dependency Driver Provider managing driver state, online availability,
@@ -215,6 +216,8 @@ class DriverProvider extends ChangeNotifier {
   Future<DriverDocumentModel?> uploadAndVerifyDocument({
     required DriverDocumentType type,
     required String imageBase64,
+    Uint8List? rawBytes,
+    String? downloadUrl,
     String mimeType = 'image/jpeg',
     Map<String, String>? expectedData,
   }) async {
@@ -226,10 +229,43 @@ class DriverProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      String? resolvedUrl = downloadUrl;
+      // If rawBytes provided and downloadUrl not yet resolved, upload to Firebase Storage
+      if (resolvedUrl == null && rawBytes != null) {
+        try {
+          final storage = FirebaseStorageService();
+          if (type == DriverDocumentType.vehicleFront) {
+            resolvedUrl = await storage.uploadVehiclePhoto(
+              driverId: uid,
+              photoType: 'front',
+              bytes: rawBytes,
+              mimeType: mimeType,
+            );
+          } else if (type == DriverDocumentType.vehicleInterior) {
+            resolvedUrl = await storage.uploadVehiclePhoto(
+              driverId: uid,
+              photoType: 'interior',
+              bytes: rawBytes,
+              mimeType: mimeType,
+            );
+          } else {
+            resolvedUrl = await storage.uploadDriverDocument(
+              driverId: uid,
+              type: type,
+              bytes: rawBytes,
+              mimeType: mimeType,
+            );
+          }
+        } catch (storageErr) {
+          debugPrint('[DriverProvider] Firebase Storage upload notice: $storageErr');
+        }
+      }
+
       final doc = await _firestoreService.submitAndVerifyDocument(
         driverId: uid,
         type: type,
         imageBase64: imageBase64,
+        downloadUrl: resolvedUrl,
         mimeType: mimeType,
         expectedData: expectedData,
       );
@@ -243,6 +279,19 @@ class DriverProvider extends ChangeNotifier {
 
       if (hasPassedAiVerification) {
         _driverProfile = _driverProfile.copyWith(isVerified: true);
+      }
+
+      // If this was a vehicle photo, also update local vehicle state
+      if (resolvedUrl != null) {
+        if (type == DriverDocumentType.vehicleFront) {
+          _driverProfile = _driverProfile.copyWith(
+            vehicle: _driverProfile.vehicle.copyWith(frontPhotoUrl: resolvedUrl),
+          );
+        } else if (type == DriverDocumentType.vehicleInterior) {
+          _driverProfile = _driverProfile.copyWith(
+            vehicle: _driverProfile.vehicle.copyWith(interiorPhotoUrl: resolvedUrl),
+          );
+        }
       }
 
       return doc;

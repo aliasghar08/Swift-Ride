@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../domain/models/chat_message_model.dart';
+import 'firebase_storage_service.dart';
 
 /// Real-time chat service for active rides between riders and drivers.
 class RideChatService {
@@ -60,16 +61,21 @@ class RideChatService {
             .toList());
   }
 
-  /// Sends a new message in the ride chat.
+  /// Sends a new message in the ride chat, with optional rich media.
   Future<String?> sendMessage({
     required String rideId,
     required String senderId,
     required String senderRole,
     required String text,
+    String? mediaUrl,
+    String? mediaType,
   }) async {
     final cleanText = text.trim();
-    if (cleanText.isEmpty || cleanText.length > 500) {
-      return 'Message cannot be empty or exceed 500 characters.';
+    if (cleanText.isEmpty && (mediaUrl == null || mediaUrl.isEmpty)) {
+      return 'Message cannot be empty.';
+    }
+    if (cleanText.length > 500) {
+      return 'Message cannot exceed 500 characters.';
     }
 
     final fs = _firestore;
@@ -80,6 +86,8 @@ class RideChatService {
         senderRole: senderRole,
         text: cleanText,
         createdAt: DateTime.now(),
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
       );
       final list = _memoryMessages.putIfAbsent(rideId, () => []);
       list.add(msg);
@@ -88,16 +96,61 @@ class RideChatService {
     }
 
     try {
-      await fs.collection('rides').doc(rideId).collection('messages').add({
+      final data = <String, dynamic>{
         'senderId': senderId,
         'senderRole': senderRole,
         'text': cleanText,
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
+      if (mediaUrl != null && mediaUrl.isNotEmpty) {
+        data['mediaUrl'] = mediaUrl;
+      }
+      if (mediaType != null && mediaType.isNotEmpty) {
+        data['mediaType'] = mediaType;
+      }
+      await fs.collection('rides').doc(rideId).collection('messages').add(data);
       return null;
     } catch (e) {
       debugPrint('[RideChatService] sendMessage error: $e');
       return 'Failed to deliver message. Please retry.';
+    }
+  }
+
+  /// Uploads a photo/video/audio attachment to Firebase Storage and delivers it to the ride chat.
+  Future<String?> sendMediaMessage({
+    required String rideId,
+    required String senderId,
+    required String senderRole,
+    required Uint8List bytes,
+    required String fileName,
+    String mimeType = 'image/jpeg',
+    String? caption,
+  }) async {
+    try {
+      final storageService = FirebaseStorageService();
+      final downloadUrl = await storageService.uploadChatMedia(
+        rideId: rideId,
+        senderId: senderId,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: mimeType,
+      );
+
+      final mediaType = mimeType.startsWith('video/')
+          ? 'video'
+          : (mimeType.startsWith('audio/') ? 'audio' : 'image');
+
+      return await sendMessage(
+        rideId: rideId,
+        senderId: senderId,
+        senderRole: senderRole,
+        text: caption ?? '',
+        mediaUrl: downloadUrl,
+        mediaType: mediaType,
+      );
+    } catch (e) {
+      debugPrint('[RideChatService] sendMediaMessage error: $e');
+      return 'Failed to upload and send media: $e';
     }
   }
 

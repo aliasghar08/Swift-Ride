@@ -28,6 +28,8 @@ service cloud.firestore {
     //   - licenseNumber: string (1-50 chars)
     //   - vehicleMake: string, vehicleModel: string, vehiclePlate: string, vehicleColor: string
     //   - vehicleYear: number (1990 - 2035)
+    //   - frontPhotoUrl: string | null (optional, valid URL format)
+    //   - interiorPhotoUrl: string | null (optional, valid URL format)
     //   - isVerified: bool
     //   - isOnline: bool
     //   - subscriptionStatus: string ("ACTIVE" | "INACTIVE" | "TRIAL")
@@ -39,6 +41,18 @@ service cloud.firestore {
     //   - isGenderVerified: bool (optional, immutable by client)
     //   - femalePassengersOnly: bool (optional)
     //   - createdAt: timestamp (immutable)
+    //
+    // Subcollection: drivers/{driverId}/documents/{docId}
+    //   - documentType: string (e.g. "CNIC_FRONT", "CNIC_BACK", "DRIVING_LICENSE", etc.)
+    //   - status: string ("PENDING" | "VERIFYING" | "VERIFIED" | "NEEDS_REVIEW" | "REJECTED")
+    //   - confidence: number (>= 0)
+    //   - isVerified: bool
+    //   - extractedFields: map (fullName, idNumber, expiryDate, issueDate, vehiclePlate)
+    //   - downloadUrl: string | null (pointing to Firebase Storage)
+    //   - issues: list of strings (optional)
+    //   - summary: string (optional)
+    //   - verifiedAt: timestamp | null (optional)
+    //   - updatedAt: timestamp | null (optional)
     //
     // Collection: rides/{rideId}
     //   - riderId: string (immutable)
@@ -63,7 +77,10 @@ service cloud.firestore {
     //
     // Subcollection: rides/{rideId}/messages/{messageId}
     //   - senderId: string (matches auth.uid)
-    //   - text: string (1-500 chars)
+    //   - senderRole: string (optional, "rider" | "driver")
+    //   - text: string (0-500 chars, non-empty if no mediaUrl)
+    //   - mediaUrl: string | null (optional, valid URL pointing to photo/video/audio)
+    //   - mediaType: string | null (optional, "image" | "video" | "audio")
     //   - createdAt: timestamp
     //   - readAt: timestamp | null
     //
@@ -193,6 +210,13 @@ service cloud.firestore {
         validStringLength(data.vehiclePlate, 1, 20) &&
         data.isVerified is bool &&
         data.isOnline is bool &&
+        // Vehicle photo URLs: optional valid URL or null
+        (!('frontPhotoUrl' in data) ||
+          data.frontPhotoUrl == null ||
+          (data.frontPhotoUrl is string && (data.frontPhotoUrl == '' || (data.frontPhotoUrl.size() <= 1000 && isValidUrl(data.frontPhotoUrl))))) &&
+        (!('interiorPhotoUrl' in data) ||
+          data.interiorPhotoUrl == null ||
+          (data.interiorPhotoUrl is string && (data.interiorPhotoUrl == '' || (data.interiorPhotoUrl.size() <= 1000 && isValidUrl(data.interiorPhotoUrl))))) &&
         // Gender: optional ('female' | 'male' | null)
         (!('gender' in data) ||
           data.gender == null ||
@@ -203,6 +227,20 @@ service cloud.firestore {
         // femalePassengersOnly: optional bool
         (!('femalePassengersOnly' in data) ||
           data.femalePassengersOnly is bool);
+    }
+
+    // Driver Document Validators
+    function isValidDriverDocument(data) {
+      return (!('downloadUrl' in data) ||
+          data.downloadUrl == null ||
+          (data.downloadUrl is string && (data.downloadUrl == '' || isValidUrl(data.downloadUrl)))) &&
+        (!('documentType' in data) || (data.documentType is string && data.documentType.size() <= 50)) &&
+        (!('status' in data) || (data.status is string && data.status.size() <= 50)) &&
+        (!('confidence' in data) || (data.confidence is number && data.confidence >= 0)) &&
+        (!('isVerified' in data) || data.isVerified is bool) &&
+        (!('extractedFields' in data) || data.extractedFields is map) &&
+        (!('issues' in data) || (data.issues is list && data.issues.size() <= 50)) &&
+        (!('summary' in data) || (data.summary is string && data.summary.size() <= 1000));
     }
 
     // Ride Validators
@@ -278,7 +316,10 @@ service cloud.firestore {
       // Driver subcollection for uploaded documents
       match /documents/{docId} {
         allow read: if isAuthenticated() && (isOwner(driverId) || isAdmin());
-        allow write: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+        allow create, update: if isAuthenticated() &&
+          (isOwner(driverId) || isAdmin()) &&
+          isValidDriverDocument(request.resource.data);
+        allow delete: if isAuthenticated() && (isOwner(driverId) || isAdmin());
       }
     }
 
@@ -317,17 +358,19 @@ service cloud.firestore {
           get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
         );
 
-        // Create allowed if senderId is the current user, text is non-empty string <= 500 chars,
-        // and user is rider or driver of the ride
+        // Create allowed if senderId is the current user, user is participant of the ride,
+        // and message payload supports text and/or rich media (photos/videos/audio)
         allow create: if isAuthenticated()
           && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 500
           && (
             get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
             get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
-          );
+          )
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 500
+          && (request.resource.data.text.size() > 0 || ('mediaUrl' in request.resource.data && request.resource.data.mediaUrl is string && request.resource.data.mediaUrl.size() > 0))
+          && (!('mediaUrl' in request.resource.data) || request.resource.data.mediaUrl == null || isValidUrl(request.resource.data.mediaUrl))
+          && (!('mediaType' in request.resource.data) || request.resource.data.mediaType in ['image', 'video', 'audio']);
 
         // Update allowed only by the recipient to mark the message as read (affecting only 'readAt')
         allow update: if isAuthenticated()

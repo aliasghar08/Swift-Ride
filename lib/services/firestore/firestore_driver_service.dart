@@ -533,6 +533,7 @@ class FirestoreDriverService {
     required String driverId,
     required DriverDocumentType type,
     required String imageBase64,
+    String? downloadUrl,
     String mimeType = 'image/jpeg',
     Map<String, String>? expectedData,
   }) async {
@@ -541,6 +542,7 @@ class FirestoreDriverService {
       type: type,
       status: DocVerificationStatus.verified,
       confidence: 0.94,
+      downloadUrl: downloadUrl,
       extractedFields: AiExtractedFields(
         fullName: expectedData?['fullName'] ?? 'Verified Driver',
         idNumber: expectedData?['cnicNumber'] ?? expectedData?['licenseNumber'] ?? '33202-1234567-1',
@@ -568,14 +570,18 @@ class FirestoreDriverService {
         'documentType': type.code,
         'imageBase64': imageBase64,
         'mimeType': mimeType,
+        'downloadUrl': ?downloadUrl,
         'expectedData': expectedData,
       });
 
       final resultData = res.data['result'] as Map<String, dynamic>?;
       if (resultData != null) {
         final doc = DriverDocumentModel.fromMap(resultData, type.code);
-        _memoryDriverDocuments.putIfAbsent(driverId, () => {})[type.code] = doc;
-        return doc;
+        final effectiveDoc = doc.downloadUrl == null && downloadUrl != null
+            ? doc.copyWith(downloadUrl: downloadUrl)
+            : doc;
+        _memoryDriverDocuments.putIfAbsent(driverId, () => {})[type.code] = effectiveDoc;
+        return effectiveDoc;
       }
     } catch (e) {
       debugPrint('[FirestoreDriverService] verifyDriverDocument notice: $e');
@@ -588,6 +594,18 @@ class FirestoreDriverService {
           .collection('documents')
           .doc(type.code)
           .set(fallbackDoc.toMap(), SetOptions(merge: true));
+
+      if (downloadUrl != null) {
+        if (type == DriverDocumentType.vehicleFront) {
+          await fs.collection(AppConstants.driversCollection).doc(driverId).set({
+            'vehicle': {'frontPhotoUrl': downloadUrl},
+          }, SetOptions(merge: true));
+        } else if (type == DriverDocumentType.vehicleInterior) {
+          await fs.collection(AppConstants.driversCollection).doc(driverId).set({
+            'vehicle': {'interiorPhotoUrl': downloadUrl},
+          }, SetOptions(merge: true));
+        }
+      }
     } catch (_) {}
 
     return fallbackDoc;

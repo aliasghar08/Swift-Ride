@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_theme.dart';
 import '../../domain/models/chat_message_model.dart';
 import '../../services/ride_chat_service.dart';
@@ -132,6 +133,122 @@ class _RideChatSheetState extends State<RideChatSheet> {
     if (mounted) setState(() => _isSending = false);
 
     _scrollToBottom();
+  }
+
+  Future<void> _pickAndSendMedia(ImageSource source) async {
+    if (_isSending) return;
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 80,
+      );
+      if (picked == null || !mounted) return;
+
+      setState(() => _isSending = true);
+      final bytes = await picked.readAsBytes();
+      final mimeType = picked.path.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      final fileName = picked.name.isNotEmpty
+          ? picked.name
+          : 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
+
+      final err = await _chatService.sendMediaMessage(
+        rideId: widget.rideId,
+        senderId: widget.currentUserId,
+        senderRole: widget.currentUserRole,
+        bytes: bytes,
+        fileName: fileName,
+        mimeType: mimeType,
+        caption: _textController.text.trim().isNotEmpty ? _textController.text.trim() : null,
+      );
+
+      if (mounted) {
+        if (err != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err), backgroundColor: AppTheme.sunsetCoral),
+          );
+        } else {
+          _textController.clear();
+          _scrollToBottom();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to attach image: $e'),
+            backgroundColor: AppTheme.sunsetCoral,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  void _showMediaPickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF141B2D)
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: AppTheme.primaryBlue),
+                ),
+                title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Snap landmark or vehicle location'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndSendMedia(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.emeraldGreen.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library_rounded, color: AppTheme.emeraldGreen),
+                ),
+                title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Send a saved photo or screenshot'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _pickAndSendMedia(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -322,16 +439,49 @@ class _RideChatSheetState extends State<RideChatSheet> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(
-                              msg.text,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: isMe
-                                    ? Colors.white
-                                    : (isDark ? Colors.white : Colors.black87),
-                                height: 1.3,
+                            if (msg.hasMedia) ...[
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 240),
+                                  child: Image.network(
+                                    msg.mediaUrl!,
+                                    fit: BoxFit.cover,
+                                    loadingBuilder: (ctx, child, progress) {
+                                      if (progress == null) return child;
+                                      return Container(
+                                        height: 140,
+                                        width: 200,
+                                        color: Colors.black12,
+                                        child: const Center(
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (ctx, error, stackTrace) => Container(
+                                      height: 100,
+                                      width: 180,
+                                      color: Colors.black12,
+                                      child: const Center(
+                                        child: Icon(Icons.broken_image_rounded, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              if (msg.text.isNotEmpty) const SizedBox(height: 6),
+                            ],
+                            if (msg.text.isNotEmpty)
+                              Text(
+                                msg.text,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: isMe
+                                      ? Colors.white
+                                      : (isDark ? Colors.white : Colors.black87),
+                                  height: 1.3,
+                                ),
+                              ),
                             const SizedBox(height: 3),
                             Row(
                               mainAxisSize: MainAxisSize.min,
@@ -407,6 +557,12 @@ class _RideChatSheetState extends State<RideChatSheet> {
             ),
             child: Row(
               children: [
+                IconButton(
+                  tooltip: 'Attach Photo',
+                  icon: const Icon(Icons.add_photo_alternate_outlined, size: 22),
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  onPressed: _isSending ? null : () => _showMediaPickerSheet(),
+                ),
                 Expanded(
                   child: TextField(
                     controller: _textController,

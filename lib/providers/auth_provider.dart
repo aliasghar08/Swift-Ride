@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../domain/models/user_model.dart';
 import '../domain/models/user_role.dart';
 import '../services/auth_service.dart';
+import '../services/firebase_storage_service.dart';
 import '../services/firestore/firestore_user_service.dart';
 import '../services/native/native_storage_service.dart';
 import '../services/push_notification_service.dart';
@@ -561,12 +562,27 @@ class AuthProvider extends ChangeNotifier {
     await updateUserProfile(fullName: fullName);
   }
 
-  /// Updates user profile fields (name, phone, optional email, and role) across
+  /// Uploads a new profile photo to Firebase Storage and updates the user profile.
+  Future<String> uploadProfilePhoto(Uint8List bytes, {String mimeType = 'image/jpeg'}) async {
+    final uid = _currentUser.id;
+    if (uid.isEmpty) throw StateError('No user signed in');
+    final storage = FirebaseStorageService();
+    final url = await storage.uploadUserProfilePhoto(
+      userId: uid,
+      bytes: bytes,
+      mimeType: mimeType,
+    );
+    await updateUserProfile(photoUrl: url);
+    return url;
+  }
+
+  /// Updates user profile fields (name, phone, optional email, photoUrl, and role) across
   /// in-memory state, native storage cache, and Cloud Firestore.
   Future<void> updateUserProfile({
     String? fullName,
     String? phone,
     String? email,
+    String? photoUrl,
     UserRole? role,
   }) async {
     final nextName = (fullName != null && fullName.trim().isNotEmpty)
@@ -579,6 +595,7 @@ class AuthProvider extends ChangeNotifier {
         ? (email.trim().isEmpty ? null : email.trim())
         : _currentUser.email;
     final nextRole = role ?? _currentUser.role;
+    final nextPhoto = photoUrl ?? _currentUser.photoUrl;
 
     _currentUser = AppUser(
       id: _currentUser.id.isNotEmpty
@@ -590,6 +607,9 @@ class AuthProvider extends ChangeNotifier {
       role: nextRole,
       rating: _currentUser.rating,
       totalRides: _currentUser.totalRides,
+      photoUrl: nextPhoto,
+      gender: _currentUser.gender,
+      isGenderVerified: _currentUser.isGenderVerified,
       fcmTokens: _currentUser.fcmTokens,
       trustedContacts: _currentUser.trustedContacts,
       createdAt: _currentUser.createdAt,

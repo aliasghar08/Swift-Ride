@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, rtdb } from '../../config/firebase';
-import { APP_CONSTANTS } from '../../config/constants';
+import { APP_CONSTANTS, REQUIRE_DRIVER_VERIFICATION } from '../../config/constants';
 import { assertHasToken } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
 import { z } from 'zod';
@@ -76,7 +76,7 @@ export const toggleOnline = onCall(
       driverData?.vehicleMake
     );
 
-    if (data.isOnline && (!isVerified || !hasValidVehicle)) {
+    if (REQUIRE_DRIVER_VERIFICATION && data.isOnline && (!isVerified || !hasValidVehicle)) {
       throw new HttpsError(
         'failed-precondition',
         'Please enter complete vehicle details (legal & visual) and complete document verification before going online.'

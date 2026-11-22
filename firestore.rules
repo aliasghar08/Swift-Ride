@@ -323,8 +323,6 @@ service cloud.firestore {
           isValidDriver(request.resource.data) &&
           // Cannot modify verification or subscription status without admin/functions
           request.resource.data.isVerified == resource.data.isVerified &&
-          // Driver cannot go online if not verified
-          (request.resource.data.isOnline == false || resource.data.isVerified == true) &&
           // Only verified female drivers can enable femalePassengersOnly
           (!('femalePassengersOnly' in request.resource.data) ||
            request.resource.data.femalePassengersOnly != true ||
@@ -408,8 +406,7 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         request.resource.data.driverId == request.auth.uid &&
         isValidOffer(request.resource.data) &&
-        exists(/databases/$(database)/documents/drivers/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/drivers/$(request.auth.uid)).data.isVerified == true;
+        exists(/databases/$(database)/documents/drivers/$(request.auth.uid));
       allow update: if isAuthenticated() &&
         isValidOffer(request.resource.data) &&
         (resource.data.driverId == request.auth.uid ||

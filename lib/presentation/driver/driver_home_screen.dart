@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/native/native_channel_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -155,8 +156,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     LocationProvider locProv,
   ) async {
     final driver = driverProv.driverProfile;
-    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
-    if (!isVerified || !driver.vehicle.isConfigured) return;
+    if (AppConstants.kRequireDriverVerification) {
+      final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+      if (!isVerified) return;
+    }
+    if (!driver.vehicle.isConfigured) return;
 
     final storage = NativeStorageService();
     final explicitlyOffline = await storage.getBool('driver_explicitly_offline') ?? false;
@@ -1029,7 +1033,10 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                           return;
                                         }
                                       } else {
-                                        if (!driver.vehicle.isConfigured || (!driver.isVerified && !driverProv.hasPassedAiVerification)) {
+                                        if (!driver.vehicle.isConfigured ||
+                                            (AppConstants.kRequireDriverVerification &&
+                                                !driver.isVerified &&
+                                                !driverProv.hasPassedAiVerification)) {
                                           _showVehicleSetupRequiredDialog(context);
                                           return;
                                         }
@@ -1195,7 +1202,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   ],
                                 ),
                               ),
-                              if (!driver.isVerified || !driver.vehicle.isConfigured) ...[
+                              if (!driver.isVerified) ...[
                                 const SizedBox(height: 8),
                                 InkWell(
                                   onTap: () {
@@ -1209,27 +1216,29 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.amberWarning.withValues(alpha: 0.15),
+                                      color: isDark
+                                          ? AppTheme.accentCyan.withValues(alpha: 0.12)
+                                          : AppTheme.primaryBlue.withValues(alpha: 0.08),
                                       borderRadius: BorderRadius.circular(10),
                                       border: Border.all(
-                                        color: AppTheme.amberWarning.withValues(alpha: 0.4),
+                                        color: isDark
+                                            ? AppTheme.accentCyan.withValues(alpha: 0.3)
+                                            : AppTheme.primaryBlue.withValues(alpha: 0.25),
                                       ),
                                     ),
                                     child: Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.verified_user_outlined,
-                                          color: AppTheme.amberWarning,
+                                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                           size: 18,
                                         ),
                                         const SizedBox(width: 8),
                                         Expanded(
                                           child: Text(
-                                            !driver.vehicle.isConfigured
-                                                ? 'Vehicle details missing. Tap to setup vehicle & verify.'
-                                                : 'Documents unverified. Tap to verify with AI to go online.',
+                                            'Boost Trust: Get Verified Badge (Optional)',
                                             style: TextStyle(
-                                              color: isDark ? Colors.amber.shade200 : AppTheme.amberWarning,
+                                              color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                               fontSize: layout.fontSize(11),
                                               fontWeight: FontWeight.w600,
                                             ),
@@ -1237,9 +1246,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        const Icon(
+                                        Icon(
                                           Icons.chevron_right,
-                                          color: AppTheme.amberWarning,
+                                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                           size: 16,
                                         ),
                                       ],

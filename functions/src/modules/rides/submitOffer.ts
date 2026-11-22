@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../../config/firebase';
-import { APP_CONSTANTS } from '../../config/constants';
+import { APP_CONSTANTS, REQUIRE_DRIVER_VERIFICATION } from '../../config/constants';
 import { assertRole } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
 import { sendPushToUser } from '../notifications';
@@ -39,22 +39,26 @@ export const submitOffer = onCall(
     }
 
     const driverData = driverDoc.data();
-    if (driverData?.isVerified !== true) {
+    if (!driverData) {
+      throw new HttpsError('failed-precondition', 'Driver profile data is missing.');
+    }
+
+    if (REQUIRE_DRIVER_VERIFICATION && driverData.isVerified !== true) {
       throw new HttpsError('permission-denied', 'Driver profile is pending document verification.');
     }
 
-    if (driverData?.status === 'banned' || driverData?.isSuspended === true) {
+    if (driverData.status === 'banned' || driverData.isSuspended === true) {
       throw new HttpsError('permission-denied', 'Your driver account is suspended.');
     }
 
-    const plate = driverData?.vehiclePlate;
-    if (!plate || plate === 'SWIFT-101' || plate === 'ABC-1234' || !driverData?.vehicleMake) {
+    const plate = driverData.vehiclePlate;
+    if (REQUIRE_DRIVER_VERIFICATION && (!plate || plate === 'SWIFT-101' || plate === 'ABC-1234' || !driverData.vehicleMake)) {
       throw new HttpsError('failed-precondition', 'Please configure your vehicle details before submitting offers.');
     }
 
     // Women-Only mode offer submission gates
     if (rideData.femaleDriverOnly === true) {
-      const isFemaleDriver = driverData?.gender?.toLowerCase() === 'female' && driverData?.isVerified === true;
+      const isFemaleDriver = driverData.gender?.toLowerCase() === 'female' && driverData.isVerified === true;
       if (!isFemaleDriver) {
         throw new HttpsError(
           'permission-denied',
@@ -63,7 +67,7 @@ export const submitOffer = onCall(
       }
     }
 
-    if (driverData?.femalePassengersOnly === true) {
+    if (driverData.femalePassengersOnly === true) {
       if (rideData.riderGender?.toLowerCase() !== 'female') {
         throw new HttpsError(
           'failed-precondition',
@@ -78,11 +82,11 @@ export const submitOffer = onCall(
       driverId: driver.uid,
       counterFare: data.counterFare,
       etaMinutes: data.etaMinutes || 5,
-      driverRating: driverData?.rating || 5.0,
+      driverRating: driverData.rating || 5.0,
       vehicleInfo: {
-        make: driverData.vehicleMake,
+        make: driverData.vehicleMake || 'SwiftRide',
         model: driverData.vehicleModel || 'Vehicle',
-        plate: driverData.vehiclePlate,
+        plate: driverData.vehiclePlate || 'SWIFT-101',
         color: driverData.vehicleColor || 'Standard',
       },
       status: 'PENDING',
@@ -93,7 +97,7 @@ export const submitOffer = onCall(
     if (rideData.riderId) {
       await sendPushToUser(rideData.riderId, {
         title: 'New Offer Received!',
-        body: `${driverData.vehicleMake ? driverData.vehicleMake + ' Captain' : 'A driver'} offered $${data.counterFare.toFixed(2)} for your ride.`,
+        body: `${driverData.vehicleMake ? driverData.vehicleMake + ' Captain' : 'A driver'} offered Rs ${data.counterFare.toFixed(0)} for your ride.`,
         type: 'COUNTER_OFFER',
         rideId: data.rideId,
         extraData: {

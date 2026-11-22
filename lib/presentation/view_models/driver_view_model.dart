@@ -21,6 +21,7 @@ import '../../services/native/native_notification_service.dart';
 import '../../services/native/native_storage_service.dart';
 import '../../services/pricing_ml_service.dart';
 import '../../services/native_map_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/id_generator.dart';
 import '../../services/firestore/firestore_driver_service.dart';
 import '../../services/map_service.dart';
@@ -572,7 +573,9 @@ class DriverViewModel extends ChangeNotifier {
       if (!driver.vehicle.isConfigured) {
         return 'Please input your vehicle details (legal & visual info) before going online.';
       }
-      if (!driver.isVerified && !driverProv.hasPassedAiVerification) {
+      if (AppConstants.kRequireDriverVerification &&
+          !driver.isVerified &&
+          !driverProv.hasPassedAiVerification) {
         return 'Please verify your driver documents before going online.';
       }
     }
@@ -631,8 +634,11 @@ class DriverViewModel extends ChangeNotifier {
     required LocationProvider locProv,
   }) async {
     final driver = driverProv.driverProfile;
-    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
-    if (!isVerified || !driver.vehicle.isConfigured) return;
+    if (AppConstants.kRequireDriverVerification) {
+      final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+      if (!isVerified) return;
+    }
+    if (!driver.vehicle.isConfigured) return;
 
     final explicitlyOffline = await _storage.getBool('driver_explicitly_offline') ?? false;
     if (explicitlyOffline) return;

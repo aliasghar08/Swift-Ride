@@ -1,3 +1,5 @@
+export const REQUIRE_DRIVER_VERIFICATION = false;
+
 export const APP_CONSTANTS = {
   REGION: 'us-central1' as const,
   // Fare formula (PKR): base (150) + (km * 45) + (min * 5)

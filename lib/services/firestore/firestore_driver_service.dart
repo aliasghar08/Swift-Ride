@@ -395,7 +395,9 @@ class FirestoreDriverService {
   }) {
     final fs = _firestore;
     if (fs == null) {
-      var list = _memoryDrivers.values.where((d) => d.isOnline).toList();
+      var list = _memoryDrivers.values
+          .where((d) => d.isOnline && (!AppConstants.kRequireDriverVerification || d.isVerified))
+          .toList();
       if (centerLat != null && centerLng != null) {
         if (radiusKm != null) {
           list = list
@@ -412,10 +414,14 @@ class FirestoreDriverService {
       return Stream.value(list);
     }
 
-    return fs
+    var query = fs
         .collection(AppConstants.driversCollection)
-        .where('isOnline', isEqualTo: true)
-        .where('isVerified', isEqualTo: true)
+        .where('isOnline', isEqualTo: true);
+    if (AppConstants.kRequireDriverVerification) {
+      query = query.where('isVerified', isEqualTo: true);
+    }
+
+    return query
         .snapshots()
         .map((querySnap) {
       var drivers =

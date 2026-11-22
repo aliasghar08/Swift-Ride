@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../domain/models/driver_profile_model.dart';
+import '../core/constants/app_constants.dart';
 import '../domain/models/driver_document_model.dart';
 import '../domain/models/vehicle_info_model.dart';
 import '../services/driver_service.dart';
@@ -174,10 +175,12 @@ class DriverProvider extends ChangeNotifier {
   }
 
   /// Whether the driver has entered complete legal & visual vehicle information
-  /// and passed official verification to safely receive ride requests.
+  /// and passed official verification (if required) to safely receive ride requests.
   bool get canActAsDriver {
     return _driverProfile.vehicle.isConfigured &&
-        (_driverProfile.isVerified || hasPassedAiVerification);
+        (!AppConstants.kRequireDriverVerification ||
+            _driverProfile.isVerified ||
+            hasPassedAiVerification);
   }
 
   /// Updates driver's vehicle legal and visual details and persists to Firestore.

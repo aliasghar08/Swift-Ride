@@ -107,6 +107,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "isOnline", "order": "ASCENDING" },
+        { "fieldPath": "currentLocation.geohash", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "drivers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isOnline", "order": "ASCENDING" },
         { "fieldPath": "isVerified", "order": "ASCENDING" },
         { "fieldPath": "currentLocation.geohash", "order": "ASCENDING" }
       ]

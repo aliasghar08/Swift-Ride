@@ -1,6 +1,6 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { db } from '../config/firebase';
-import { APP_CONSTANTS } from '../config/constants';
+import { APP_CONSTANTS, REQUIRE_DRIVER_VERIFICATION } from '../config/constants';
 import { notifyDriversOfRide, notifyDriverOfPoolDetour } from '../modules/notifications';
 import * as geofire from 'geofire-common';
 
@@ -33,10 +33,15 @@ export const onRideCreated = onDocumentCreated(
 
     // 2. Query online drivers within proximity bounds
     for (const b of bounds) {
-      const q = db
+      let q = db
         .collection(APP_CONSTANTS.COLLECTIONS.DRIVERS)
-        .where('isOnline', '==', true)
-        .where('isVerified', '==', true)
+        .where('isOnline', '==', true);
+
+      if (REQUIRE_DRIVER_VERIFICATION) {
+        q = q.where('isVerified', '==', true);
+      }
+
+      q = q
         .orderBy('currentLocation.geohash')
         .startAt(b[0])
         .endAt(b[1]);

@@ -35,7 +35,7 @@ void main() {
       expect(explicitlyOffline, isFalse);
     });
 
-    test('checkAndAutoGoOnline keeps unverified driver offline', () async {
+    test('checkAndAutoGoOnline keeps unverified driver offline without configured vehicle', () async {
       final storage = NativeStorageService();
       await storage.remove('driver_explicitly_offline');
 
@@ -51,6 +51,31 @@ void main() {
 
       await viewModel.checkAndAutoGoOnline(driverProv: driverProv, locProv: locProv);
       expect(driverProv.isOnline, isFalse);
+    });
+
+    test('checkAndAutoGoOnline transitions unverified driver with configured vehicle online when verification optional', () async {
+      final storage = NativeStorageService();
+      await storage.remove('driver_explicitly_offline');
+
+      final viewModel = DriverViewModel();
+      final driverProv = DriverProvider(firestoreService: FakeFirestoreDriverService());
+      final locProv = LocationProvider();
+
+      driverProv.setDriverProfileForTesting(
+        DriverProfile.empty(userId: 'd_unverified_configured').copyWith(
+          isVerified: false,
+          vehicle: const VehicleInfo(
+            make: 'Toyota',
+            model: 'Corolla',
+            year: 2022,
+            plate: 'LEA-21-4567',
+            color: 'White',
+          ),
+        ),
+      );
+
+      await viewModel.checkAndAutoGoOnline(driverProv: driverProv, locProv: locProv);
+      expect(driverProv.isOnline, isTrue);
     });
 
     test('checkAndAutoGoOnline transitions verified driver with configured vehicle online', () async {

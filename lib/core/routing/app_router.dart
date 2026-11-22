@@ -3,6 +3,7 @@ import '../provider/custom_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../services/fcm_service.dart';
+import '../../services/push_notification_service.dart';
 import '../../providers/ride_provider.dart';
 import '../../domain/models/user_role.dart';
 import '../../presentation/common/mode_app_bar.dart';
@@ -44,6 +45,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
         _pushRegisteredFor = null;
         _restoredForRole = null;
         _fcm.unregister();
+        PushNotificationService.instance.removeCurrentTokenOnLogout();
       }
       return;
     }
@@ -67,8 +69,12 @@ class _MainShellScreenState extends State<MainShellScreen> {
         _pushRegisteredFor = uid;
         _fcm.onMessageOpened = (message) {
           debugPrint('[Shell] notification opened: type=${message.data['type']}');
+          AppRouter.handleNotificationTap(message.data);
         };
         _fcm.initialize(userId: uid);
+        PushNotificationService.instance.initialize(
+          onNotificationTap: AppRouter.handleNotificationTap,
+        );
       }
 
       if (asDriver) {
@@ -126,6 +132,26 @@ class _MainShellScreenState extends State<MainShellScreen> {
 /// Pure Flutter route generator supporting the main app shell, phone auth, and deep-linked trip tracking.
 class AppRouter {
   static const String initialRoute = '/';
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+  /// Handles notification tap routing for ride dispatch, offers, and safety alerts.
+  static void handleNotificationTap(Map<String, dynamic> data) {
+    debugPrint('[NotificationTap] Routing payload: $data');
+    final type = data['type']?.toString();
+    final rideId = data['rideId']?.toString();
+
+    // Route active ride / dispatch / offer notifications to active screen
+    if (type == 'NEW_RIDE_REQUEST' ||
+        type == 'COUNTER_OFFER' ||
+        type == 'OFFER_ACCEPTED' ||
+        type == 'DRIVER_ARRIVED' ||
+        type == 'SAFETY_ALERT' ||
+        type == 'SOS' ||
+        type == 'RIDE_REQUEST' ||
+        rideId != null) {
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/', (route) => false);
+    }
+  }
 
   /// Smooth fade + gentle slide transition for pushReplacement and route navigation.
   static Route<T> smoothRoute<T>(

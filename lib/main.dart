@@ -16,10 +16,10 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'firebase_options.dart';
 import 'providers/safety_provider.dart';
 import 'presentation/auth/phone_auth_screen.dart';
-import 'services/fcm_service.dart';
 import 'services/fuel_price_service.dart';
 import 'services/ad_service.dart';
 import 'services/native/native_storage_service.dart';
+import 'services/push_notification_service.dart';
 import 'ai/ai.dart';
 
 Future<void> main() async {
@@ -82,6 +82,11 @@ Future<void> main() async {
       FuelPriceService().fetchLivePrices();
       AdService.instance.initialize().catchError((adErr) {
         debugPrint('[AdMob] AdService background init notice: $adErr');
+      });
+      PushNotificationService.instance.initialize(
+        onNotificationTap: AppRouter.handleNotificationTap,
+      ).catchError((pushErr) {
+        debugPrint('[FCM] PushNotificationService init notice: $pushErr');
       });
     });
   });
@@ -161,7 +166,7 @@ class SwiftRideApp extends StatefulWidget {
 }
 
 class _SwiftRideAppState extends State<SwiftRideApp> with WidgetsBindingObserver {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  GlobalKey<NavigatorState> get _navigatorKey => AppRouter.navigatorKey;
   int _handledSignOutGen = 0;
 
   @override

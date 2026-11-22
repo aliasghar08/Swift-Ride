@@ -4,6 +4,7 @@ import { db, rtdb } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
 import { assertAuthenticated } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
+import { sendPushToUser } from '../notifications';
 import { z } from 'zod';
 
 const AcceptOfferSchema = z.object({
@@ -94,6 +95,17 @@ export const acceptOffer = onCall(
       timestamp: Date.now(),
       heading: 0,
       speed: 0,
+    });
+
+    // 5. Notify winning driver that offer was accepted
+    await sendPushToUser(result.driverId, {
+      title: 'Offer Accepted! 🎉',
+      body: `The rider accepted your offer of $${result.acceptedFare.toFixed(2)}. Start heading to pickup!`,
+      type: 'OFFER_ACCEPTED',
+      rideId,
+      extraData: {
+        acceptedFare: result.acceptedFare.toString(),
+      },
     });
 
     return {

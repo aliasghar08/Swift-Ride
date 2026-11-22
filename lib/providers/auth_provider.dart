@@ -7,6 +7,7 @@ import '../domain/models/user_role.dart';
 import '../services/auth_service.dart';
 import '../services/firestore/firestore_user_service.dart';
 import '../services/native/native_storage_service.dart';
+import '../services/push_notification_service.dart';
 
 /// Production-ready Auth & Role Provider managing the active session with
 /// Firebase Phone Authentication, Firestore user profile persistence, and NativeStorageService.
@@ -455,6 +456,7 @@ class AuthProvider extends ChangeNotifier {
         await _firestoreUserService.saveUser(_currentUser);
       }
       await _authService.signOut();
+      unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
       unawaited(_storage.remove(_cachedProfileKey));
       _verificationId = null;
       _resendToken = null;
@@ -469,6 +471,7 @@ class AuthProvider extends ChangeNotifier {
       );
       _activeRole = UserRole.rider;
       _signOutGeneration++;
+      unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
       unawaited(_storage.setString('active_user_role', 'rider'));
       unawaited(_initAnonymousSession());
     } catch (e) {
@@ -506,6 +509,7 @@ class AuthProvider extends ChangeNotifier {
       );
       _activeRole = UserRole.rider;
       _signOutGeneration++;
+      unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
       unawaited(_storage.setString('active_user_role', 'rider'));
       unawaited(_storage.remove('driver_daily_khata'));
       unawaited(_initAnonymousSession());

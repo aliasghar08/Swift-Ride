@@ -27,10 +27,13 @@ export const onRideUpdated = onDocumentUpdated(
       // Send push notification to rider
       if (after.riderId) {
         let msg = '';
+        let notifType = 'RIDE_STATUS_UPDATE';
         if (after.status === 'ACCEPTED') {
           msg = `A driver accepted your offer for $${after.acceptedFare}!`;
+          notifType = 'OFFER_ACCEPTED';
         } else if (after.status === 'DRIVER_ARRIVED') {
           msg = `Your driver has arrived at the pickup location. Share PIN ${after.pin} to start!`;
+          notifType = 'DRIVER_ARRIVED';
         } else if (after.status === 'IN_PROGRESS') {
           msg = 'Your trip is now in progress. Safe travels!';
         } else if (after.status === 'COMPLETED') {
@@ -41,9 +44,9 @@ export const onRideUpdated = onDocumentUpdated(
 
         if (msg) {
           await sendNotificationToUser(after.riderId, {
-            title: 'SwiftRide Status Update',
+            title: notifType === 'DRIVER_ARRIVED' ? 'Driver Arrived! 📍' : 'SwiftRide Status Update',
             body: msg,
-            data: { rideId, status: after.status },
+            data: { rideId, status: after.status, type: notifType },
           });
         }
       }

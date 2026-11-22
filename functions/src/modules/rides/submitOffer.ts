@@ -4,6 +4,7 @@ import { db } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
 import { assertRole } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
+import { sendPushToUser } from '../notifications';
 import { z } from 'zod';
 
 const SubmitOfferSchema = z.object({
@@ -87,6 +88,20 @@ export const submitOffer = onCall(
       status: 'PENDING',
       createdAt: FieldValue.serverTimestamp(),
     });
+
+    // Notify rider of incoming driver offer/counter-offer
+    if (rideData.riderId) {
+      await sendPushToUser(rideData.riderId, {
+        title: 'New Offer Received!',
+        body: `${driverData.vehicleMake ? driverData.vehicleMake + ' Captain' : 'A driver'} offered $${data.counterFare.toFixed(2)} for your ride.`,
+        type: 'COUNTER_OFFER',
+        rideId: data.rideId,
+        extraData: {
+          offerId: offerRef.id,
+          counterFare: data.counterFare.toString(),
+        },
+      });
+    }
 
     return {
       success: true,

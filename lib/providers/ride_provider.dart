@@ -5,6 +5,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import '../domain/models/demand_hotspot_model.dart';
 import '../domain/models/driver_profile_model.dart';
 import '../domain/models/location_point_model.dart';
 import '../domain/models/ride_model.dart';
@@ -582,6 +583,39 @@ class RideProvider extends ChangeNotifier {
         debugPrint('[RideProvider.driverArrived] failed: $e');
       }),
     );
+  }
+
+  /// Streams active live demand hotspots for cockpit heatmaps.
+  Stream<List<DemandHotspot>> streamDemandHotspots() {
+    return _firestore.streamDemandHotspots();
+  }
+
+  /// Driver accepts an en-route corridor pool offer.
+  Future<bool> acceptPoolOffer({
+    required String rideId,
+    required String parentRideId,
+  }) async {
+    final success = await _firestore.acceptPoolOffer(
+      rideId: rideId,
+      parentRideId: parentRideId,
+    );
+    return success;
+  }
+
+  /// Marks a specific waypoint as completed on the active ride.
+  Future<void> completeWaypoint(int index) async {
+    final ride = _currentRide;
+    if (ride == null || index < 0 || index >= ride.waypoints.length) return;
+
+    final updated = List<Map<String, dynamic>>.from(
+      ride.waypoints.map((w) => Map<String, dynamic>.from(w)),
+    );
+    updated[index]['completed'] = true;
+
+    _currentRide = ride.copyWith(waypoints: updated);
+    notifyListeners();
+
+    await _firestore.updateWaypoints(ride.id, updated);
   }
 
   /// Verifies the 4-digit PIN server-side to begin the trip.

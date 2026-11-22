@@ -1,5 +1,6 @@
 import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
-import { rtdb } from '../config/firebase';
+import { FieldValue } from 'firebase-admin/firestore';
+import { db, rtdb } from '../config/firebase';
 import { APP_CONSTANTS } from '../config/constants';
 import { sendNotificationToUser } from '../modules/notifications';
 
@@ -58,6 +59,62 @@ export const onRideUpdated = onDocumentUpdated(
           body: `Ride ${rideId} was cancelled by rider.`,
           data: { rideId, status: 'CANCELLED' },
         });
+      }
+
+      // Log Anonymized ML Training Outcome Telemetry (Zero PII)
+      // When ride concludes (COMPLETED, CANCELLED, or EXPIRED)
+      if (['COMPLETED', 'CANCELLED'].includes(after.status)) {
+        try {
+          const vehicleTierMap: Record<string, number> = {
+            bike: 0,
+            rikshaw: 1,
+            rickshaw: 1,
+            car_economy: 2,
+            car_ac: 3,
+            comfort: 4,
+            car: 3,
+          };
+          const vehicleTier = vehicleTierMap[after.vehicleType] ?? 3;
+          const distanceKm = typeof after.distanceKm === 'number' ? after.distanceKm : 5.0;
+          const durationMin = typeof after.durationMin === 'number' ? after.durationMin : 15.0;
+          const initialOfferPkr = typeof after.offeredFare === 'number' ? after.offeredFare : 300.0;
+          const finalAgreedFarePkr = typeof after.acceptedFare === 'number' ? after.acceptedFare : initialOfferPkr;
+          const wasHaggled = after.acceptedFare !== undefined && Math.abs(after.acceptedFare - initialOfferPkr) > 1.0;
+
+          // Estimate congestion ratio from duration vs expected free-flow
+          const expectedFreeFlowMin = (distanceKm / 35.0) * 60.0;
+          const congestionRatio = Math.min(2.4, Math.max(1.0, durationMin / Math.max(1.0, expectedFreeFlowMin)));
+
+          // Infer acceptedWithinSec if timestamps available
+          let acceptedWithinSec = 45;
+          if (after.acceptedAt && after.createdAt) {
+            const createdMs = after.createdAt.toMillis ? after.createdAt.toMillis() : Date.parse(after.createdAt);
+            const acceptedMs = after.acceptedAt.toMillis ? after.acceptedAt.toMillis() : Date.parse(after.acceptedAt);
+            if (!isNaN(createdMs) && !isNaN(acceptedMs) && acceptedMs >= createdMs) {
+              acceptedWithinSec = Math.round((acceptedMs - createdMs) / 1000);
+            }
+          }
+
+          const outcomeRef = db.collection(APP_CONSTANTS.COLLECTIONS.ML_TRAINING_OUTCOMES).doc(rideId);
+          await outcomeRef.set({
+            distanceKm,
+            durationMin,
+            congestionRatio: Math.round(congestionRatio * 100) / 100,
+            vehicleTier,
+            roadCondition: 1, // Default urban normal
+            acEnabled: vehicleTier >= 2 ? 1 : 0,
+            bookedSeats: after.bookedSeats ?? 1,
+            fuelPricePkr: 285.0, // Baseline PKR petrol reference
+            initialOfferPkr,
+            finalAgreedFarePkr,
+            acceptedWithinSec,
+            wasHaggled,
+            finalStatus: after.status,
+            timestamp: FieldValue.serverTimestamp(),
+          });
+        } catch (mlErr) {
+          console.warn('[MLTelemetry] Error logging training outcome:', mlErr);
+        }
       }
     }
   }

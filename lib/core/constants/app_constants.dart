@@ -38,5 +38,7 @@ class AppConstants {
   static const String safetyEventsCollection = 'safety_events';
   static const String sharedTripsCollection = 'shared_trips';
   static const String paymentsCollection = 'payments';
+  static const String demandHotspotsCollection = 'demand_hotspots';
+  static const String mlTrainingOutcomesCollection = 'ml_training_outcomes';
 }
 

@@ -282,6 +282,15 @@ void main() {
       // Check driver document verification rules
       expect(content, contains('match /documents/{docId}'));
       expect(content, contains('isValidDriverDocument'));
+
+      // Check carpooling and multi-destination ride extensions
+      expect(content, contains('parentPoolRideId'));
+      expect(content, contains('remainingSeats'));
+      expect(content, contains('waypoints'));
+
+      // Check demand hotspots and ML training outcomes collections
+      expect(content, contains('match /demand_hotspots/{cellId}'));
+      expect(content, contains('match /ml_training_outcomes/{rideId}'));
     });
 
     test('database.rules.json has valid JSON syntax and rules', () {

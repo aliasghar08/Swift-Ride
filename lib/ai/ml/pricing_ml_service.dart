@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
@@ -20,6 +21,10 @@ class PricingMLService {
   Interpreter? _economicsInterpreter;
   bool _isEconomicsInitialized = false;
   bool _isEconomicsLoading = false;
+  String? _activeModelVersion;
+
+  String get activeModelVersion => _activeModelVersion ?? 'bundled_v1';
+  bool get isUsingOtaModel => _activeModelVersion != null && _activeModelVersion != 'bundled_v1';
 
   // Single-target Pricing model normalization bounds
   static const double _distMin = 1.0;
@@ -90,18 +95,54 @@ class PricingMLService {
     }
   }
 
-  /// Loads the multi-output TFLite economics neural network from app assets
-  Future<void> initializeEconomics() async {
+  /// Loads the multi-output TFLite economics neural network from app assets or optional OTA path
+  Future<void> initializeEconomics({String? otaModelPath, Map<String, dynamic>? manifest}) async {
     if (_isEconomicsInitialized || _isEconomicsLoading) return;
     _isEconomicsLoading = true;
     try {
+      if (otaModelPath != null && otaModelPath.isNotEmpty && File(otaModelPath).existsSync()) {
+        try {
+          _economicsInterpreter = Interpreter.fromFile(File(otaModelPath));
+          _isEconomicsInitialized = true;
+          _activeModelVersion = manifest?['version']?.toString() ?? 'ota_dynamic';
+          debugPrint('[PricingMLService] OTA Economics model ($activeModelVersion) loaded successfully.');
+          return;
+        } catch (otaErr) {
+          debugPrint('[PricingMLService] Warning: Failed to load OTA model ($otaErr). Falling back to bundled assets.');
+        }
+      }
+
       _economicsInterpreter = await Interpreter.fromAsset('assets/ml/economics_model.tflite');
       _isEconomicsInitialized = true;
+      _activeModelVersion = 'bundled_v1';
       debugPrint('[PricingMLService] Multi-output Economics TFLite model loaded successfully.');
     } catch (e) {
       debugPrint('[PricingMLService] Notice: Could not load economics TFLite model ($e). Using algorithmic physics fallback.');
     } finally {
       _isEconomicsLoading = false;
+    }
+  }
+
+  /// Dynamically hot-swaps or updates the active Economics model with an OTA downloaded model
+  Future<bool> loadOtaModel({required String modelFilePath, Map<String, dynamic>? manifest}) async {
+    try {
+      final file = File(modelFilePath);
+      if (!file.existsSync()) {
+        debugPrint('[PricingMLService] OTA model file not found at $modelFilePath');
+        return false;
+      }
+
+      final newInterpreter = Interpreter.fromFile(file);
+      final oldInterpreter = _economicsInterpreter;
+      _economicsInterpreter = newInterpreter;
+      _isEconomicsInitialized = true;
+      _activeModelVersion = manifest?['version']?.toString() ?? 'ota_v2';
+      oldInterpreter?.close();
+      debugPrint('[PricingMLService] Successfully hot-swapped to OTA Economics model ($activeModelVersion).');
+      return true;
+    } catch (e) {
+      debugPrint('[PricingMLService] Failed to load OTA model: $e. Retaining previous model.');
+      return false;
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/geohash_util.dart';
+import '../../domain/models/demand_hotspot_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_offer_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -717,6 +718,116 @@ class FirestoreRideService {
       });
     } catch (e) {
       debugPrint('[FirestoreRideService] Error cancelling ride: $e');
+    }
+  }
+
+  /// Streams active live demand hotspots for heatmaps and driver nudges.
+  Stream<List<DemandHotspot>> streamDemandHotspots() {
+    final fs = _firestore;
+    if (fs == null) return Stream.value([]);
+
+    return fs
+        .collection(AppConstants.demandHotspotsCollection)
+        .where('expiresAt', isGreaterThan: Timestamp.now())
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((doc) => DemandHotspot.fromMap(doc.data(), docId: doc.id))
+            .where((h) => !h.isExpired)
+            .toList())
+        .handleError((e) {
+      debugPrint('[FirestoreRideService] Error streaming demand hotspots: $e');
+      return <DemandHotspot>[];
+    });
+  }
+
+  /// Updates the sequential waypoints and remaining seat capacity of a pooled ride.
+  Future<void> updateWaypoints(
+    String rideId,
+    List<Map<String, dynamic>> waypoints, {
+    int? remainingSeats,
+  }) async {
+    final cur = _memoryRides[rideId];
+    if (cur != null) {
+      _memoryRides[rideId] = cur.copyWith(
+        waypoints: waypoints,
+        remainingSeats: remainingSeats ?? cur.remainingSeats,
+      );
+    }
+
+    final fs = _firestore;
+    if (fs == null) return;
+
+    try {
+      final updates = <String, dynamic>{
+        'waypoints': waypoints,
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (remainingSeats != null) {
+        updates['remainingSeats'] = remainingSeats;
+      }
+      await fs.collection(AppConstants.ridesCollection).doc(rideId).update(updates);
+    } catch (e) {
+      debugPrint('[FirestoreRideService] Error updating waypoints: $e');
+    }
+  }
+
+  /// Driver accepts an en-route corridor pool offer, joining the incoming passenger into their active ride.
+  Future<bool> acceptPoolOffer({
+    required String rideId,
+    required String parentRideId,
+  }) async {
+    final fs = _firestore;
+    if (fs == null) {
+      // Memory fallback for tests
+      final parent = _memoryRides[parentRideId];
+      final incoming = _memoryRides[rideId];
+      if (parent != null && incoming != null) {
+        final remaining = parent.remainingSeats - incoming.bookedSeats;
+        _memoryRides[parentRideId] = parent.copyWith(
+          remainingSeats: remaining,
+          waypoints: [
+            ...parent.waypoints,
+            {
+              'rideId': rideId,
+              'type': 'pickup',
+              'lat': incoming.pickup.latitude,
+              'lng': incoming.pickup.longitude,
+              'address': incoming.pickup.address,
+              'pin': incoming.pin,
+              'completed': false,
+            },
+            {
+              'rideId': rideId,
+              'type': 'dropoff',
+              'lat': incoming.dropoff.latitude,
+              'lng': incoming.dropoff.longitude,
+              'address': incoming.dropoff.address,
+              'pin': incoming.pin,
+              'completed': false,
+            },
+          ],
+        );
+        _memoryRides[rideId] = incoming.copyWith(
+          driverId: parent.driverId,
+          parentPoolRideId: parentRideId,
+          status: RideStatus.accepted,
+          acceptedFare: incoming.offeredFare,
+        );
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      final callable = FirebaseFunctions.instance.httpsCallable('acceptPoolOffer');
+      final res = await callable.call<Map<String, dynamic>>({
+        'rideId': rideId,
+        'parentRideId': parentRideId,
+      });
+      return res.data['success'] == true;
+    } catch (e) {
+      debugPrint('[FirestoreRideService] Error calling acceptPoolOffer: $e');
+      return false;
     }
   }
 }

@@ -9,6 +9,7 @@ export {
   requestRide,
   submitOffer,
   acceptOffer,
+  acceptPoolOffer,
   updateRideStatus,
   cancelRide,
   getRideHistory,
@@ -57,6 +58,9 @@ export {
   cleanupStaleRides,
   persistLocations,
 } from './scheduled';
+
+// 9b. Analytics & Demand Heatmaps
+export { updateDemandHotspots, refreshDemandHotspots } from './modules/analytics/demandHeatmap';
 
 // 10. AI Module (Gemini Developer API + App Check)
 export {

@@ -72,8 +72,17 @@ service cloud.firestore {
     //   - typing: map | bool (optional)
     //   - femaleDriverOnly: bool (optional)
     //   - riderGender: string | null (optional)
+    //   - parentPoolRideId: string | null (optional, max 100 chars)
+    //   - remainingSeats: number (optional, integer >= 0 and <= 10)
+    //   - waypoints: list (optional, max 20 items)
     //   - createdAt: timestamp (immutable)
     //   - completedAt: timestamp | null
+    //
+    // Collection: demand_hotspots/{cellId}
+    //   - aggregated demand data (written exclusively by backend Cloud Functions scheduled analytics)
+    //
+    // Collection: ml_training_outcomes/{rideId}
+    //   - ride training data (locked down completely, server-side admin / Cloud Functions only for zero PII leakage)
     //
     // Subcollection: rides/{rideId}/messages/{messageId}
     //   - senderId: string (matches auth.uid)
@@ -259,7 +268,17 @@ service cloud.firestore {
         // riderGender: optional string or null (max 20 chars if string)
         (!('riderGender' in data) ||
           data.riderGender == null ||
-          (data.riderGender is string && data.riderGender.size() <= 20));
+          (data.riderGender is string && data.riderGender.size() <= 20)) &&
+        // parentPoolRideId: optional string or null (max 100 chars)
+        (!('parentPoolRideId' in data) ||
+          data.parentPoolRideId == null ||
+          (data.parentPoolRideId is string && data.parentPoolRideId.size() <= 100)) &&
+        // remainingSeats: optional number (integer >= 0 and <= 10)
+        (!('remainingSeats' in data) ||
+          ((data.remainingSeats is int || data.remainingSeats is number) && data.remainingSeats >= 0 && data.remainingSeats <= 10)) &&
+        // waypoints: optional list (max 20 items)
+        (!('waypoints' in data) ||
+          (data.waypoints is list && data.waypoints.size() <= 20));
     }
 
     // Ride Offer Validators
@@ -464,6 +483,19 @@ service cloud.firestore {
       allow create: if isAuthenticated() &&
         (request.resource.data.userId == request.auth.uid || isAdmin());
       allow update, delete: if isAdmin();
+    }
+
+    // Demand Hotspots (Aggregated geospatial demand cells)
+    match /demand_hotspots/{cellId} {
+      allow read: if isAuthenticated();
+      // Written exclusively by backend Cloud Functions scheduled analytics
+      allow write: if false;
+    }
+
+    // ML Training Outcomes (Zero PII leakage, server-side admin only)
+    match /ml_training_outcomes/{rideId} {
+      // Locked down completely from client SDKs; backend admin / Cloud Functions only
+      allow read, write: if false;
     }
   }
 }

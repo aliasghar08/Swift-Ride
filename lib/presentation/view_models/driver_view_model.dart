@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/native/native_channel_constants.dart';
+import '../../domain/models/demand_hotspot_model.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -72,6 +74,215 @@ class DriverViewModel extends ChangeNotifier {
   final Map<String, double> _aiMarketValuations = {};
   AutoAcceptMode _autoAcceptMode = AutoAcceptMode.off;
   final Set<String> _autoAcceptedRideIds = {};
+
+  // Live Demand Hotspots & Repositioning
+  bool _showHotspots = true;
+  List<DemandHotspot> _demandHotspots = [];
+  String? _repositioningNudge;
+  DemandHotspot? _targetHotspot;
+
+  // En-Route Dynamic Seat Pooling
+  Map<String, dynamic>? _enRoutePoolOffer;
+  bool _isAcceptingPoolOffer = false;
+
+  bool get showHotspots => _showHotspots;
+  List<DemandHotspot> get demandHotspots => List.unmodifiable(_demandHotspots);
+  String? get repositioningNudge => _repositioningNudge;
+  DemandHotspot? get targetHotspot => _targetHotspot;
+  Map<String, dynamic>? get enRoutePoolOffer => _enRoutePoolOffer;
+  bool get isAcceptingPoolOffer => _isAcceptingPoolOffer;
+
+  void toggleHotspots() {
+    _showHotspots = !_showHotspots;
+    _deviceService.triggerHaptic('selection');
+    notifyListeners();
+  }
+
+  void setDemandHotspots(List<DemandHotspot> hotspots) {
+    _demandHotspots = hotspots;
+    notifyListeners();
+  }
+
+  void dismissRepositioningNudge() {
+    _repositioningNudge = null;
+    _targetHotspot = null;
+    notifyListeners();
+  }
+
+  /// Evaluates whether driver is idle in a cold zone with nearby high-demand hotspots.
+  void evaluateRepositioningNudge({
+    required double currentLat,
+    required double currentLng,
+    required bool isOnline,
+    required Duration idleDuration,
+  }) {
+    if (!isOnline || idleDuration < const Duration(minutes: 10)) {
+      if (_repositioningNudge != null) dismissRepositioningNudge();
+      return;
+    }
+
+    // Check local demand at current position
+    final nearbyHotspots = _demandHotspots
+        .where((h) => !h.isExpired && h.distanceToKm(currentLat, currentLng) <= 1.5)
+        .toList();
+    final localScore = nearbyHotspots.isEmpty
+        ? 0.0
+        : nearbyHotspots.map((h) => h.demandScore).reduce(math.max);
+
+    // If local demand is not cold (>= 0.25), no need to reposition
+    if (localScore >= 0.25) {
+      if (_repositioningNudge != null) dismissRepositioningNudge();
+      return;
+    }
+
+    // Look for high-demand clusters (demandScore >= 0.65) within 4.0 km
+    final candidates = _demandHotspots
+        .where((h) =>
+            !h.isExpired &&
+            h.demandScore >= 0.65 &&
+            h.distanceToKm(currentLat, currentLng) <= 4.0)
+        .toList();
+
+    if (candidates.isEmpty) {
+      if (_repositioningNudge != null) dismissRepositioningNudge();
+      return;
+    }
+
+    // Choose candidate with highest demandScore (tie-break closest)
+    candidates.sort((a, b) {
+      final scoreComp = b.demandScore.compareTo(a.demandScore);
+      if (scoreComp != 0) return scoreComp;
+      return a.distanceToKm(currentLat, currentLng).compareTo(b.distanceToKm(currentLat, currentLng));
+    });
+
+    final best = candidates.first;
+    final distKm = best.distanceToKm(currentLat, currentLng);
+    _targetHotspot = best;
+    _repositioningNudge =
+        'High demand nearby (${distKm.toStringAsFixed(1)} km) • Estimated +40% faster bookings. Tap to navigate.';
+    notifyListeners();
+  }
+
+  void setEnRoutePoolOffer(Map<String, dynamic>? offer) {
+    _enRoutePoolOffer = offer;
+    if (offer != null) {
+      _deviceService.triggerHaptic('heavy');
+      _audioService.playAlertTone('beep');
+    }
+    notifyListeners();
+  }
+
+  void clearEnRoutePoolOffer() {
+    _enRoutePoolOffer = null;
+    notifyListeners();
+  }
+
+  /// Accepts an incoming en-route pool offer, merging into the driver's active trip.
+  Future<bool> acceptEnRoutePoolOffer({
+    required RideProvider rideProv,
+    required String rideId,
+    required String parentRideId,
+  }) async {
+    if (_isAcceptingPoolOffer) return false;
+    _isAcceptingPoolOffer = true;
+    notifyListeners();
+
+    try {
+      final ok = await rideProv.acceptPoolOffer(
+        rideId: rideId,
+        parentRideId: parentRideId,
+      );
+      if (ok) {
+        _enRoutePoolOffer = null;
+        _deviceService.triggerHaptic('success');
+        _audioService.playAlertTone('success');
+        _audioService.speak('Co-rider accepted. Waypoint added to your route.');
+      }
+      return ok;
+    } catch (e) {
+      debugPrint('[DriverViewModel] acceptEnRoutePoolOffer error: $e');
+      return false;
+    } finally {
+      _isAcceptingPoolOffer = false;
+      notifyListeners();
+    }
+  }
+
+  /// Waypoint progression: gets the active (first uncompleted) waypoint on a pooled ride.
+  Map<String, dynamic>? getActiveWaypoint(RideModel? ride) {
+    if (ride == null || ride.waypoints.isEmpty) return null;
+    for (final w in ride.waypoints) {
+      if (w['completed'] != true) {
+        return w;
+      }
+    }
+    return null;
+  }
+
+  int getActiveWaypointIndex(RideModel? ride) {
+    if (ride == null || ride.waypoints.isEmpty) return -1;
+    for (int i = 0; i < ride.waypoints.length; i++) {
+      if (ride.waypoints[i]['completed'] != true) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /// Verifies waypoint PIN (for pickups) or completes waypoint (for dropoffs).
+  Future<bool> verifyAndCompleteWaypoint({
+    required RideProvider rideProv,
+    required String enteredPin,
+    required AuthProvider authProv,
+    required DriverProvider driverProv,
+  }) async {
+    final ride = rideProv.currentRide;
+    if (ride == null) return false;
+
+    final index = getActiveWaypointIndex(ride);
+    if (index < 0) return false;
+
+    final waypoint = ride.waypoints[index];
+    final isPickup = waypoint['type'] == 'pickup';
+
+    if (isPickup) {
+      final expectedPin = waypoint['pin']?.toString() ?? '1234';
+      if (enteredPin.trim() != expectedPin.trim()) {
+        _pinErrorMessage = 'Invalid PIN for co-rider pickup.';
+        _deviceService.triggerHaptic('vibrate');
+        _audioService.playAlertTone('beep');
+        notifyListeners();
+        return false;
+      }
+    }
+
+    _pinErrorMessage = null;
+    pinController.clear();
+    await rideProv.completeWaypoint(index);
+    _deviceService.triggerHaptic('success');
+    _audioService.playAlertTone('success');
+
+    // Check if all waypoints are now completed
+    final remainingIncomplete = rideProv.currentRide?.waypoints
+            .where((w) => w['completed'] != true)
+            .toList() ??
+        [];
+
+    if (remainingIncomplete.isEmpty) {
+      // Complete overall trip
+      await completeActiveTrip(
+        rideProv: rideProv,
+        driverProv: driverProv,
+        authProv: authProv,
+      );
+    } else {
+      _audioService.speak(
+        isPickup ? 'Co-rider picked up. Heading to next stop.' : 'Stop completed.',
+      );
+      notifyListeners();
+    }
+    return true;
+  }
 
   DriverViewModel({
     NativeDeviceService? deviceService,

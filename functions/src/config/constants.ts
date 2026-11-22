@@ -28,6 +28,9 @@ export const APP_CONSTANTS = {
   GEOHASH_PRECISION_SEARCH: 5,
   GEOHASH_PRECISION_CELL: 7,
 
+  // En-Route Pooling Settings
+  POOL_MAX_DETOUR_KM: 1.5,
+
   // Collections
   COLLECTIONS: {
     USERS: 'users',
@@ -41,6 +44,8 @@ export const APP_CONSTANTS = {
     AI_CONVERSATIONS: 'ai_conversations',
     AI_INSIGHTS: 'ai_insights',
     AI_PREFERENCES: 'ai_preferences',
+    DEMAND_HOTSPOTS: 'demand_hotspots',
+    ML_TRAINING_OUTCOMES: 'ml_training_outcomes',
   },
 
   // RTDB Nodes

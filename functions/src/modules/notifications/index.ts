@@ -14,6 +14,7 @@ export interface SwiftRidePushPayload {
     | 'RIDE_REQUEST'
     | 'RIDE_STATUS_UPDATE'
     | 'NEW_CHAT_MESSAGE'
+    | 'EN_ROUTE_POOL_REQUEST'
     | 'SOS';
   rideId: string;
   extraData?: Record<string, string>;
@@ -147,4 +148,37 @@ export async function notifyDriversOfRide(
   };
 
   await sendPushToDrivers(driverIds, payload);
+}
+
+export async function notifyDriverOfPoolDetour(
+  driverId: string,
+  poolData: {
+    rideId: string;
+    parentRideId: string;
+    detourKm: number;
+    extraEarningsPkr: number;
+    pickupAddress: string;
+    dropoffAddress: string;
+    bookedSeats: number;
+  }
+): Promise<void> {
+  const title = `En-Route Co-Rider Offer! (+PKR ${poolData.extraEarningsPkr.toFixed(0)})`;
+  const body = `Pickup on your way: ${poolData.pickupAddress} • +${poolData.detourKm.toFixed(1)} km detour (${poolData.bookedSeats} seat${poolData.bookedSeats > 1 ? 's' : ''})`;
+
+  const payload: SwiftRidePushPayload = {
+    title,
+    body,
+    type: 'EN_ROUTE_POOL_REQUEST',
+    rideId: poolData.rideId,
+    extraData: {
+      parentRideId: poolData.parentRideId,
+      detourKm: poolData.detourKm.toFixed(2),
+      extraEarningsPkr: poolData.extraEarningsPkr.toFixed(0),
+      pickupAddress: poolData.pickupAddress,
+      dropoffAddress: poolData.dropoffAddress,
+      bookedSeats: poolData.bookedSeats.toString(),
+    },
+  };
+
+  await sendPushToUser(driverId, payload);
 }

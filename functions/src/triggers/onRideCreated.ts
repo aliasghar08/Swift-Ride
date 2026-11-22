@@ -1,7 +1,7 @@
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { db } from '../config/firebase';
 import { APP_CONSTANTS } from '../config/constants';
-import { notifyDriversOfRide } from '../modules/notifications';
+import { notifyDriversOfRide, notifyDriverOfPoolDetour } from '../modules/notifications';
 import * as geofire from 'geofire-common';
 
 export const onRideCreated = onDocumentCreated(
@@ -21,6 +21,7 @@ export const onRideCreated = onDocumentCreated(
     if (rideData.status !== 'REQUESTED') return;
 
     const pickupGeo = rideData.pickup?.geopoint;
+    const dropoffGeo = rideData.dropoff?.geopoint;
     if (!pickupGeo) return;
 
     const center: [number, number] = [pickupGeo.latitude, pickupGeo.longitude];
@@ -104,5 +105,77 @@ export const onRideCreated = onDocumentCreated(
     console.log(
       `Dispatched ride request ${rideId} to ${topDriverIds.length} nearby drivers within ${APP_CONSTANTS.MATCHING_INITIAL_RADIUS_KM}km.`
     );
+
+    // 5. En-Route Corridor Matching (Dynamic Seat Pooling)
+    // If vehicle allows pooling (seats >= 2 and bookedSeats < totalSeats) and dropoff is present
+    if (totalSeats >= 2 && dropoffGeo) {
+      try {
+        const activeRidesSnap = await db
+          .collection(APP_CONSTANTS.COLLECTIONS.RIDES)
+          .where('status', 'in', ['ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS'])
+          .limit(20)
+          .get();
+
+        const dropoffCoord: [number, number] = [dropoffGeo.latitude, dropoffGeo.longitude];
+
+        for (const aDoc of activeRidesSnap.docs) {
+          const aRide = aDoc.data();
+          if (!aRide.driverId || aDoc.id === rideId) continue;
+
+          // Check remaining capacity on the active vehicle
+          const activeBooked = aRide.bookedSeats ?? 1;
+          const activeVehicleSeats = vehicleSeats[aRide.vehicleType] ?? 4;
+          const activeRemaining = aRide.remainingSeats ?? Math.max(0, activeVehicleSeats - activeBooked);
+
+          if (activeRemaining < bookedSeats) continue;
+
+          // Driver location
+          const dLat = aRide.driverLocation?.lat;
+          const dLng = aRide.driverLocation?.lng;
+          const driverCoord: [number, number] =
+            dLat !== undefined && dLng !== undefined
+              ? [dLat, dLng]
+              : aRide.pickup?.geopoint
+              ? [aRide.pickup.geopoint.latitude, aRide.pickup.geopoint.longitude]
+              : center;
+
+          const existingDropoffGeo = aRide.dropoff?.geopoint;
+          if (!existingDropoffGeo) continue;
+          const existingDropoffCoord: [number, number] = [
+            existingDropoffGeo.latitude,
+            existingDropoffGeo.longitude,
+          ];
+
+          // Haversine Detour Calculation:
+          // Added Detour = dist(Driver, NewPickup) + dist(NewPickup, NewDropoff) + dist(NewDropoff, ExistingDropoff) - dist(Driver, ExistingDropoff)
+          const distDriverToNewPickup = geofire.distanceBetween(driverCoord, center);
+          const distNewPickupToNewDrop = geofire.distanceBetween(center, dropoffCoord);
+          const distNewDropToExistingDrop = geofire.distanceBetween(dropoffCoord, existingDropoffCoord);
+          const distDirect = geofire.distanceBetween(driverCoord, existingDropoffCoord);
+
+          const addedDetourKm = Math.max(
+            0,
+            distDriverToNewPickup + distNewPickupToNewDrop + distNewDropToExistingDrop - distDirect
+          );
+
+          if (addedDetourKm <= APP_CONSTANTS.POOL_MAX_DETOUR_KM) {
+            await notifyDriverOfPoolDetour(aRide.driverId, {
+              rideId,
+              parentRideId: aDoc.id,
+              detourKm: addedDetourKm,
+              extraEarningsPkr: rideData.offeredFare,
+              pickupAddress: rideData.pickup.address,
+              dropoffAddress: rideData.dropoff.address,
+              bookedSeats,
+            });
+            console.log(
+              `Dispatched en-route pool offer for ride ${rideId} to driver ${aRide.driverId} (detour: ${addedDetourKm.toFixed(2)} km)`
+            );
+          }
+        }
+      } catch (poolErr) {
+        console.warn('En-route pool matching note:', poolErr);
+      }
+    }
   }
 );

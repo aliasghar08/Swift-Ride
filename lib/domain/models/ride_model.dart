@@ -90,10 +90,14 @@ class RideModel {
   final double? changeDue;
   final bool femaleDriverOnly;
   final String? riderGender;
+  final String? parentPoolRideId;
+  final int remainingSeats;
+  final List<Map<String, dynamic>> waypoints;
 
   int get totalSeats => VehicleTypeX.fromString(vehicleType).seats;
-  int get emptySeats => (totalSeats - bookedSeats).clamp(0, totalSeats);
+  int get emptySeats => (remainingSeats > 0 ? remainingSeats : (totalSeats - bookedSeats)).clamp(0, totalSeats);
   bool get hasEmptySeats => emptySeats > 0 || bookedSeats < totalSeats;
+  bool get isPooled => parentPoolRideId != null || waypoints.isNotEmpty;
 
   const RideModel({
     required this.id,
@@ -126,7 +130,10 @@ class RideModel {
     this.changeDue,
     this.femaleDriverOnly = false,
     this.riderGender,
-  });
+    this.parentPoolRideId,
+    int? remainingSeats,
+    this.waypoints = const [],
+  }) : remainingSeats = remainingSeats ?? (4 - bookedSeats);
 
   /// Effective fare: accepted fare once matched, or offered fare while pending.
   double get fare => acceptedFare ?? offeredFare;
@@ -162,6 +169,9 @@ class RideModel {
     double? changeDue,
     bool? femaleDriverOnly,
     String? riderGender,
+    String? parentPoolRideId,
+    int? remainingSeats,
+    List<Map<String, dynamic>>? waypoints,
   }) {
     return RideModel(
       id: id ?? this.id,
@@ -194,6 +204,9 @@ class RideModel {
       changeDue: changeDue ?? this.changeDue,
       femaleDriverOnly: femaleDriverOnly ?? this.femaleDriverOnly,
       riderGender: riderGender ?? this.riderGender,
+      parentPoolRideId: parentPoolRideId ?? this.parentPoolRideId,
+      remainingSeats: remainingSeats ?? this.remainingSeats,
+      waypoints: waypoints ?? this.waypoints,
     );
   }
 
@@ -228,6 +241,9 @@ class RideModel {
         if (driverLocation != null) 'driverLocation': driverLocation!.toMap(),
         'femaleDriverOnly': femaleDriverOnly,
         if (riderGender != null) 'riderGender': riderGender,
+        if (parentPoolRideId != null) 'parentPoolRideId': parentPoolRideId,
+        'remainingSeats': remainingSeats,
+        'waypoints': waypoints,
       };
 
   static double _parseDouble(dynamic val, [double fallback = 0.0]) {
@@ -324,6 +340,12 @@ class RideModel {
       changeDue: _parseNullableDouble(map['changeDue']),
       femaleDriverOnly: map['femaleDriverOnly'] == true,
       riderGender: map['riderGender'] as String?,
+      parentPoolRideId: map['parentPoolRideId'] as String?,
+      remainingSeats: _parseInt(map['remainingSeats'], 4 - _parseInt(map['bookedSeats'], 1)),
+      waypoints: (map['waypoints'] as List<dynamic>?)
+              ?.map((e) => Map<String, dynamic>.from(e as Map))
+              .toList() ??
+          const [],
     );
   }
 }

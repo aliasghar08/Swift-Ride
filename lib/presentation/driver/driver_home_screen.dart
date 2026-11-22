@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/native/native_channel_constants.dart';
@@ -39,6 +40,8 @@ import 'widgets/driver_analytics_drawer.dart';
 import 'widgets/driver_name_dialog.dart';
 import 'widgets/driver_status_credibility_dialog.dart';
 import 'driver_verification_screen.dart';
+import '../../domain/models/demand_hotspot_model.dart';
+import '../../services/firestore/firestore_ride_service.dart';
 import '../../domain/models/user_role.dart';
 import '../../services/ad_service.dart';
 import '../../services/native/native_storage_service.dart';
@@ -79,11 +82,21 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   /// Native GPS arrives far more often than we need to write, so throttle.
   static const Duration _telemetryInterval = Duration(seconds: 4);
   bool _hasCheckedAutoOnline = false;
+  StreamSubscription<List<DemandHotspot>>? _hotspotSub;
+  DateTime _lastMovedTime = DateTime.now();
+  double _lastStationaryLat = 0.0;
+  double _lastStationaryLng = 0.0;
 
   @override
   void initState() {
     super.initState();
     _viewModel = DriverViewModel();
+    _hotspotSub = FirestoreRideService().streamDemandHotspots().listen((hotspots) {
+      if (mounted) {
+        _viewModel.setDemandHotspots(hotspots);
+        setState(() {});
+      }
+    });
     NativeStorageService().getBool('promo_dismissed_women_driver_mode_v1').then((val) {
       if (mounted && val == true) {
         setState(() => _isWomenDriverPromoDismissed = true);
@@ -215,6 +228,27 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           activeRideId: activeRide.id,
         );
       }
+    } else {
+      // Track stationary duration and evaluate repositioning nudges when waiting
+      final now = DateTime.now();
+      final distFromStationary = _lastStationaryLat == 0.0
+          ? 0.0
+          : GeohashUtil.distanceKm(_lastStationaryLat, _lastStationaryLng, latitude, longitude) * 1000.0;
+      if (distFromStationary >= 20.0 || _lastStationaryLat == 0.0) {
+        _lastStationaryLat = latitude;
+        _lastStationaryLng = longitude;
+        _lastMovedTime = now;
+      }
+      final idleDuration = now.difference(_lastMovedTime);
+      final driverProv = CustomChangeNotifierProvider.maybeOf<DriverProvider>(context);
+      if (driverProv != null) {
+        _viewModel.evaluateRepositioningNudge(
+          currentLat: latitude,
+          currentLng: longitude,
+          isOnline: driverProv.isOnline,
+          idleDuration: idleDuration,
+        );
+      }
     }
 
     // Dynamic 3D camera navigation follow
@@ -306,6 +340,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   @override
   void dispose() {
+    _hotspotSub?.cancel();
     _locProv?.onLocationUpdate = null;
     _viewModel.dispose();
     super.dispose();
@@ -645,6 +680,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   mode: MapMode.navigation,
                   darkMode: true,
                   showTraffic: _showTraffic,
+                  circles: _buildDemandCircles(),
                   onControllerCreated: (controller) {
                     _mapController = controller;
                   },
@@ -669,6 +705,17 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         ),
                         id: 'driver_ride_dropoff',
                       ),
+                      ...currentRide.waypoints
+                          .where((w) => w['completed'] != true && w['lat'] != null && w['lng'] != null)
+                          .map((w) {
+                        final isPickup = w['type'] == 'pickup';
+                        final lat = (w['lat'] as num).toDouble();
+                        final lng = (w['lng'] as num).toDouble();
+                        final wId = 'waypoint_${w['rideId']}_${w['type']}';
+                        return isPickup
+                            ? MapMarkers.pickup(LatLng(lat, lng), id: wId)
+                            : MapMarkers.dropoff(LatLng(lat, lng), id: wId);
+                      }),
                     ],
                   },
                   polylines: {
@@ -1309,6 +1356,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 ),
               ),
 
+              // 2b. En-Route Incoming Pool Request Card
+              if (_viewModel.enRoutePoolOffer != null && currentRide != null)
+                _buildEnRoutePoolOfferCard(layout, rideProv, isDark),
+
+              // 2c. Live Demand Repositioning Nudge Banner
+              if (_viewModel.repositioningNudge != null && currentRide == null)
+                _buildRepositioningNudgeBanner(layout, isDark),
+
               // 3. Bottom Cockpit Card
               Positioned(
                 left: 0,
@@ -1357,6 +1412,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    FloatingActionButton.small(
+                      heroTag: 'driver_hotspots_btn',
+                      tooltip: _viewModel.showHotspots ? 'Hide Demand Hotspots' : 'Show Demand Hotspots',
+                      backgroundColor: _viewModel.showHotspots ? AppTheme.amberWarning : AppTheme.primaryNavy,
+                      foregroundColor: _viewModel.showHotspots ? Colors.black : Colors.white,
+                      child: Icon(_viewModel.showHotspots ? Icons.local_fire_department : Icons.local_fire_department_outlined, size: 20),
+                      onPressed: () => setState(() => _viewModel.toggleHotspots()),
+                    ),
+                    const SizedBox(height: 12),
                     FloatingActionButton.small(
                       heroTag: 'driver_history_btn',
                       tooltip: 'Trip History',
@@ -2651,6 +2715,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
+        if (ride.waypoints.isNotEmpty) ...[
+          _buildMultiStopWaypointsSection(layout, ride, rideProv, authProv, driverProv, isDark, c),
+        ],
         // Active Trip Economics (Fuel, Maintenance, Profit)
         Builder(
           builder: (ctx) {
@@ -3755,6 +3822,336 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
             ),
             child: const Text('Verify CNIC / Documents'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Set<Circle> _buildDemandCircles() {
+    if (!_viewModel.showHotspots) return const {};
+    return _viewModel.demandHotspots.map((h) {
+      final isHigh = h.isHighDemand;
+      final color = isHigh ? AppTheme.sunsetCoral : AppTheme.amberWarning;
+      return Circle(
+        circleId: CircleId('hotspot_${h.cellId}'),
+        center: LatLng(h.lat, h.lng),
+        radius: h.radiusM,
+        fillColor: color.withValues(alpha: isHigh ? 0.28 : 0.20),
+        strokeColor: color.withValues(alpha: isHigh ? 0.85 : 0.70),
+        strokeWidth: 2,
+      );
+    }).toSet();
+  }
+
+  Widget _buildRepositioningNudgeBanner(ResponsiveLayoutHelper layout, bool isDark) {
+    final nudge = _viewModel.repositioningNudge;
+    final hotspot = _viewModel.targetHotspot;
+    if (nudge == null || hotspot == null) return const SizedBox.shrink();
+
+    return Positioned(
+      top: 75,
+      left: layout.horizontalPadding,
+      right: layout.horizontalPadding,
+      child: GlassContainer(
+        borderRadius: 16,
+        blur: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shadows: AppTheme.glowShadow(AppTheme.amberWarning, opacity: 0.35, blur: 14),
+        borderColor: AppTheme.amberWarning.withValues(alpha: 0.6),
+        child: Row(
+          children: [
+            const Icon(Icons.local_fire_department_rounded, color: AppTheme.amberWarning, size: 24),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'HOTSPOT NUDGE',
+                    style: TextStyle(
+                      fontSize: layout.fontSize(10),
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: AppTheme.amberWarning,
+                    ),
+                  ),
+                  Text(
+                    nudge,
+                    style: TextStyle(
+                      fontSize: layout.fontSize(11.5),
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? Colors.white : Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.amberWarning,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: Size.zero,
+              ),
+              onPressed: () {
+                _viewModel.navigateExternally(hotspot.lat, hotspot.lng);
+              },
+              child: const Text('Go', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              color: Colors.white70,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () => setState(() => _viewModel.dismissRepositioningNudge()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEnRoutePoolOfferCard(ResponsiveLayoutHelper layout, RideProvider rideProv, bool isDark) {
+    final offer = _viewModel.enRoutePoolOffer;
+    if (offer == null) return const SizedBox.shrink();
+
+    final extraPkr = offer['extraEarningsPkr'] ?? offer['fare'] ?? '350';
+    final detourKm = offer['detourKm'] ?? '1.2';
+    final pickup = offer['pickupAddress'] ?? 'Nearby stop';
+    final dropoff = offer['dropoffAddress'] ?? 'Along route';
+    final rideId = offer['rideId']?.toString() ?? '';
+    final parentRideId = offer['parentRideId']?.toString() ?? rideProv.currentRide?.id ?? '';
+
+    return Positioned(
+      bottom: 280,
+      left: layout.horizontalPadding,
+      right: layout.horizontalPadding,
+      child: PulsingGlowWidget(
+        glowColor: AppTheme.accentCyan,
+        child: GlassContainer(
+          borderRadius: 20,
+          blur: 24,
+          padding: const EdgeInsets.all(14),
+          borderColor: AppTheme.accentCyan,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.alt_route_rounded, color: AppTheme.accentCyan, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'En-Route +PKR $extraPkr • +$detourKm km detour',
+                      style: TextStyle(
+                        color: AppTheme.accentCyan,
+                        fontWeight: FontWeight.w800,
+                        fontSize: layout.fontSize(13.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Pickup: $pickup\nDropoff: $dropoff',
+                style: TextStyle(
+                  fontSize: layout.fontSize(11.5),
+                  color: isDark ? Colors.white70 : Colors.black87,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => setState(() => _viewModel.clearEnRoutePoolOffer()),
+                      child: const Text('Decline'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                      onPressed: _viewModel.isAcceptingPoolOffer
+                          ? null
+                          : () async {
+                              await _viewModel.acceptEnRoutePoolOffer(
+                                rideProv: rideProv,
+                                rideId: rideId,
+                                parentRideId: parentRideId,
+                              );
+                              setState(() {});
+                            },
+                      child: Text(_viewModel.isAcceptingPoolOffer ? 'Accepting...' : 'Accept Co-Rider'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMultiStopWaypointsSection(
+    ResponsiveLayoutHelper layout,
+    RideModel ride,
+    RideProvider rideProv,
+    AuthProvider authProv,
+    DriverProvider driverProv,
+    bool isDark,
+    dynamic c,
+  ) {
+    final waypoints = ride.waypoints;
+    final activeIndex = _viewModel.getActiveWaypointIndex(ride);
+    final activeWaypoint = _viewModel.getActiveWaypoint(ride);
+
+    return Container(
+      margin: EdgeInsets.only(top: layout.scale(8), bottom: layout.scale(4)),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF132238) : const Color(0xFFF0F9FF),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.accentCyan.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.linear_scale_rounded, size: 16, color: AppTheme.accentCyan),
+              const SizedBox(width: 6),
+              Text(
+                'Multi-Stop Route (${waypoints.where((w) => w['completed'] == true).length}/${waypoints.length} Done)',
+                style: TextStyle(
+                  fontSize: layout.fontSize(12),
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.accentCyan,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...waypoints.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final w = entry.value;
+            final isCompleted = w['completed'] == true;
+            final isCurrent = idx == activeIndex;
+            final isPickup = w['type'] == 'pickup';
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color: isCurrent
+                    ? AppTheme.accentCyan.withValues(alpha: 0.15)
+                    : (isCompleted ? Colors.white10 : Colors.transparent),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isCurrent ? AppTheme.accentCyan : Colors.white12,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isCompleted
+                        ? Icons.check_circle_rounded
+                        : (isPickup ? Icons.person_pin_circle_rounded : Icons.location_on_rounded),
+                    size: 16,
+                    color: isCompleted
+                        ? AppTheme.emeraldGreen
+                        : (isCurrent ? AppTheme.accentCyan : c.textMuted),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Stop ${idx + 1}: ${isPickup ? 'Pick up' : 'Drop off'} (${w['address'] ?? ''})',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11),
+                        fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                        decoration: isCompleted ? TextDecoration.lineThrough : null,
+                        color: isCompleted ? c.textMuted : (isDark ? Colors.white : c.textPrimary),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (activeWaypoint != null) ...[
+            const SizedBox(height: 6),
+            if (activeWaypoint['type'] == 'pickup') ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: SizedBox(
+                      height: layout.touchTarget(42),
+                      child: TextField(
+                        controller: _viewModel.pinController,
+                        keyboardType: TextInputType.number,
+                        maxLength: 4,
+                        textAlign: TextAlign.center,
+                        decoration: InputDecoration(
+                          counterText: '',
+                          hintText: 'Enter 4-Digit PIN',
+                          hintStyle: TextStyle(fontSize: layout.fontSize(11)),
+                          contentPadding: EdgeInsets.zero,
+                          filled: true,
+                          fillColor: isDark ? Colors.white10 : Colors.black.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                    onPressed: () async {
+                      await _viewModel.verifyAndCompleteWaypoint(
+                        rideProv: rideProv,
+                        enteredPin: _viewModel.pinController.text,
+                        authProv: authProv,
+                        driverProv: driverProv,
+                      );
+                      setState(() {});
+                    },
+                    child: const Text('Verify PIN'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                height: layout.touchTarget(42),
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text('Complete Stop ${activeIndex + 1} Dropoff'),
+                  onPressed: () async {
+                    await _viewModel.verifyAndCompleteWaypoint(
+                      rideProv: rideProv,
+                      enteredPin: '',
+                      authProv: authProv,
+                      driverProv: driverProv,
+                    );
+                    setState(() {});
+                  },
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );

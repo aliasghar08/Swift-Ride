@@ -930,11 +930,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 isDark: isDark,
                               ),
                             GlassContainer(
-                              borderRadius: 20,
+                              borderRadius: 18,
                               blur: 20,
                               padding: EdgeInsets.symmetric(
-                                horizontal: layout.scale(16),
-                                vertical: layout.scale(12),
+                                horizontal: layout.scale(12),
+                                vertical: layout.isHeightCompact ? 8 : layout.scale(10),
                               ),
                               shadows: driverProv.isOnline
                                   ? AppTheme.glowShadow(
@@ -952,8 +952,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     onTap: () => _scaffoldKey.currentState?.openDrawer(),
                                     borderRadius: BorderRadius.circular(10),
                                     child: Container(
-                                      padding: const EdgeInsets.all(7),
-                                      margin: const EdgeInsets.only(right: 10),
+                                      padding: const EdgeInsets.all(6),
+                                      margin: const EdgeInsets.only(right: 8),
                                       decoration: BoxDecoration(
                                         color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
                                         borderRadius: BorderRadius.circular(10),
@@ -964,31 +964,35 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       child: const Icon(
                                         Icons.menu_rounded,
                                         color: AppTheme.emeraldGreen,
-                                        size: 18,
+                                        size: 17,
                                       ),
                                     ),
                                   ),
                                   driverProv.isOnline
                                       ? PulsingGlowWidget(
                                           glowColor: AppTheme.emeraldGreen,
-                                          child: const CircleAvatar(
+                                          child: CircleAvatar(
+                                            radius: layout.isHeightCompact ? 14 : 16,
                                             backgroundColor: AppTheme.emeraldGreen,
-                                            child: Icon(
+                                            child: const Icon(
                                               Icons.drive_eta,
                                               color: Colors.white,
+                                              size: 16,
                                             ),
                                           ),
                                         )
                                       : CircleAvatar(
+                                          radius: layout.isHeightCompact ? 14 : 16,
                                           backgroundColor: Colors.grey.withValues(
                                             alpha: 0.2,
                                           ),
                                           child: const Icon(
                                             Icons.drive_eta,
                                             color: Colors.grey,
+                                            size: 16,
                                           ),
                                         ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1003,14 +1007,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                                 ? AppTheme.emeraldGreen
                                                 : Colors.grey,
                                             fontWeight: FontWeight.w800,
-                                            fontSize: layout.fontSize(13),
+                                            fontSize: layout.fontSize(12),
                                           ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                         Text(
                                           'Earnings: ${CurrencyFormatter.format(driver.totalEarnings)} • 2% Fee',
                                           style: TextStyle(
                                             color: isDark ? Colors.white70 : c.textMuted,
-                                            fontSize: layout.fontSize(12),
+                                            fontSize: layout.fontSize(11),
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -1018,270 +1024,193 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  Switch(
-                                    value: driverProv.isOnline,
-                                    activeThumbColor: AppTheme.accentCyan,
-                                    onChanged: (val) async {
-                                      if (!val) {
-                                        // Switching OFF: show credibility & status confirmation first
-                                        final confirmed = await DriverStatusCredibilityDialog.show(
-                                          context,
-                                          isGoingOnline: false,
-                                        );
-                                        if (confirmed != true || !context.mounted) {
-                                          return;
-                                        }
-                                      } else {
-                                        if (!driver.vehicle.isConfigured ||
-                                            (AppConstants.kRequireDriverVerification &&
-                                                !driver.isVerified &&
-                                                !driverProv.hasPassedAiVerification)) {
-                                          _showVehicleSetupRequiredDialog(context);
-                                          return;
-                                        }
+                                  const SizedBox(width: 6),
+                                  Transform.scale(
+                                    scale: 0.85,
+                                    child: Switch(
+                                      value: driverProv.isOnline,
+                                      activeThumbColor: AppTheme.accentCyan,
+                                      onChanged: (val) async {
+                                        if (!val) {
+                                          // Switching OFF: show credibility & status confirmation first
+                                          final confirmed = await DriverStatusCredibilityDialog.show(
+                                            context,
+                                            isGoingOnline: false,
+                                          );
+                                          if (confirmed != true || !context.mounted) {
+                                            return;
+                                          }
+                                        } else {
+                                          if (!driver.vehicle.isConfigured ||
+                                              (AppConstants.kRequireDriverVerification &&
+                                                  !driver.isVerified &&
+                                                  !driverProv.hasPassedAiVerification)) {
+                                            _showVehicleSetupRequiredDialog(context);
+                                            return;
+                                          }
 
-                                        // 1. Foreground Location Prominent Disclosure -> OS runtime prompt
-                                        final granted = await PermissionDisclosures
-                                            .ensureForegroundLocation(
-                                          context,
-                                          asDriver: true,
-                                        );
-                                        if (!context.mounted) return;
-                                        if (!granted &&
-                                            await locProv.permissionStatus() ==
-                                                false) {
+                                          // 1. Foreground Location Prominent Disclosure -> OS runtime prompt
+                                          final granted = await PermissionDisclosures
+                                              .ensureForegroundLocation(
+                                            context,
+                                            asDriver: true,
+                                          );
                                           if (!context.mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Location access is required to go online. You can enable it in your device Settings.',
+                                          if (!granted &&
+                                              await locProv.permissionStatus() ==
+                                                  false) {
+                                            if (!context.mounted) return;
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                  'Location access is required to go online. You can enable it in your device Settings.',
+                                                ),
                                               ),
+                                            );
+                                            return;
+                                          }
+
+                                          // 2. Background Location Prominent Disclosure -> OS runtime prompt ("Allow all the time")
+                                          if (!context.mounted) return;
+                                          await PermissionDisclosures
+                                              .ensureBackgroundLocation(context);
+                                          if (!context.mounted) return;
+                                        }
+                                        final error = await _viewModel.toggleOnline(
+                                          driverProv: driverProv,
+                                          locProv: locProv,
+                                          online: val,
+                                        );
+                                        if (error != null && context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text(error),
+                                              backgroundColor: AppTheme.sunsetCoral,
+                                              action: !driver.isVerified
+                                                  ? SnackBarAction(
+                                                      label: 'Verify Now',
+                                                      textColor: Colors.white,
+                                                      onPressed: () {
+                                                        Navigator.of(context).push(
+                                                          MaterialPageRoute(
+                                                            builder: (_) => const DriverVerificationScreen(),
+                                                          ),
+                                                        );
+                                                      },
+                                                    )
+                                                  : null,
                                             ),
                                           );
-                                          return;
+                                        } else if (error == null &&
+                                            val &&
+                                            context.mounted) {
+                                          await PermissionDisclosures
+                                              .ensureNotifications(context);
+                                          if (context.mounted) {
+                                            DriverStatusCredibilityDialog.show(
+                                              context,
+                                              isGoingOnline: true,
+                                            );
+                                          }
                                         }
-
-                                        // 2. Background Location Prominent Disclosure -> OS runtime prompt ("Allow all the time")
-                                        // Contains mandatory Google Play copy: "even when the app is closed or not in use"
-                                        if (!context.mounted) return;
-                                        await PermissionDisclosures
-                                            .ensureBackgroundLocation(context);
-                                        if (!context.mounted) return;
-                                      }
-                                      final error = await _viewModel.toggleOnline(
-                                        driverProv: driverProv,
-                                        locProv: locProv,
-                                        online: val,
-                                      );
-                                      if (error != null && context.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text(error),
-                                            backgroundColor: AppTheme.sunsetCoral,
-                                            action: !driver.isVerified
-                                                ? SnackBarAction(
-                                                    label: 'Verify Now',
-                                                    textColor: Colors.white,
-                                                    onPressed: () {
-                                                      Navigator.of(context).push(
-                                                        MaterialPageRoute(
-                                                          builder: (_) => const DriverVerificationScreen(),
-                                                        ),
-                                                      );
-                                                    },
-                                                  )
-                                                : null,
-                                          ),
-                                        );
-                                      } else if (error == null &&
-                                          val &&
-                                          context.mounted) {
-                                        // Deferred so it never interrupts the
-                                        // location flow; own disclosure first.
-                                        await PermissionDisclosures
-                                            .ensureNotifications(context);
-                                        if (context.mounted) {
-                                          DriverStatusCredibilityDialog.show(
-                                            context,
-                                            isGoingOnline: true,
-                                          );
-                                        }
-                                      }
-                                    },
+                                      },
+                                    ),
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
-                              // Women Passengers Only Switch Tile
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: driverProv.femalePassengersOnly
-                                      ? const Color(0xFFE91E63).withValues(alpha: 0.12)
-                                      : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03)),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: driverProv.femalePassengersOnly
-                                        ? const Color(0xFFE91E63).withValues(alpha: 0.4)
-                                        : Colors.grey.withValues(alpha: 0.2),
-                                  ),
-                                ),
+                              SizedBox(height: layout.isHeightCompact ? 6 : 8),
+                              // Streamlined Horizontal Quick Actions Row
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const BouncingScrollPhysics(),
                                 child: Row(
                                   children: [
-                                    Icon(
-                                      Icons.female_rounded,
-                                      size: 18,
-                                      color: driverProv.femalePassengersOnly
-                                          ? const Color(0xFFE91E63)
-                                          : (isDark ? Colors.white60 : Colors.black54),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Text(
-                                                'Women Passengers Only',
-                                                style: TextStyle(
-                                                  color: driverProv.femalePassengersOnly
-                                                      ? const Color(0xFFE91E63)
-                                                      : (isDark ? Colors.white : c.textPrimary),
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: layout.fontSize(11.5),
-                                                ),
-                                              ),
-                                              if (driverProv.femalePassengersOnly) ...[
-                                                const SizedBox(width: 6),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFE91E63),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: Text(
-                                                    'ACTIVE',
-                                                    style: TextStyle(
-                                                      fontSize: layout.fontSize(8.5),
-                                                      fontWeight: FontWeight.w900,
-                                                      color: Colors.white,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                          Text(
-                                            'Accept rides exclusively from verified female riders',
-                                            style: TextStyle(
-                                              color: isDark ? Colors.white60 : c.textMuted,
-                                              fontSize: layout.fontSize(10),
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Switch(
-                                      value: driverProv.femalePassengersOnly,
-                                      activeThumbColor: const Color(0xFFE91E63),
-                                      onChanged: (val) async {
+                                    // Women Only Toggle Pill
+                                    InkWell(
+                                      onTap: () async {
                                         final error = await _viewModel.toggleFemalePassengersOnly(
                                           driverProv: driverProv,
-                                          enabled: val,
+                                          enabled: !driverProv.femalePassengersOnly,
                                         );
                                         if (error != null && context.mounted) {
                                           _showWomenOnlyDriverGatingDialog(context, error, driver);
                                         }
                                       },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (!driver.isVerified) ...[
-                                const SizedBox(height: 8),
-                                InkWell(
-                                  onTap: () {
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => const DriverVerificationScreen(),
-                                      ),
-                                    );
-                                  },
-                                  borderRadius: BorderRadius.circular(10),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                                    decoration: BoxDecoration(
-                                      color: isDark
-                                          ? AppTheme.accentCyan.withValues(alpha: 0.12)
-                                          : AppTheme.primaryBlue.withValues(alpha: 0.08),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: isDark
-                                            ? AppTheme.accentCyan.withValues(alpha: 0.3)
-                                            : AppTheme.primaryBlue.withValues(alpha: 0.25),
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.verified_user_outlined,
-                                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                                          size: 18,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            'Boost Trust: Get Verified Badge (Optional)',
-                                            style: TextStyle(
-                                              color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                                              fontSize: layout.fontSize(11),
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.chevron_right,
-                                          color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                                          size: 16,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  // Floating Action Chip for Khata
-                                  Expanded(
-                                    child: InkWell(
-                                      onTap: () => DriverKhataSheet.show(context),
-                                      borderRadius: BorderRadius.circular(12),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 180),
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
                                         decoration: BoxDecoration(
-                                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(12),
+                                          color: driverProv.femalePassengersOnly
+                                              ? const Color(0xFFE91E63).withValues(alpha: 0.16)
+                                              : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+                                          borderRadius: BorderRadius.circular(16),
                                           border: Border.all(
-                                            color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                                            color: driverProv.femalePassengersOnly
+                                                ? const Color(0xFFE91E63)
+                                                : (isDark ? Colors.white24 : Colors.black12),
+                                            width: driverProv.femalePassengersOnly ? 1.3 : 1.0,
                                           ),
                                         ),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.female_rounded,
+                                              size: 14,
+                                              color: driverProv.femalePassengersOnly
+                                                  ? const Color(0xFFE91E63)
+                                                  : (isDark ? Colors.white70 : Colors.black54),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Women Only',
+                                              style: TextStyle(
+                                                fontSize: layout.fontSize(10),
+                                                fontWeight: driverProv.femalePassengersOnly ? FontWeight.w800 : FontWeight.w600,
+                                                color: driverProv.femalePassengersOnly
+                                                    ? const Color(0xFFE91E63)
+                                                    : (isDark ? Colors.white70 : Colors.black87),
+                                              ),
+                                            ),
+                                            if (driverProv.femalePassengersOnly) ...[
+                                              const SizedBox(width: 4),
+                                              Container(
+                                                width: 5,
+                                                height: 5,
+                                                decoration: const BoxDecoration(
+                                                  color: Color(0xFFE91E63),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    // Khata Quick Pill
+                                    InkWell(
+                                      onTap: () => DriverKhataSheet.show(context),
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.emeraldGreen.withValues(alpha: 0.13),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             const Icon(
                                               Icons.account_balance_wallet_rounded,
                                               color: AppTheme.emeraldGreen,
-                                              size: 15,
+                                              size: 13,
                                             ),
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width: 4),
                                             ListenableBuilder(
                                               listenable: DriverKhataService(),
                                               builder: (ctx, _) {
@@ -1291,7 +1220,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                                   style: TextStyle(
                                                     color: AppTheme.emeraldGreen,
                                                     fontWeight: FontWeight.w800,
-                                                    fontSize: layout.fontSize(11),
+                                                    fontSize: layout.fontSize(10),
                                                   ),
                                                 );
                                               },
@@ -1300,59 +1229,94 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         ),
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  // AI Advisor shortcut
-                                  InkWell(
-                                    onTap: () async {
-                                      final allowed =
-                                          await AiConsentDialog.ensureConsent(
-                                            context,
-                                          );
-                                      if (!allowed || !context.mounted) return;
-                                      Navigator.of(
-                                        context,
-                                      ).pushNamed('/earnings-advisor');
-                                    },
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.accentTeal.withValues(
-                                          alpha: 0.2,
-                                        ),
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(
-                                          color: AppTheme.accentTeal.withValues(
-                                            alpha: 0.45,
+                                    const SizedBox(width: 6),
+                                    // AI Advisor Quick Pill
+                                    InkWell(
+                                      onTap: () async {
+                                        final allowed = await AiConsentDialog.ensureConsent(context);
+                                        if (!allowed || !context.mounted) return;
+                                        Navigator.of(context).pushNamed('/earnings-advisor');
+                                      },
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.accentTeal.withValues(alpha: 0.14),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: AppTheme.accentTeal.withValues(alpha: 0.35),
                                           ),
                                         ),
-                                      ),
-                                      child: const Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.psychology,
-                                            size: 14,
-                                            color: AppTheme.accentTeal,
-                                          ),
-                                          SizedBox(width: 4),
-                                          Text(
-                                            'AI Advisor',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.psychology,
+                                              size: 13,
                                               color: AppTheme.accentTeal,
                                             ),
-                                          ),
-                                        ],
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'AI Advisor',
+                                              style: TextStyle(
+                                                fontSize: layout.fontSize(10),
+                                                fontWeight: FontWeight.w700,
+                                                color: AppTheme.accentTeal,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    if (!driver.isVerified) ...[
+                                      const SizedBox(width: 6),
+                                      // Boost Trust Badge (Optional) Pill
+                                      InkWell(
+                                        onTap: () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (_) => const DriverVerificationScreen(),
+                                            ),
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                          decoration: BoxDecoration(
+                                            color: isDark
+                                                ? AppTheme.accentCyan.withValues(alpha: 0.12)
+                                                : AppTheme.primaryBlue.withValues(alpha: 0.08),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: isDark
+                                                  ? AppTheme.accentCyan.withValues(alpha: 0.3)
+                                                  : AppTheme.primaryBlue.withValues(alpha: 0.25),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.verified_user_outlined,
+                                                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                                                size: 13,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                'Verify Badge (Optional)',
+                                                style: TextStyle(
+                                                  color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                                                  fontSize: layout.fontSize(10),
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -1381,34 +1345,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 child: Align(
                   alignment: Alignment.bottomCenter,
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: layout.maxCardWidth),
+                    constraints: BoxConstraints(
+                      maxWidth: layout.maxCardWidth,
+                      maxHeight: layout.screenHeight * (layout.isHeightCompact ? 0.36 : 0.44),
+                    ),
                     child: GlassContainer(
-                      borderRadius: 28,
+                      borderRadius: 24,
                       blur: 24,
                       shadows: isDark ? AppTheme.darkElevation : AppTheme.premiumElevation,
                       padding: EdgeInsets.fromLTRB(
                         layout.horizontalPadding,
-                        14,
+                        layout.scale(10),
                         layout.horizontalPadding,
-                        layout.safePadding.bottom > 0
-                            ? layout.safePadding.bottom + 8
-                            : 20,
+                        layout.scale(8),
                       ),
-                      child: currentRide == null
-                          ? _buildWaitingOrEarningsCard(
-                              layout,
-                              driver,
-                              driverProv,
-                              rideProv,
-                              authProv,
-                            )
-                          : _buildActiveDriverRideCard(
-                              layout,
-                              currentRide,
-                              rideProv,
-                              driverProv,
-                              authProv,
-                            ),
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: currentRide == null
+                            ? _buildWaitingOrEarningsCard(
+                                layout,
+                                driver,
+                                driverProv,
+                                rideProv,
+                                authProv,
+                              )
+                            : _buildActiveDriverRideCard(
+                                layout,
+                                currentRide,
+                                rideProv,
+                                driverProv,
+                                authProv,
+                              ),
+                      ),
                     ),
                   ),
                 ),
@@ -1417,33 +1385,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
           floatingActionButton: currentRide != null
               ? null
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    FloatingActionButton.small(
-                      heroTag: 'driver_hotspots_btn',
-                      tooltip: _viewModel.showHotspots ? 'Hide Demand Hotspots' : 'Show Demand Hotspots',
-                      backgroundColor: _viewModel.showHotspots ? AppTheme.amberWarning : AppTheme.primaryNavy,
-                      foregroundColor: _viewModel.showHotspots ? Colors.black : Colors.white,
-                      child: Icon(_viewModel.showHotspots ? Icons.local_fire_department : Icons.local_fire_department_outlined, size: 20),
-                      onPressed: () => setState(() => _viewModel.toggleHotspots()),
-                    ),
-                    const SizedBox(height: 12),
-                    FloatingActionButton.small(
-                      heroTag: 'driver_history_btn',
-                      tooltip: 'Trip History',
-                      backgroundColor: AppTheme.primaryNavy,
-                      foregroundColor: AppTheme.accentCyan,
-                      child: const Icon(Icons.history_rounded, size: 20),
-                      onPressed: () => Navigator.of(context).pushNamed('/history'),
-                    ),
-                    const SizedBox(height: 12),
-                    PulsingGlowWidget(
-                      glowColor: AppTheme.accentCyan,
-                      minSpread: 1.0,
-                      maxSpread: 5.0,
-                      child: FloatingActionButton.extended(
+              : Padding(
+                  padding: EdgeInsets.only(
+                    bottom: layout.isHeightCompact ? 8 : 16,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      FloatingActionButton.small(
+                        heroTag: 'driver_hotspots_btn',
+                        tooltip: _viewModel.showHotspots ? 'Hide Demand Hotspots' : 'Show Demand Hotspots',
+                        backgroundColor: _viewModel.showHotspots ? AppTheme.amberWarning : AppTheme.primaryNavy,
+                        foregroundColor: _viewModel.showHotspots ? Colors.black : Colors.white,
+                        child: Icon(_viewModel.showHotspots ? Icons.local_fire_department : Icons.local_fire_department_outlined, size: 20),
+                        onPressed: () => setState(() => _viewModel.toggleHotspots()),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'driver_history_btn',
+                        tooltip: 'Trip History',
+                        backgroundColor: AppTheme.primaryNavy,
+                        foregroundColor: AppTheme.accentCyan,
+                        child: const Icon(Icons.history_rounded, size: 20),
+                        onPressed: () => Navigator.of(context).pushNamed('/history'),
+                      ),
+                      const SizedBox(height: 8),
+                      FloatingActionButton.small(
+                        heroTag: 'driver_ai_chat_btn',
+                        tooltip: 'AI Assistant',
+                        backgroundColor: AppTheme.primaryNavy,
+                        foregroundColor: AppTheme.accentCyan,
+                        child: const Icon(Icons.auto_awesome, size: 20),
                         onPressed: () async {
                           final allowed = await AiConsentDialog.ensureConsent(
                             context,
@@ -1451,16 +1424,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           if (!allowed || !context.mounted) return;
                           Navigator.of(context).pushNamed('/ai-chat');
                         },
-                        backgroundColor: AppTheme.primaryNavy,
-                        foregroundColor: AppTheme.accentCyan,
-                        icon: const Icon(Icons.auto_awesome, size: 20),
-                        label: const Text(
-                          'AI Assistant',
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
         );
       },
@@ -1644,14 +1610,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         if (driverProv.isOnline) ...[
           // Auto-Acceptance Settings Card
           Container(
-            margin: const EdgeInsets.only(bottom: 10),
+            margin: EdgeInsets.only(bottom: layout.isHeightCompact ? 6 : 8),
             padding: EdgeInsets.symmetric(
-              horizontal: layout.scale(12),
-              vertical: layout.scale(10),
+              horizontal: layout.scale(10),
+              vertical: layout.isHeightCompact ? 6 : layout.scale(8),
             ),
             decoration: BoxDecoration(
               color: c.surfaceRaised,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _viewModel.autoAcceptMode != AutoAcceptMode.off
                     ? AppTheme.accentCyan.withValues(alpha: 0.5)
@@ -1669,25 +1635,25 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           : (_viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
                               ? Icons.auto_awesome
                               : Icons.touch_app_rounded),
-                      size: layout.scale(18),
+                      size: layout.scale(16),
                       color: _viewModel.autoAcceptMode != AutoAcceptMode.off
                           ? AppTheme.accentCyan
                           : c.textMuted,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Auto-Accept Incoming Rides',
                         style: TextStyle(
                           color: isDark ? Colors.white : c.textPrimary,
-                          fontSize: layout.fontSize(12),
+                          fontSize: layout.fontSize(11.5),
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
                     if (_viewModel.autoAcceptMode != AutoAcceptMode.off)
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: AppTheme.accentCyan.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
@@ -1697,7 +1663,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               ? 'CURRENT RATE'
                               : 'AI VALUE (±5%)',
                           style: TextStyle(
-                            fontSize: layout.fontSize(9.5),
+                            fontSize: layout.fontSize(9),
                             fontWeight: FontWeight.w800,
                             color: AppTheme.accentCyan,
                           ),
@@ -1705,7 +1671,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: layout.isHeightCompact ? 4 : 6),
                 Row(
                   children: [
                     Expanded(
@@ -1714,7 +1680,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         borderRadius: BorderRadius.circular(8),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          padding: EdgeInsets.symmetric(vertical: layout.isHeightCompact ? 4.5 : 5.5),
                           decoration: BoxDecoration(
                             color: _viewModel.autoAcceptMode == AutoAcceptMode.off
                                 ? AppTheme.slateMuted.withValues(alpha: 0.2)
@@ -1731,7 +1697,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             child: Text(
                               'Manual',
                               style: TextStyle(
-                                fontSize: layout.fontSize(10.5),
+                                fontSize: layout.fontSize(10),
                                 fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.off
                                     ? FontWeight.w700
                                     : FontWeight.w500,
@@ -1744,14 +1710,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: InkWell(
                         onTap: () => _viewModel.setAutoAcceptMode(AutoAcceptMode.currentRate),
                         borderRadius: BorderRadius.circular(8),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          padding: EdgeInsets.symmetric(vertical: layout.isHeightCompact ? 4.5 : 5.5),
                           decoration: BoxDecoration(
                             color: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
                                 ? AppTheme.emeraldGreen.withValues(alpha: 0.2)
@@ -1768,7 +1734,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             child: Text(
                               'Current Rate',
                               style: TextStyle(
-                                fontSize: layout.fontSize(10.5),
+                                fontSize: layout.fontSize(10),
                                 fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
                                     ? FontWeight.w700
                                     : FontWeight.w500,
@@ -1781,14 +1747,14 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: InkWell(
                         onTap: () => _viewModel.setAutoAcceptMode(AutoAcceptMode.aiValuation),
                         borderRadius: BorderRadius.circular(8),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          padding: EdgeInsets.symmetric(vertical: layout.isHeightCompact ? 4.5 : 5.5),
                           decoration: BoxDecoration(
                             color: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
                                 ? AppTheme.accentCyan.withValues(alpha: 0.2)
@@ -1805,7 +1771,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             child: Text(
                               'AI Value (±5%)',
                               style: TextStyle(
-                                fontSize: layout.fontSize(10.5),
+                                fontSize: layout.fontSize(10),
                                 fontWeight: _viewModel.autoAcceptMode == AutoAcceptMode.aiValuation
                                     ? FontWeight.w700
                                     : FontWeight.w500,
@@ -1820,7 +1786,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                SizedBox(height: layout.isHeightCompact ? 4 : 5),
                 Text(
                   _viewModel.autoAcceptMode == AutoAcceptMode.currentRate
                       ? 'Instant auto-acceptance at rider\'s offered fare (>= PKR 50).'
@@ -1829,7 +1795,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           : 'Manual review: you decide on each incoming bid.'),
                   style: TextStyle(
                     color: c.textMuted,
-                    fontSize: layout.fontSize(10),
+                    fontSize: layout.fontSize(9.5),
                   ),
                 ),
               ],

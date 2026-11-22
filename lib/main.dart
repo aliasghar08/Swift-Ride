@@ -79,6 +79,9 @@ Future<void> main() async {
   WidgetsBinding.instance.addPostFrameCallback((_) {
     debugPrint('[Main] First UI frame rendered successfully. Triggering background services...');
     FuelPriceService().fetchLivePrices();
+    AdService.instance.initialize().catchError((adErr) {
+      debugPrint('[AdService] Background init notice: $adErr');
+    });
     PushNotificationService.instance.initialize(
       onNotificationTap: AppRouter.handleNotificationTap,
     ).catchError((pushErr) {

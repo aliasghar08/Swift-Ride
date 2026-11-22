@@ -49,6 +49,18 @@ class ResponsiveLayoutHelper {
     return size * max(0.85, min(1.2, ratio));
   }
 
+  /// True if the screen height is compact (< 720pt), requiring streamlined vertical density.
+  bool get isHeightCompact => screenHeight < 720;
+
+  /// True if screen width is compact (< 380pt).
+  bool get isCompact => screenType.isCompact || screenWidth < 380;
+
+  /// Proportional vertical scaling factor relative to standard 844pt mobile design height.
+  double vScale(double size) {
+    final ratio = screenHeight / 844.0;
+    return size * max(0.85, min(1.15, ratio));
+  }
+
   /// Responsive font size for [baseSize] at the 390pt design width.
   ///
   /// Returns an *unscaled* size on purpose: Flutter applies the user's OS

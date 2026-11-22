@@ -58,13 +58,11 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     }
   }
 
-  void _createBannerAd({bool useFallback = false}) {
+  void _createBannerAd() {
     if (kIsWeb || !mounted || _bannerAd != null) return;
     try {
-      final unitId = useFallback
-          ? AdService.testAndroidBannerId
-          : AdService.instance.bannerAdUnitId;
-      debugPrint('[AdBannerWidget] Creating BannerAd with adUnitId: $unitId (fallback=$useFallback)');
+      final unitId = AdService.instance.bannerAdUnitId;
+      debugPrint('[AdBannerWidget] Creating BannerAd with adUnitId: $unitId (debug=$kDebugMode)');
       _bannerAd = BannerAd(
         adUnitId: unitId,
         size: AdSize.banner,
@@ -78,12 +76,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
             debugPrint('[AdBannerWidget] Banner failed to load: code=${error.code}, message=${error.message}');
             ad.dispose();
             _bannerAd = null;
-            // If live ad failed with no inventory (Code 3) or not yet filled, fallback to sample banner
-            if (!useFallback && unitId != AdService.testAndroidBannerId) {
-              debugPrint('[AdBannerWidget] Live ad unfilled (code ${error.code}); falling back to Google sample banner ad to verify display.');
-              _createBannerAd(useFallback: true);
-              return;
-            }
+            // Cleanly collapse to SizedBox.shrink(); never load test units as a fallback in release builds
             if (mounted) setState(() => _isLoaded = false);
           },
         ),

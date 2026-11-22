@@ -1,6 +1,7 @@
 package com.dartnexuslab.swiftride
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -461,6 +462,19 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 val nm = getSystemService(NotificationManager::class.java)
+
+                nm?.createNotificationChannel(
+                    NotificationChannel(
+                        "swift_ride_dispatch",
+                        "Swift Ride Dispatch",
+                        NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = "Incoming ride requests and dispatch offers"
+                        enableVibration(true)
+                        setShowBadge(true)
+                        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    }
+                )
 
                 nm?.createNotificationChannel(
                     NotificationChannel(

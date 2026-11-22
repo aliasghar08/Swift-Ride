@@ -14,6 +14,7 @@ import '../../services/native/native_audio_service.dart';
 import '../../services/native/native_device_service.dart';
 import '../../services/native/native_launcher_service.dart';
 import '../../services/native/native_notification_service.dart';
+import '../../services/native/native_storage_service.dart';
 import '../../services/pricing_ml_service.dart';
 import '../../services/native_map_service.dart';
 import '../../core/utils/id_generator.dart';
@@ -56,6 +57,7 @@ class DriverViewModel extends ChangeNotifier {
   final NativeAudioService _audioService;
   final NativeLauncherService _launcherService;
   final PricingMLService _pricingMLService;
+  final NativeStorageService _storage;
 
   final TextEditingController pinController = TextEditingController();
   final TextEditingController counterFareController = TextEditingController();
@@ -76,12 +78,14 @@ class DriverViewModel extends ChangeNotifier {
     NativeAudioService? audioService,
     NativeLauncherService? launcherService,
     PricingMLService? pricingMLService,
+    NativeStorageService? storage,
   })  : _deviceService = deviceService ?? NativeDeviceService(),
         _driverService = driverService ?? FirestoreDriverService(),
         _notificationService = notificationService ?? NativeNotificationService(),
         _audioService = audioService ?? NativeAudioService(),
         _launcherService = launcherService ?? NativeLauncherService(),
-        _pricingMLService = pricingMLService ?? PricingMLService();
+        _pricingMLService = pricingMLService ?? PricingMLService(),
+        _storage = storage ?? NativeStorageService();
 
   String? get pinErrorMessage => _pinErrorMessage;
   bool get isProcessingPayout => _isProcessingPayout;
@@ -373,6 +377,9 @@ class DriverViewModel extends ChangeNotifier {
       return error;
     }
 
+    // Persist whether driver explicitly toggled offline (defaulting to false / online by default)
+    await _storage.setBool('driver_explicitly_offline', !online);
+
     if (online) {
       locProv.startBroadcaster();
       await _deviceService.setKeepScreenOn(true);
@@ -392,6 +399,27 @@ class DriverViewModel extends ChangeNotifier {
 
     // driverProv.toggleOnline already notified its listeners.
     return null;
+  }
+
+  /// Automatically transitions verified drivers to Online unless explicitly toggled offline.
+  Future<void> checkAndAutoGoOnline({
+    required DriverProvider driverProv,
+    required LocationProvider locProv,
+  }) async {
+    final driver = driverProv.driverProfile;
+    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+    if (!isVerified || !driver.vehicle.isConfigured) return;
+
+    final explicitlyOffline = await _storage.getBool('driver_explicitly_offline') ?? false;
+    if (explicitlyOffline) return;
+
+    if (!driverProv.isOnline) {
+      await toggleOnline(
+        driverProv: driverProv,
+        locProv: locProv,
+        online: true,
+      );
+    }
   }
 
   /// Toggles Women Passengers Only mode for verified female captains.

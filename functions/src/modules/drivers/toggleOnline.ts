@@ -96,7 +96,14 @@ export const toggleOnline = onCall(
     await driverRef.update({
       isOnline: data.isOnline,
       ...(data.femalePassengersOnly !== undefined ? { femalePassengersOnly: data.femalePassengersOnly } : {}),
-      ...(data.currentLocation ? { currentLocation: data.currentLocation } : {}),
+      ...(data.currentLocation
+        ? {
+            currentLocation: {
+              ...data.currentLocation,
+              lastSeenAt: FieldValue.serverTimestamp(),
+            },
+          }
+        : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
 

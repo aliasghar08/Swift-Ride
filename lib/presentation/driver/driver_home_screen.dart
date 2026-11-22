@@ -40,6 +40,8 @@ import 'driver_verification_screen.dart';
 import '../../domain/models/user_role.dart';
 import '../../services/ad_service.dart';
 import '../../services/native/native_storage_service.dart';
+import '../../services/push_notification_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -71,6 +73,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
   /// Native GPS arrives far more often than we need to write, so throttle.
   static const Duration _telemetryInterval = Duration(seconds: 4);
+  bool _hasCheckedAutoOnline = false;
 
   @override
   void initState() {
@@ -107,6 +110,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       });
     }
 
+    if (!_hasCheckedAutoOnline) {
+      _hasCheckedAutoOnline = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        final driverProv = CustomChangeNotifierProvider.of<DriverProvider>(context);
+        final locProv = CustomChangeNotifierProvider.of<LocationProvider>(context);
+        await _ensureDriverAutoOnline(driverProv, locProv);
+      });
+    }
+
     if (identical(loc, _locProv) && identical(ride, _rideProv)) return;
 
     _locProv?.onLocationUpdate = null;
@@ -116,6 +129,51 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
 
     // Drivers must see incoming requests: watch stream for matching
     ride.watchAvailableRides();
+  }
+
+  /// Automatically transitions verified drivers to Online unless explicitly toggled offline.
+  Future<void> _ensureDriverAutoOnline(
+    DriverProvider driverProv,
+    LocationProvider locProv,
+  ) async {
+    final driver = driverProv.driverProfile;
+    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+    if (!isVerified || !driver.vehicle.isConfigured) return;
+
+    final storage = NativeStorageService();
+    final explicitlyOffline = await storage.getBool('driver_explicitly_offline') ?? false;
+    if (explicitlyOffline) return;
+
+    if (!driverProv.isOnline) {
+      final hasForeground = await locProv.permissionStatus();
+      if (hasForeground != true) {
+        if (!mounted) return;
+        final granted = await PermissionDisclosures.ensureForegroundLocation(
+          context,
+          asDriver: true,
+        );
+        if (!granted && mounted && await locProv.permissionStatus() == false) {
+          return;
+        }
+      }
+
+      if (mounted) {
+        await PermissionDisclosures.ensureBackgroundLocation(context);
+      }
+
+      if (!mounted) return;
+      await _viewModel.toggleOnline(
+        driverProv: driverProv,
+        locProv: locProv,
+        online: true,
+      );
+
+      // Sync FCM token
+      final token = await FirebaseMessaging.instance.getToken().catchError((_) => null);
+      if (token != null) {
+        await PushNotificationService.instance.syncTokenToFirestore(token);
+      }
+    }
   }
 
   /// Sends the driver's real position to the backend while a trip is active

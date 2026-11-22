@@ -140,6 +140,18 @@ class AppRouter {
     final type = data['type']?.toString();
     final rideId = data['rideId']?.toString();
 
+    final context = navigatorKey.currentContext;
+    if (context != null) {
+      if (type == 'NEW_RIDE_REQUEST' || type == 'RIDE_REQUEST') {
+        try {
+          final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+          if (auth.activeRole != UserRole.driver) {
+            auth.switchRole(UserRole.driver);
+          }
+        } catch (_) {}
+      }
+    }
+
     // Route active ride / dispatch / offer notifications to active screen
     if (type == 'NEW_RIDE_REQUEST' ||
         type == 'COUNTER_OFFER' ||

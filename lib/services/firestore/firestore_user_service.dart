@@ -158,6 +158,10 @@ class FirestoreUserService {
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
           'location': null,
+          if (user.photoUrl != null) 'photoUrl': user.photoUrl,
+          if (user.authProvider != null) 'authProvider': user.authProvider,
+          if (user.gender != null) 'gender': user.gender,
+          'isGenderVerified': user.isGenderVerified,
         });
       } else {
         await docRef.update({
@@ -166,6 +170,10 @@ class FirestoreUserService {
           'email': user.email,
           'role': user.role.toDbString(),
           'updatedAt': FieldValue.serverTimestamp(),
+          if (user.photoUrl != null) 'photoUrl': user.photoUrl,
+          if (user.authProvider != null) 'authProvider': user.authProvider,
+          if (user.gender != null) 'gender': user.gender,
+          'isGenderVerified': user.isGenderVerified,
         });
       }
     } catch (e) {

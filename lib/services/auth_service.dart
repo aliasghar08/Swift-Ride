@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../domain/models/user_model.dart';
 import '../domain/models/user_role.dart';
@@ -366,6 +367,9 @@ class AuthService {
       }
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      if (googleAuth.idToken == null) {
+        debugPrint('[AuthService] Google Sign-In warning: idToken is null. Check GIDServerClientID configuration.');
+      }
       final OAuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -394,13 +398,24 @@ class AuthService {
         authProvider: 'google',
         defaultRole: role,
       );
+    } on PlatformException catch (e) {
+      debugPrint('[AuthService] PlatformException during Google Sign-In: code=${e.code}, message=${e.message}, details=${e.details}');
+      final code = e.code.toLowerCase();
+      final msg = (e.message ?? '').toLowerCase();
+      if (code.contains('cancel') || msg.contains('cancel') || code == 'sign_in_canceled') {
+        debugPrint('[AuthService] Google Sign-In cancelled by user');
+        return null;
+      }
+      rethrow;
     } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthService] FirebaseAuthException during Google Sign-In: code=${e.code}, message=${e.message}');
       if (e.code == 'canceled' || e.code == 'popup-closed-by-user' || e.code.contains('cancel')) {
         debugPrint('[AuthService] Google Sign-In dismissed/canceled: [${e.code}]');
         return null;
       }
       rethrow;
     } catch (e) {
+      debugPrint('[AuthService] Unexpected error during Google Sign-In: $e');
       final errStr = e.toString().toLowerCase();
       if (errStr.contains('canceled') || errStr.contains('cancelled') || errStr.contains('sign_in_canceled')) {
         debugPrint('[AuthService] Google Sign-In user cancelled');

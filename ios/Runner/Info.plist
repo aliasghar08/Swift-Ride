@@ -54,6 +54,10 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GIDClientID</key>
+	<string>113634488038-s869tr34nd75rv4j18s6fv514bk94khd.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com</string>
 	<key>GMSApiKey</key>
 	<string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
 	<key>GADApplicationIdentifier</key>

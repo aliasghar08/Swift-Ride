@@ -30,7 +30,7 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider({
     AppUser? initialUser,
-    UserRole initialRole = UserRole.rider,
+    UserRole initialRole = UserRole.passenger,
   })  : _currentUser = initialUser ?? AppUser.guest(),
         _activeRole = initialRole {
     _loadPersistedRole();
@@ -105,12 +105,12 @@ class AuthProvider extends ChangeNotifier {
           _activeRole = UserRole.admin;
           notifyListeners();
         } else {
-          _activeRole = UserRole.rider;
-          _storage.setString('active_user_role', 'rider');
+          _activeRole = UserRole.passenger;
+          _storage.setString('active_user_role', 'passenger');
           notifyListeners();
         }
-      } else if (roleStr == 'rider' && _activeRole != UserRole.rider) {
-        _activeRole = UserRole.rider;
+      } else if ((roleStr == 'passenger' || roleStr == 'rider') && _activeRole != UserRole.passenger) {
+        _activeRole = UserRole.passenger;
         notifyListeners();
       }
     }
@@ -480,18 +480,18 @@ class AuthProvider extends ChangeNotifier {
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
         phone: '',
-        role: UserRole.rider,
+        role: UserRole.passenger,
         rating: 5.0,
         totalRides: 0,
         createdAt: DateTime.now(),
       );
-      _activeRole = UserRole.rider;
+      _activeRole = UserRole.passenger;
       _signOutGeneration++;
       try {
         unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
       } catch (_) {}
       try {
-        unawaited(_storage.setString('active_user_role', 'rider'));
+        unawaited(_storage.setString('active_user_role', 'passenger'));
       } catch (_) {}
       try {
         unawaited(_initAnonymousSession());
@@ -524,15 +524,15 @@ class AuthProvider extends ChangeNotifier {
         id: 'guest_${DateTime.now().millisecondsSinceEpoch}',
         fullName: 'Guest User',
         phone: '',
-        role: UserRole.rider,
+        role: UserRole.passenger,
         rating: 5.0,
         totalRides: 0,
         createdAt: DateTime.now(),
       );
-      _activeRole = UserRole.rider;
+      _activeRole = UserRole.passenger;
       _signOutGeneration++;
       unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
-      unawaited(_storage.setString('active_user_role', 'rider'));
+      unawaited(_storage.setString('active_user_role', 'passenger'));
       unawaited(_storage.remove('driver_daily_khata'));
       unawaited(_initAnonymousSession());
       return true;

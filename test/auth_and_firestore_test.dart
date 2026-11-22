@@ -293,7 +293,7 @@ void main() {
 
       // Verify Profile Setup step UI
       expect(find.text('Select Account Role'), findsOneWidget);
-      expect(find.text('Rider'), findsOneWidget);
+      expect(find.text('Passenger'), findsOneWidget);
       expect(find.text('Driver'), findsOneWidget);
       expect(find.textContaining('Region: Jhang (31.2785, 72.3317) · AI Bidding Ready'), findsOneWidget);
     });

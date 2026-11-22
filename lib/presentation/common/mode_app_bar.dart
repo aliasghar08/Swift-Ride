@@ -176,10 +176,10 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                   ),
                 ),
-                SizedBox(width: isCompact ? 4 : 6),
+                SizedBox(width: isCompact ? 3 : 6),
                 // Role Switcher Segmented Control
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                  padding: EdgeInsets.symmetric(horizontal: isCompact ? 2 : 3, vertical: 2),
                   decoration: BoxDecoration(
                     color: c.surfaceRaised.withValues(alpha: 0.85),
                     borderRadius: BorderRadius.circular(12),
@@ -194,11 +194,11 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     children: [
                       _buildRoleButton(
                         layout: layout,
-                        label: 'Rider',
+                        label: 'Passenger',
                         icon: Icons.person,
-                        isSelected: auth.activeRole == UserRole.rider,
+                        isSelected: auth.activeRole == UserRole.passenger,
                         isCompact: isCompact,
-                        onTap: () => auth.switchRole(UserRole.rider),
+                        onTap: () => auth.switchRole(UserRole.passenger),
                       ),
                       _buildRoleButton(
                         layout: layout,
@@ -219,7 +219,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ],
                   ),
                 ),
-                SizedBox(width: isCompact ? 4 : 6),
+                SizedBox(width: isCompact ? 3 : 6),
                 // Auth / User Profile Icon Button
                 InkWell(
                   onTap: () => _showUserSessionModal(context, auth, isDark, layout),
@@ -908,7 +908,7 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: EdgeInsets.symmetric(
-                horizontal: isCompact ? 5 : 7,
+                horizontal: isCompact ? 3.5 : 7,
                 vertical: 6,
               ),
               decoration: BoxDecoration(
@@ -927,14 +927,14 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                 children: [
                   Icon(
                     icon,
-                    size: isCompact ? 11.5 : 13,
+                    size: isCompact ? 11 : 13,
                     color: isSelected ? Colors.white : AppTheme.slateMuted,
                   ),
-                  SizedBox(width: isCompact ? 2.5 : 4),
+                  SizedBox(width: isCompact ? 1.5 : 4),
                   Text(
                     label,
                     style: TextStyle(
-                      fontSize: isCompact ? 10 : 11,
+                      fontSize: isCompact ? 9 : 11,
                       fontWeight: isSelected
                           ? FontWeight.w700
                           : FontWeight.w500,

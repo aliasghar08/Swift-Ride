@@ -1,7 +1,10 @@
 enum UserRole {
-  rider,
+  passenger,
   driver,
   admin;
+
+  /// Backward-compatibility alias for legacy code and tests.
+  static const UserRole rider = UserRole.passenger;
 
   static UserRole fromString(String? role) {
     switch (role?.toLowerCase()) {
@@ -9,8 +12,10 @@ enum UserRole {
         return UserRole.driver;
       case 'admin':
         return UserRole.admin;
+      case 'passenger':
+      case 'rider':
       default:
-        return UserRole.rider;
+        return UserRole.passenger;
     }
   }
 

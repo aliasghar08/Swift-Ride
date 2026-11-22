@@ -10,7 +10,7 @@ const RegisterUserSchema = z.object({
   fullName: z.string().min(2).max(100),
   phone: z.string().min(7).max(25),
   email: z.string().email().optional(),
-  role: z.enum(['rider', 'driver']).default('rider'),
+  role: z.enum(['passenger', 'rider', 'driver']).default('passenger'),
   fcmToken: z.string().optional(),
 });
 
@@ -91,7 +91,7 @@ export const verifyOtp = onCall(
 
 const SetUserRoleSchema = z.object({
   targetUserId: z.string().min(1),
-  role: z.enum(['rider', 'driver', 'admin']),
+  role: z.enum(['passenger', 'rider', 'driver', 'admin']),
 });
 
 export const setUserRole = onCall(

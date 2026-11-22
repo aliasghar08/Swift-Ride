@@ -330,14 +330,14 @@ class AuthService {
     required String selectedRole,
     String? fullName,
   }) async {
-    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.rider;
+    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.passenger;
     final auth = _auth;
 
     if (auth == null) {
       debugPrint('[AuthService] Firebase uninitialized: Simulating Google sign-in');
       final mockUser = AppUser(
         id: 'google_user_${DateTime.now().millisecondsSinceEpoch}',
-        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Google Rider',
+        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Google Passenger',
         email: 'rider.google@swiftride.pk',
         phone: '',
         role: role,
@@ -432,14 +432,14 @@ class AuthService {
     required String selectedRole,
     String? fullName,
   }) async {
-    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.rider;
+    final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.passenger;
     final auth = _auth;
 
     if (auth == null) {
       debugPrint('[AuthService] Firebase uninitialized: Simulating Apple sign-in');
       final mockUser = AppUser(
         id: 'apple_user_${DateTime.now().millisecondsSinceEpoch}',
-        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Apple Rider',
+        fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Apple Passenger',
         email: 'rider.apple@swiftride.pk',
         phone: '',
         role: role,
@@ -503,7 +503,7 @@ class AuthService {
     String? email,
     String? photoUrl,
     String? authProvider,
-    UserRole defaultRole = UserRole.rider,
+    UserRole defaultRole = UserRole.passenger,
   }) async {
     final trimmedName = fullName?.trim();
     final hasExplicitName = trimmedName != null &&
@@ -533,8 +533,8 @@ class AuthService {
           normalizedPhone.isNotEmpty ? normalizedPhone : existingUser.phone;
       final resolvedEmail =
           hasExplicitEmail ? trimmedEmail : existingUser.email;
-      final resolvedRole = defaultRole != UserRole.rider ||
-              existingUser.role == UserRole.rider
+      final resolvedRole = defaultRole != UserRole.passenger ||
+              existingUser.role == UserRole.passenger
           ? defaultRole
           : existingUser.role;
 

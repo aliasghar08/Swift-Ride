@@ -10,7 +10,7 @@ service cloud.firestore {
     //   - phone: string | null (optional, 7-25 chars or empty string or null for social auth)
     //   - email: string | null (optional, valid email format)
     //   - fullName: string (required, 1-100 chars)
-    //   - role: string ("rider" | "driver" | "admin")
+    //   - role: string ("passenger" | "driver" | "admin")
     //   - rating: number (0.0 - 5.0)
     //   - totalRides: number (>= 0)
     //   - fcmTokens: list of strings (max 10 tokens)
@@ -175,7 +175,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return hasRequiredFields(data, ['fullName', 'role', 'rating', 'totalRides', 'createdAt']) &&
         validStringLength(data.fullName, 1, 100) &&
-        data.role in ['rider', 'driver', 'admin'] &&
+        data.role in ['passenger', 'rider', 'driver', 'admin'] &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
         data.totalRides is number && data.totalRides >= 0 &&
         // Gender: optional ('female' | 'male' | null)
@@ -295,7 +295,7 @@ service cloud.firestore {
         // Regular client cannot self-grant isGenderVerified = true on create
         (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
         // Prevent regular user from setting role to admin on create
-        (request.resource.data.role in ['rider', 'driver'] || isAdmin());
+        (request.resource.data.role in ['passenger', 'rider', 'driver'] || isAdmin());
       allow update: if isAuthenticated() &&
         (isAdmin() ||
          (isOwner(userId) &&
@@ -450,7 +450,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() &&
         request.resource.data.userId == request.auth.uid &&
-        request.resource.data.role in ['rider', 'driver'];
+        request.resource.data.role in ['passenger', 'rider', 'driver'];
       allow update: if isAuthenticated() &&
         (resource.data.userId == request.auth.uid || isAdmin()) &&
         areImmutableFieldsUnchanged(['userId', 'role', 'createdAt']);

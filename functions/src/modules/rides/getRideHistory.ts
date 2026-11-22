@@ -6,7 +6,7 @@ import { validateInput } from '../../middleware/validation';
 import { z } from 'zod';
 
 const GetRideHistorySchema = z.object({
-  role: z.enum(['rider', 'driver']).default('rider'),
+  role: z.enum(['passenger', 'rider', 'driver']).default('passenger'),
   limit: z.number().min(1).max(50).default(20),
 });
 
@@ -16,7 +16,7 @@ export const getRideHistory = onCall(
     const caller = await assertAuthenticated(request);
     const data = validateInput(GetRideHistorySchema, request.data);
 
-    const field = data.role === 'rider' ? 'riderId' : 'driverId';
+    const field = (data.role === 'passenger' || data.role === 'rider') ? 'riderId' : 'driverId';
     const limitNum = data.limit ?? 20;
     const snapshot = await db
       .collection(APP_CONSTANTS.COLLECTIONS.RIDES)

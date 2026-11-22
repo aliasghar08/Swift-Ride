@@ -88,8 +88,8 @@ void main() {
     expect(find.text('SwiftRide'), findsWidgets);
     expect(find.text('2% Fee (Always)'), findsOneWidget);
 
-    // Verify Rider view is loaded initially
-    expect(find.text('Rider'), findsWidgets);
+    // Verify Passenger view is loaded initially
+    expect(find.text('Passenger'), findsWidgets);
     expect(find.text('Where to? (Destination)'), findsOneWidget);
     // Fare preview is only visible when destination is selected
     expect(find.text('Your Offer (Rider sets the price):'), findsNothing);

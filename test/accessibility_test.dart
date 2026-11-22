@@ -104,7 +104,7 @@ void main() {
       await pumpApp(tester);
 
       // The switcher used to be a bare GestureDetector with no label at all.
-      expect(find.bySemanticsLabel('Rider mode'), findsOneWidget);
+      expect(find.bySemanticsLabel('Passenger mode'), findsOneWidget);
       expect(find.bySemanticsLabel('Driver mode'), findsOneWidget);
       expect(find.bySemanticsLabel('Admin mode'), findsOneWidget);
 
@@ -162,7 +162,7 @@ void main() {
 
       // WCAG 2.5.5 — the visual pill stays compact but the tappable area must
       // not be smaller than 48x48.
-      final size = tester.getSize(find.bySemanticsLabel('Rider mode'));
+      final size = tester.getSize(find.bySemanticsLabel('Passenger mode'));
       expect(size.height, greaterThanOrEqualTo(48.0));
       expect(size.width, greaterThanOrEqualTo(48.0));
     });

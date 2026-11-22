@@ -329,8 +329,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(authProvider.activeRole, equals(UserRole.admin));
 
-      // Tap Rider tab
-      await tester.tap(find.text('Rider'));
+      // Tap Passenger tab
+      await tester.tap(find.text('Passenger'));
       await tester.pump(const Duration(milliseconds: 300));
       expect(authProvider.activeRole, equals(UserRole.rider));
     });

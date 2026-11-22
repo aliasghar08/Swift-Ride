@@ -51,7 +51,7 @@ class AppUser {
         id: '',
         phone: '',
         fullName: '',
-        role: UserRole.rider,
+        role: UserRole.passenger,
         rating: 0,
         totalRides: 0,
         createdAt: DateTime.now(),

@@ -4,7 +4,7 @@ import { APP_CONSTANTS } from '../config/constants';
 
 export interface AuthenticatedUser {
   uid: string;
-  role: 'rider' | 'driver' | 'admin';
+  role: 'passenger' | 'rider' | 'driver' | 'admin';
   phone?: string;
   email?: string;
 }
@@ -26,13 +26,13 @@ export async function assertAuthenticated(request: CallableRequest): Promise<Aut
 
   if (!userDoc.exists) {
     // Return minimal user if document creation is currently pending
-    return { uid, role: 'rider' };
+    return { uid, role: 'passenger' };
   }
 
   const data = userDoc.data() || {};
   return {
     uid,
-    role: data.role || 'rider',
+    role: data.role || 'passenger',
     phone: data.phone,
     email: data.email,
   };
@@ -40,7 +40,7 @@ export async function assertAuthenticated(request: CallableRequest): Promise<Aut
 
 export async function assertRole(
   request: CallableRequest,
-  allowedRoles: Array<'rider' | 'driver' | 'admin'>
+  allowedRoles: Array<'passenger' | 'rider' | 'driver' | 'admin'>
 ): Promise<AuthenticatedUser> {
   const user = await assertAuthenticated(request);
   if (!allowedRoles.includes(user.role)) {

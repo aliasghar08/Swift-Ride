@@ -115,7 +115,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
           case UserRole.admin:
             activeView = const AdminDashboardScreen();
             break;
-          case UserRole.rider:
+          case UserRole.passenger:
             activeView = const RiderHomeScreen();
             break;
         }
@@ -167,7 +167,7 @@ class AppRouter {
               rideId: rideId,
               currentUserId: currentUserId,
               currentUserRole: isDriver ? 'driver' : 'rider',
-              otherUserName: isDriver ? 'Rider' : 'Driver',
+              otherUserName: isDriver ? 'Passenger' : 'Driver',
               otherUserId: '',
             );
           } catch (_) {}

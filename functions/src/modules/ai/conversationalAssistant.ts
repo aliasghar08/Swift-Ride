@@ -44,7 +44,7 @@ export interface ConversationalAssistantRequest {
 
 export async function processConversation(
   userId: string,
-  userRole: 'rider' | 'driver' | 'admin',
+  userRole: 'passenger' | 'rider' | 'driver' | 'admin',
   requestData: ConversationalAssistantRequest
 ) {
   const { message, conversationId, history = [], context = {} } = requestData;

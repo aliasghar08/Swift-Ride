@@ -56,7 +56,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  UserRole _selectedRole = UserRole.rider;
+  UserRole _selectedRole = UserRole.passenger;
 
   String? _lastLookedUpPhone;
   bool _isProfileAutofilled = false;
@@ -1285,11 +1285,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   visualDensity: VisualDensity.compact,
                   label: const FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Text('Rider'),
+                    child: Text('Passenger'),
                   ),
-                  selected: _selectedRole == UserRole.rider,
+                  selected: _selectedRole == UserRole.passenger,
                   onSelected: (val) {
-                    if (val) setState(() => _selectedRole = UserRole.rider);
+                    if (val) setState(() => _selectedRole = UserRole.passenger);
                   },
                 ),
               ),
@@ -1766,11 +1766,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               child: ChoiceChip(
                 label: const FittedBox(
                   fit: BoxFit.scaleDown,
-                  child: Text('Rider'),
+                  child: Text('Passenger'),
                 ),
-                selected: _selectedRole == UserRole.rider,
+                selected: _selectedRole == UserRole.passenger,
                 onSelected: (val) {
-                  if (val) setState(() => _selectedRole = UserRole.rider);
+                  if (val) setState(() => _selectedRole = UserRole.passenger);
                 },
               ),
             ),

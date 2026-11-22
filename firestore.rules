@@ -17,6 +17,8 @@ service cloud.firestore {
     //   - authProvider: string | null (optional, "google" | "apple" | "phone" etc., max 50 chars)
     //   - photoUrl: string | null (optional, valid URL format, max 1000 chars)
     //   - trustedContacts: list of strings (max 5 contacts)
+    //   - gender: string | null (optional, 'female' | 'male')
+    //   - isGenderVerified: bool (optional, default false, immutable by client)
     //   - createdAt: timestamp (immutable)
     //   - updatedAt: timestamp
     //   - location: map | null
@@ -33,6 +35,9 @@ service cloud.firestore {
     //   - stripeAccountId: string | null
     //   - payoutStatus: string ("pending" | "active")
     //   - rating: number, totalRides: number
+    //   - gender: string | null (optional, 'female' | 'male')
+    //   - isGenderVerified: bool (optional, immutable by client)
+    //   - femalePassengersOnly: bool (optional)
     //   - createdAt: timestamp (immutable)
     //
     // Collection: rides/{rideId}
@@ -50,6 +55,8 @@ service cloud.firestore {
     //   - safetyFlags: list of strings
     //   - shareToken: string | null
     //   - pin: string (4 digits)
+    //   - femaleDriverOnly: bool (optional)
+    //   - riderGender: string | null (optional)
     //   - createdAt: timestamp (immutable)
     //   - completedAt: timestamp | null
     //
@@ -138,6 +145,13 @@ service cloud.firestore {
         data.role in ['rider', 'driver', 'admin'] &&
         data.rating is number && data.rating >= 0 && data.rating <= 5 &&
         data.totalRides is number && data.totalRides >= 0 &&
+        // Gender: optional ('female' | 'male' | null)
+        (!('gender' in data) ||
+          data.gender == null ||
+          data.gender in ['female', 'male']) &&
+        // isGenderVerified: optional bool (default false)
+        (!('isGenderVerified' in data) ||
+          data.isGenderVerified is bool) &&
         // Phone: optional for social auth (Google/Apple), but when present must be null, empty, or 7-25 chars
         (!('phone' in data) ||
           data.phone == null ||
@@ -171,7 +185,17 @@ service cloud.firestore {
         validStringLength(data.vehicleModel, 1, 50) &&
         validStringLength(data.vehiclePlate, 1, 20) &&
         data.isVerified is bool &&
-        data.isOnline is bool;
+        data.isOnline is bool &&
+        // Gender: optional ('female' | 'male' | null)
+        (!('gender' in data) ||
+          data.gender == null ||
+          data.gender in ['female', 'male']) &&
+        // isGenderVerified: optional bool
+        (!('isGenderVerified' in data) ||
+          data.isGenderVerified is bool) &&
+        // femalePassengersOnly: optional bool
+        (!('femalePassengersOnly' in data) ||
+          data.femalePassengersOnly is bool);
     }
 
     // Ride Validators
@@ -179,7 +203,14 @@ service cloud.firestore {
       return hasRequiredFields(data, ['riderId', 'status', 'pickup', 'dropoff', 'offeredFare', 'createdAt']) &&
         data.riderId is string &&
         data.status in ['REQUESTED', 'ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
-        data.offeredFare is number && data.offeredFare > 0;
+        data.offeredFare is number && data.offeredFare > 0 &&
+        // femaleDriverOnly: optional bool
+        (!('femaleDriverOnly' in data) ||
+          data.femaleDriverOnly is bool) &&
+        // riderGender: optional string or null (max 20 chars if string)
+        (!('riderGender' in data) ||
+          data.riderGender == null ||
+          (data.riderGender is string && data.riderGender.size() <= 20));
     }
 
     // Ride Offer Validators
@@ -193,13 +224,18 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isDriver());
       allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) &&
+        // Regular client cannot self-grant isGenderVerified = true on create
+        (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
         // Prevent regular user from setting role to admin on create
         (request.resource.data.role in ['rider', 'driver'] || isAdmin());
       allow update: if isAuthenticated() &&
         (isAdmin() ||
          (isOwner(userId) &&
           isValidUser(request.resource.data) &&
-          areImmutableFieldsUnchanged(['createdAt', 'role'])));
+          areImmutableFieldsUnchanged(['createdAt', 'role', 'isGenderVerified']) &&
+          // If gender is verified, client cannot change gender (it is locked)
+          (!('isGenderVerified' in resource.data) || resource.data.isGenderVerified != true ||
+           areImmutableFieldsUnchanged(['gender']))));
       allow delete: if isAdmin();
     }
 
@@ -208,7 +244,11 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isOwner(driverId) && isValidDriver(request.resource.data) &&
         // Driver cannot self-verify
-        request.resource.data.isVerified == false;
+        request.resource.data.isVerified == false &&
+        // Driver cannot self-verify gender on create
+        (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
+        // Driver cannot enable femalePassengersOnly on create
+        (!('femalePassengersOnly' in request.resource.data) || request.resource.data.femalePassengersOnly != true || isAdmin());
       allow update: if isAuthenticated() &&
         (isAdmin() ||
          (isOwner(driverId) &&
@@ -217,7 +257,11 @@ service cloud.firestore {
           request.resource.data.isVerified == resource.data.isVerified &&
           // Driver cannot go online if not verified
           (request.resource.data.isOnline == false || resource.data.isVerified == true) &&
-          areImmutableFieldsUnchanged(['createdAt', 'userId'])));
+          // Only verified female drivers can enable femalePassengersOnly
+          (!('femalePassengersOnly' in request.resource.data) ||
+           request.resource.data.femalePassengersOnly != true ||
+           ('gender' in resource.data && resource.data.gender == 'female' && resource.data.isVerified == true)) &&
+          areImmutableFieldsUnchanged(['createdAt', 'userId', 'isGenderVerified'])));
       allow delete: if isAdmin();
 
       // Driver subcollection for uploaded documents

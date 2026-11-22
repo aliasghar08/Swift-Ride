@@ -44,6 +44,22 @@ export const onRideCreated = onDocumentCreated(
         const snap = await q.get();
         for (const doc of snap.docs) {
           const dData = doc.data();
+
+          // Women-Only mode dispatch rules:
+          // 1. If passenger requested female captain only, require female verified driver
+          if (rideData.femaleDriverOnly === true) {
+            if (dData.gender?.toLowerCase() !== 'female' || dData.isVerified !== true) {
+              continue;
+            }
+          }
+
+          // 2. If driver configured Women Passengers Only, require female rider
+          if (dData.femalePassengersOnly === true) {
+            if (rideData.riderGender?.toLowerCase() !== 'female') {
+              continue;
+            }
+          }
+
           const lat = dData.currentLocation?.lat;
           const lng = dData.currentLocation?.lng;
           if (lat !== undefined && lng !== undefined) {

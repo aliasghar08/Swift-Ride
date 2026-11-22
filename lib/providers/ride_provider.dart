@@ -135,6 +135,8 @@ class RideProvider extends ChangeNotifier {
     bool isAutoNegotiateEnabled = false,
     double? maxAutoAcceptFare,
     String? riderId,
+    bool femaleDriverOnly = false,
+    String? riderGender,
   }) async {
     if (Firebase.apps.isEmpty) {
       _setError('Ride requests need an internet connection.');
@@ -171,6 +173,8 @@ class RideProvider extends ChangeNotifier {
         'seatPreference': ?seatPreference,
         'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
         'maxAutoAcceptFare': maxAutoAcceptFare,
+        'femaleDriverOnly': femaleDriverOnly,
+        'riderGender': ?riderGender,
       });
 
       final rideId = res.data['rideId'] as String?;
@@ -199,6 +203,8 @@ class RideProvider extends ChangeNotifier {
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,
         riderId: effectiveRiderId,
+        femaleDriverOnly: femaleDriverOnly,
+        riderGender: riderGender,
       );
       if (directRideId != null) return directRideId;
 
@@ -222,6 +228,8 @@ class RideProvider extends ChangeNotifier {
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,
         riderId: effectiveRiderId,
+        femaleDriverOnly: femaleDriverOnly,
+        riderGender: riderGender,
       );
       if (directRideId != null) return directRideId;
       _setError('We could not reach SwiftRide. Check your connection and try again.');
@@ -244,6 +252,8 @@ class RideProvider extends ChangeNotifier {
     required bool isAutoNegotiateEnabled,
     double? maxAutoAcceptFare,
     required String riderId,
+    bool femaleDriverOnly = false,
+    String? riderGender,
   }) async {
     final rideId = 'ride_${DateTime.now().millisecondsSinceEpoch}';
     final pin = (1000 + (DateTime.now().microsecondsSinceEpoch % 9000)).toString();
@@ -267,6 +277,8 @@ class RideProvider extends ChangeNotifier {
       commissionAmount: ((offeredFare * 0.02) * 10).round() / 10.0,
       pin: pin,
       createdAt: DateTime.now(),
+      femaleDriverOnly: femaleDriverOnly,
+      riderGender: riderGender,
     );
 
     try {

@@ -43,6 +43,7 @@ export interface DocumentVerificationResult {
     issueDate?: string | null;
     vehiclePlate?: string | null;
     dob?: string | null;
+    gender?: 'female' | 'male' | null;
   };
   isExpired: boolean;
   isNameMatch: boolean | null;
@@ -98,6 +99,7 @@ Tasks by Document Type:
      - Expiry Date (if visible, in YYYY-MM-DD or DD/MM/YYYY)
      - Issue Date (if visible)
      - Vehicle Plate # (for Vehicle Registration)
+     - Gender ('female' | 'male' | null): Read explicitly or infer from Pakistani CNIC 13th digit (even is female, odd is male).
   3. Check for quality: is it clear, readable, un-blurred, and untampered?
   4. Check if the extracted name or document number matches the expected profile.
   5. Check if the document has expired.
@@ -125,7 +127,8 @@ Use this exact JSON schema:
     "expiryDate": "2028-10-15",
     "issueDate": "2023-10-15",
     "vehiclePlate": "ABC-1234",
-    "dob": null
+    "dob": null,
+    "gender": "female"
   },
   "isExpired": false,
   "isNameMatch": true,
@@ -217,6 +220,42 @@ Rules for status:
       updatedAt: FieldValue.serverTimestamp(),
       aiModel: 'gemini-3.8-flash',
     });
+
+    // Extract or infer gender from official documents (CNIC / Driving License)
+    let detectedGender: 'female' | 'male' | null = null;
+    if (result.status === 'VERIFIED') {
+      const rawGender = result.extractedFields?.gender?.toLowerCase();
+      if (rawGender === 'female' || rawGender === 'male') {
+        detectedGender = rawGender;
+      } else if (result.extractedFields?.idNumber) {
+        // Pakistani CNIC format: 13 digits where the last digit is even for female, odd for male
+        const digitsOnly = result.extractedFields.idNumber.replace(/\D/g, '');
+        if (digitsOnly.length === 13) {
+          const lastDigit = parseInt(digitsOnly.slice(-1), 10);
+          detectedGender = lastDigit % 2 === 0 ? 'female' : 'male';
+        }
+      }
+    }
+
+    if (detectedGender) {
+      await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(data.driverId).set(
+        {
+          gender: detectedGender,
+          isGenderVerified: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      await db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(data.driverId).set(
+        {
+          gender: detectedGender,
+          isGenderVerified: true,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+      logger.info({ driverId: data.driverId, detectedGender }, 'Gender successfully verified from official document');
+    }
 
     // Check overall verification status across all documents
     const allDocsSnap = await db

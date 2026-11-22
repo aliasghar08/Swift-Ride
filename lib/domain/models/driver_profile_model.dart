@@ -18,6 +18,9 @@ class DriverProfile {
   final double latitude;
   final double longitude;
   final DateTime createdAt;
+  final String? gender;
+  final bool isGenderVerified;
+  final bool femalePassengersOnly;
 
   const DriverProfile({
     required this.userId,
@@ -38,6 +41,9 @@ class DriverProfile {
     this.latitude = 0,
     this.longitude = 0,
     required this.createdAt,
+    this.gender,
+    this.isGenderVerified = false,
+    this.femalePassengersOnly = false,
   });
 
   /// A profile that claims nothing: real identity, zeroed figures.
@@ -61,6 +67,9 @@ class DriverProfile {
         totalRides: 0,
         totalEarnings: 0,
         createdAt: DateTime.now(),
+        gender: null,
+        isGenderVerified: false,
+        femalePassengersOnly: false,
       );
 
   DriverProfile copyWith({
@@ -79,6 +88,9 @@ class DriverProfile {
     double? latitude,
     double? longitude,
     DateTime? createdAt,
+    String? gender,
+    bool? isGenderVerified,
+    bool? femalePassengersOnly,
   }) {
     return DriverProfile(
       userId: userId ?? this.userId,
@@ -96,6 +108,9 @@ class DriverProfile {
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
       createdAt: createdAt ?? this.createdAt,
+      gender: gender ?? this.gender,
+      isGenderVerified: isGenderVerified ?? this.isGenderVerified,
+      femalePassengersOnly: femalePassengersOnly ?? this.femalePassengersOnly,
     );
   }
 
@@ -118,6 +133,9 @@ class DriverProfile {
         'lng': longitude,
       },
       'createdAt': createdAt.toIso8601String(),
+      if (gender != null) 'gender': gender,
+      'isGenderVerified': isGenderVerified,
+      'femalePassengersOnly': femalePassengersOnly,
     };
   }
 
@@ -149,6 +167,9 @@ class DriverProfile {
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      gender: map['gender'] as String?,
+      isGenderVerified: map['isGenderVerified'] == true,
+      femalePassengersOnly: map['femalePassengersOnly'] == true,
     );
   }
 }

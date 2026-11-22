@@ -120,6 +120,17 @@ class RiderViewModel extends ChangeNotifier {
   Map<VehicleType, double> get vehicleFares => _vehicleFares;
   int get bookedSeats => _bookedSeats;
 
+  bool _femaleDriverOnly = false;
+  bool get femaleDriverOnly => _femaleDriverOnly;
+
+  void setFemaleDriverOnly(bool value) {
+    if (_femaleDriverOnly != value) {
+      _femaleDriverOnly = value;
+      _deviceService.triggerHaptic('selection');
+      notifyListeners();
+    }
+  }
+
   String _seatPreference = 'Any';
   String get seatPreference => _seatPreference;
 
@@ -707,6 +718,8 @@ class RiderViewModel extends ChangeNotifier {
   Future<bool> submitRideRequest({
     required RideProvider rideProv,
     String? riderId,
+    bool? femaleDriverOnly,
+    String? riderGender,
   }) async {
     final parsed = double.tryParse(fareController.text);
     final fare = (parsed == null || parsed < 50.0)
@@ -721,6 +734,8 @@ class RiderViewModel extends ChangeNotifier {
       return false;
     }
 
+    final effectiveFemaleDriverOnly = femaleDriverOnly ?? _femaleDriverOnly;
+
     final rideId = await rideProv.requestRide(
       pickup: pickup,
       dropoff: dropoff,
@@ -733,6 +748,8 @@ class RiderViewModel extends ChangeNotifier {
       isAutoNegotiateEnabled: _autoNegotiate,
       maxAutoAcceptFare: _autoNegotiate ? (_maxAutoFare != null ? math.min(_maxAutoFare!, fare) : fare) : null,
       riderId: riderId,
+      femaleDriverOnly: effectiveFemaleDriverOnly,
+      riderGender: riderGender,
     );
 
     if (rideId == null) {
@@ -742,7 +759,7 @@ class RiderViewModel extends ChangeNotifier {
 
     _notificationService.showNotification(
       id: 201,
-      title: 'Searching Drivers',
+      title: effectiveFemaleDriverOnly ? 'Searching Female Captains' : 'Searching Drivers',
       body: 'Offer sent: PKR ${fare.toInt()} (2% Commission)',
     );
     return true;
@@ -752,8 +769,15 @@ class RiderViewModel extends ChangeNotifier {
   Future<bool> requestRide({
     required RideProvider rideProv,
     String? riderId,
+    bool? femaleDriverOnly,
+    String? riderGender,
   }) =>
-      submitRideRequest(rideProv: rideProv, riderId: riderId);
+      submitRideRequest(
+        rideProv: rideProv,
+        riderId: riderId,
+        femaleDriverOnly: femaleDriverOnly,
+        riderGender: riderGender,
+      );
 
   void acceptDriverOffer(RideProvider rideProv, String offerId) {
     _deviceService.triggerHaptic('heavy');

@@ -51,6 +51,26 @@ export const submitOffer = onCall(
       throw new HttpsError('failed-precondition', 'Please configure your vehicle details before submitting offers.');
     }
 
+    // Women-Only mode offer submission gates
+    if (rideData.femaleDriverOnly === true) {
+      const isFemaleDriver = driverData?.gender?.toLowerCase() === 'female' && driverData?.isVerified === true;
+      if (!isFemaleDriver) {
+        throw new HttpsError(
+          'permission-denied',
+          'Women-Only rides are exclusively served by verified female captains.'
+        );
+      }
+    }
+
+    if (driverData?.femalePassengersOnly === true) {
+      if (rideData.riderGender?.toLowerCase() !== 'female') {
+        throw new HttpsError(
+          'failed-precondition',
+          'You have Women Passengers Only mode enabled and cannot bid on this ride.'
+        );
+      }
+    }
+
     const offerRef = db.collection(APP_CONSTANTS.COLLECTIONS.RIDE_OFFERS).doc();
     await offerRef.set({
       rideId: data.rideId,

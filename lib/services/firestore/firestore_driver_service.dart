@@ -66,6 +66,9 @@ class FirestoreDriverService {
             'geopoint': GeoPoint(driver.latitude, driver.longitude),
             'geohash': GeohashUtil.encode(driver.latitude, driver.longitude, 7),
           },
+          if (driver.gender != null) 'gender': driver.gender,
+          'isGenderVerified': driver.isGenderVerified,
+          'femalePassengersOnly': driver.femalePassengersOnly,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -86,6 +89,8 @@ class FirestoreDriverService {
           if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
           'isVerified': currentVerified,
           'isOnline': currentVerified ? driver.isOnline : false,
+          if (driver.gender != null) 'gender': driver.gender,
+          'femalePassengersOnly': driver.femalePassengersOnly,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
@@ -252,6 +257,7 @@ class FirestoreDriverService {
     required bool isOnline,
     double? latitude,
     double? longitude,
+    bool? femalePassengersOnly,
   }) async {
     if (Firebase.apps.isEmpty) {
       return 'Going online needs an internet connection.';
@@ -275,6 +281,7 @@ class FirestoreDriverService {
       final res = await FirebaseFunctions.instance.httpsCallable('toggleOnline').call(
         <String, dynamic>{
           'isOnline': isOnline,
+          'femalePassengersOnly': ?femalePassengersOnly,
           if (isOnline && latitude != null && longitude != null)
             'currentLocation': {
               'lat': latitude,
@@ -470,7 +477,32 @@ class FirestoreDriverService {
       longitude: lng,
       subscriptionExpiresAt: DateTime.now().add(const Duration(days: 365)),
       createdAt: DateTime.now(),
+      gender: data['gender'] as String?,
+      isGenderVerified: data['isGenderVerified'] == true,
+      femalePassengersOnly: data['femalePassengersOnly'] == true,
     );
+  }
+
+  /// Updates driver's female passengers only preference in Firestore and memory.
+  Future<bool> updateFemalePassengersOnly(String driverId, bool femalePassengersOnly) async {
+    final cur = _memoryDrivers[driverId];
+    if (cur != null) {
+      _memoryDrivers[driverId] = cur.copyWith(femalePassengersOnly: femalePassengersOnly);
+    }
+
+    final fs = _firestore;
+    if (fs == null) return true;
+
+    try {
+      await fs.collection(AppConstants.driversCollection).doc(driverId).update({
+        'femalePassengersOnly': femalePassengersOnly,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] Error updating femalePassengersOnly: $e');
+      return false;
+    }
   }
 
   /// In-memory documents map for offline / test environments

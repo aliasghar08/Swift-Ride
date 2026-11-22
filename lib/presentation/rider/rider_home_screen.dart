@@ -36,6 +36,7 @@ import 'route_preview_screen.dart';
 import '../widgets/trip_economics_sheet.dart';
 import '../auth/phone_auth_screen.dart';
 import '../../services/ad_service.dart';
+import '../../services/native/native_storage_service.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -50,6 +51,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   String? _driverName;
   String? _driverVehicle;
   String? _driverPhoneForDriverId;
+  bool _isWomenRiderPromoDismissed = false;
 
   late final RiderViewModel _viewModel;
   GoogleMapController? _mapController;
@@ -107,6 +109,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
   void initState() {
     super.initState();
     _viewModel = RiderViewModel();
+    NativeStorageService().getBool('promo_dismissed_women_rider_mode_v1').then((val) {
+      if (mounted && val == true) {
+        setState(() => _isWomenRiderPromoDismissed = true);
+      }
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final locProv = CustomChangeNotifierProvider.of<LocationProvider>(
@@ -2079,6 +2086,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           ),
                         ],
                         SizedBox(height: layout.scale(12)),
+                        _buildWomenRiderPromoBanner(layout, AppColors.of(context)),
                         StaggeredEntryWidget(
                           index: 1,
                           child: _buildVehicleTypeSelector(layout),
@@ -2321,6 +2329,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                       final ok = await _viewModel.submitRideRequest(
                                         rideProv: rideProv,
                                         riderId: activeRiderId,
+                                        femaleDriverOnly: _viewModel.femaleDriverOnly,
+                                        riderGender: authProv.currentUser.gender,
                                       );
                                       if (ok && mounted) {
                                         // Notification permission is deferred
@@ -3147,7 +3157,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           }).toList(),
         ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
+
+        // Women-Only Mode / Female Captain Filter Pill
+        _buildFemaleCaptainFilterPill(layout, c),
 
         if (selectedType == VehicleType.car) ...[
           const SizedBox(height: 12),
@@ -3183,6 +3196,33 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 6),
+                    if (_viewModel.bookedSeats > 1 && _viewModel.femaleDriverOnly)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE91E63).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFFE91E63).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.female_rounded, size: 12, color: Color(0xFFE91E63)),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Women-Only Shared Ride',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(10),
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFE91E63),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (_viewModel.bookedSeats > 1)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
@@ -4641,6 +4681,267 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             child: const Text('Sign In Now'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _handleFemaleCaptainToggle(BuildContext context) {
+    final auth = CustomChangeNotifierProvider.of<AuthProvider>(context);
+    final user = auth.currentUser;
+    final isFemale = user.gender?.toLowerCase() == 'female';
+
+    if (!_viewModel.femaleDriverOnly && !isFemale) {
+      _showConfirmFemalePassengerDialog(context, auth);
+    } else {
+      _viewModel.setFemaleDriverOnly(!_viewModel.femaleDriverOnly);
+    }
+  }
+
+  void _showConfirmFemalePassengerDialog(BuildContext context, AuthProvider auth) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Row(
+          children: [
+            Icon(Icons.female_rounded, color: Color(0xFFE91E63), size: 24),
+            SizedBox(width: 8),
+            Text('Women-Only Mode'),
+          ],
+        ),
+        content: const Text(
+          'Women-Only ride matching connects female passengers with verified female captains for safe, comfortable travel.\n\nPlease confirm that you identify as a female passenger to use this filter.',
+          style: TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              if (auth.currentUser.id.isNotEmpty) {
+                await FirestoreUserService().updateGender(auth.currentUser.id, 'female');
+                auth.updateUser(auth.currentUser.copyWith(gender: 'female'));
+              }
+              _viewModel.setFemaleDriverOnly(true);
+              if (mounted) {
+                ScaffoldMessenger.of(this.context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Female Captain filter activated!'),
+                    backgroundColor: Color(0xFFE91E63),
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE91E63),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('I am a Female Passenger'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWomenRiderPromoBanner(ResponsiveLayoutHelper layout, AppColors c) {
+    if (_isWomenRiderPromoDismissed || _viewModel.femaleDriverOnly) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF880E4F), Color(0xFF4A148C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF880E4F).withValues(alpha: 0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: EdgeInsets.all(layout.scale(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.female_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Introducing Women-Only Rides',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: layout.fontSize(12.5),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Prefer a female captain? Filter for verified female drivers across Car, Auto Rickshaw & Bike.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: layout.fontSize(10.5),
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() => _isWomenRiderPromoDismissed = true);
+                      NativeStorageService().setBool('promo_dismissed_women_rider_mode_v1', true);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      child: const Icon(Icons.close, color: Colors.white70, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => _handleFemaleCaptainToggle(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF880E4F),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text(
+                      'Try Female Captain Filter',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: layout.fontSize(11),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFemaleCaptainFilterPill(ResponsiveLayoutHelper layout, AppColors c) {
+    final isEnabled = _viewModel.femaleDriverOnly;
+    return InkWell(
+      onTap: () => _handleFemaleCaptainToggle(context),
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isEnabled
+              ? const Color(0xFFE91E63).withValues(alpha: 0.12)
+              : c.surfaceRaised,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isEnabled
+                ? const Color(0xFFE91E63)
+                : c.border.withValues(alpha: 0.7),
+            width: isEnabled ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.female_rounded,
+              size: 20,
+              color: isEnabled ? const Color(0xFFE91E63) : c.textMuted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Female Captain Only',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(12.5),
+                          fontWeight: FontWeight.w700,
+                          color: isEnabled ? const Color(0xFFE91E63) : c.textPrimary,
+                        ),
+                      ),
+                      if (isEnabled) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE91E63),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            'Women Only • Verified',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(9),
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  Text(
+                    isEnabled
+                        ? 'Matching exclusively with verified female captains'
+                        : 'Filter for verified female drivers across Car, Rikshaw & Bike',
+                    style: TextStyle(
+                      fontSize: layout.fontSize(10.5),
+                      color: c.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: isEnabled,
+              activeThumbColor: const Color(0xFFE91E63),
+              onChanged: (_) => _handleFemaleCaptainToggle(context),
+            ),
+          ],
+        ),
       ),
     );
   }

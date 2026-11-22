@@ -88,6 +88,8 @@ class RideModel {
   final bool isAutoNegotiateEnabled;
   final double? cashReceived;
   final double? changeDue;
+  final bool femaleDriverOnly;
+  final String? riderGender;
 
   int get totalSeats => VehicleTypeX.fromString(vehicleType).seats;
   int get emptySeats => (totalSeats - bookedSeats).clamp(0, totalSeats);
@@ -122,6 +124,8 @@ class RideModel {
     this.isAutoNegotiateEnabled = false,
     this.cashReceived,
     this.changeDue,
+    this.femaleDriverOnly = false,
+    this.riderGender,
   });
 
   /// Effective fare: accepted fare once matched, or offered fare while pending.
@@ -156,6 +160,8 @@ class RideModel {
     bool? isAutoNegotiateEnabled,
     double? cashReceived,
     double? changeDue,
+    bool? femaleDriverOnly,
+    String? riderGender,
   }) {
     return RideModel(
       id: id ?? this.id,
@@ -186,6 +192,8 @@ class RideModel {
       isAutoNegotiateEnabled: isAutoNegotiateEnabled ?? this.isAutoNegotiateEnabled,
       cashReceived: cashReceived ?? this.cashReceived,
       changeDue: changeDue ?? this.changeDue,
+      femaleDriverOnly: femaleDriverOnly ?? this.femaleDriverOnly,
+      riderGender: riderGender ?? this.riderGender,
     );
   }
 
@@ -218,6 +226,8 @@ class RideModel {
         if (cashReceived != null) 'cashReceived': cashReceived,
         if (changeDue != null) 'changeDue': changeDue,
         if (driverLocation != null) 'driverLocation': driverLocation!.toMap(),
+        'femaleDriverOnly': femaleDriverOnly,
+        if (riderGender != null) 'riderGender': riderGender,
       };
 
   static double _parseDouble(dynamic val, [double fallback = 0.0]) {
@@ -312,6 +322,8 @@ class RideModel {
       isAutoNegotiateEnabled: map['isAutoNegotiateEnabled'] == true,
       cashReceived: _parseNullableDouble(map['cashReceived']),
       changeDue: _parseNullableDouble(map['changeDue']),
+      femaleDriverOnly: map['femaleDriverOnly'] == true,
+      riderGender: map['riderGender'] as String?,
     );
   }
 }

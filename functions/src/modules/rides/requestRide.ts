@@ -16,6 +16,8 @@ const RequestRideSchema = z.object({
   bookedSeats: z.number().int().min(1).max(6).optional().default(1),
   isAutoNegotiateEnabled: z.boolean().optional().default(false),
   maxAutoAcceptFare: z.number().nullable().optional(),
+  femaleDriverOnly: z.boolean().optional().default(false),
+  riderGender: z.string().optional(),
 });
 
 export const requestRide = onCall(
@@ -23,6 +25,31 @@ export const requestRide = onCall(
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(RequestRideSchema, request.data);
+
+    // Fetch user profile to verify gender if femaleDriverOnly is requested
+    const userDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(caller.uid).get();
+    const userProfileGender = userDoc.data()?.gender?.toLowerCase();
+
+    if (data.femaleDriverOnly) {
+      if (userProfileGender && userProfileGender !== 'female') {
+        throw new HttpsError(
+          'failed-precondition',
+          'Women-Only ride matching is exclusively for female passengers.'
+        );
+      }
+      // If gender was specified in the request or user profile, save it
+      if (!userProfileGender && data.riderGender?.toLowerCase() === 'female') {
+        await userDoc.ref.set(
+          {
+            gender: 'female',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
+    }
+
+    const effectiveRiderGender = data.riderGender || userProfileGender || (data.femaleDriverOnly ? 'female' : null);
 
     // Generate 4-digit verification PIN for driver verification
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
@@ -44,6 +71,8 @@ export const requestRide = onCall(
       bookedSeats: data.bookedSeats,
       isAutoNegotiateEnabled: data.isAutoNegotiateEnabled,
       maxAutoAcceptFare: data.maxAutoAcceptFare ?? null,
+      femaleDriverOnly: data.femaleDriverOnly,
+      riderGender: effectiveRiderGender,
       commissionAmount: Math.round(data.offeredFare * APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE * 10) / 10, // 2% commission
       paymentIntentId: null,
       paymentStatus: 'pending',

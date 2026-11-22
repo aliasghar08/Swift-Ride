@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 const ToggleOnlineSchema = z.object({
   isOnline: z.boolean(),
+  femalePassengersOnly: z.boolean().optional(),
   currentLocation: z
     .object({
       lat: z.number().min(-90).max(90),
@@ -82,8 +83,19 @@ export const toggleOnline = onCall(
       );
     }
 
+    if (data.femalePassengersOnly === true) {
+      const isFemale = driverData?.gender?.toLowerCase() === 'female';
+      if (!isFemale || !isVerified) {
+        throw new HttpsError(
+          'permission-denied',
+          'Women Passengers Only mode is exclusively available for verified female drivers.'
+        );
+      }
+    }
+
     await driverRef.update({
       isOnline: data.isOnline,
+      ...(data.femalePassengersOnly !== undefined ? { femalePassengersOnly: data.femalePassengersOnly } : {}),
       ...(data.currentLocation ? { currentLocation: data.currentLocation } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });

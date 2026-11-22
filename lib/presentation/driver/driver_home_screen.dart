@@ -39,6 +39,7 @@ import 'widgets/driver_name_dialog.dart';
 import 'driver_verification_screen.dart';
 import '../../domain/models/user_role.dart';
 import '../../services/ad_service.dart';
+import '../../services/native/native_storage_service.dart';
 
 class DriverHomeScreen extends StatefulWidget {
   const DriverHomeScreen({super.key});
@@ -50,6 +51,7 @@ class DriverHomeScreen extends StatefulWidget {
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _hasCheckedDriverName = false;
+  bool _isWomenDriverPromoDismissed = false;
   late final DriverViewModel _viewModel;
   final RideService _rideService = RideService();
 
@@ -74,6 +76,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   void initState() {
     super.initState();
     _viewModel = DriverViewModel();
+    NativeStorageService().getBool('promo_dismissed_women_driver_mode_v1').then((val) {
+      if (mounted && val == true) {
+        setState(() => _isWomenDriverPromoDismissed = true);
+      }
+    });
   }
 
   @override
@@ -789,23 +796,33 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                       child: StaggeredEntryWidget(
                         index: 0,
-                        child: GlassContainer(
-                          borderRadius: 20,
-                          blur: 20,
-                          padding: EdgeInsets.symmetric(
-                            horizontal: layout.scale(16),
-                            vertical: layout.scale(12),
-                          ),
-                          shadows: driverProv.isOnline
-                              ? AppTheme.glowShadow(
-                                  AppTheme.emeraldGreen,
-                                  opacity: 0.25,
-                                  blur: 16,
-                                )
-                              : (isDark ? AppTheme.darkElevation : AppTheme.subtleElevation),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_shouldShowWomenDriverPromo(driver))
+                              _buildWomenDriverPromoBanner(
+                                layout: layout,
+                                driver: driver,
+                                driverProv: driverProv,
+                                isDark: isDark,
+                              ),
+                            GlassContainer(
+                              borderRadius: 20,
+                              blur: 20,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: layout.scale(16),
+                                vertical: layout.scale(12),
+                              ),
+                              shadows: driverProv.isOnline
+                                  ? AppTheme.glowShadow(
+                                      AppTheme.emeraldGreen,
+                                      opacity: 0.25,
+                                      blur: 16,
+                                    )
+                                  : (isDark ? AppTheme.darkElevation : AppTheme.subtleElevation),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
                               Row(
                                 children: [
                                   InkWell(
@@ -953,6 +970,96 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     },
                                   ),
                                 ],
+                              ),
+                              const SizedBox(height: 8),
+                              // Women Passengers Only Switch Tile
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: driverProv.femalePassengersOnly
+                                      ? const Color(0xFFE91E63).withValues(alpha: 0.12)
+                                      : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.03)),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: driverProv.femalePassengersOnly
+                                        ? const Color(0xFFE91E63).withValues(alpha: 0.4)
+                                        : Colors.grey.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.female_rounded,
+                                      size: 18,
+                                      color: driverProv.femalePassengersOnly
+                                          ? const Color(0xFFE91E63)
+                                          : (isDark ? Colors.white60 : Colors.black54),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Text(
+                                                'Women Passengers Only',
+                                                style: TextStyle(
+                                                  color: driverProv.femalePassengersOnly
+                                                      ? const Color(0xFFE91E63)
+                                                      : (isDark ? Colors.white : c.textPrimary),
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: layout.fontSize(11.5),
+                                                ),
+                                              ),
+                                              if (driverProv.femalePassengersOnly) ...[
+                                                const SizedBox(width: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFE91E63),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: Text(
+                                                    'ACTIVE',
+                                                    style: TextStyle(
+                                                      fontSize: layout.fontSize(8.5),
+                                                      fontWeight: FontWeight.w900,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                          Text(
+                                            'Accept rides exclusively from verified female riders',
+                                            style: TextStyle(
+                                              color: isDark ? Colors.white60 : c.textMuted,
+                                              fontSize: layout.fontSize(10),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Switch(
+                                      value: driverProv.femalePassengersOnly,
+                                      activeThumbColor: const Color(0xFFE91E63),
+                                      onChanged: (val) async {
+                                        final error = await _viewModel.toggleFemalePassengersOnly(
+                                          driverProv: driverProv,
+                                          enabled: val,
+                                        );
+                                        if (error != null && context.mounted) {
+                                          _showWomenOnlyDriverGatingDialog(context, error, driver);
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
                               if (!driver.isVerified || !driver.vehicle.isConfigured) ...[
                                 const SizedBox(height: 8),
@@ -1107,7 +1214,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                             ],
                           ),
                         ),
-                      ),
+                      ],
+                    ),
+                  ),
                     ),
                   ),
                 ),
@@ -1688,6 +1797,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               alignment: WrapAlignment.end,
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
+                                if (request.riderGender?.toLowerCase() == 'female')
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE91E63).withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: const Color(0xFFE91E63).withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.female_rounded,
+                                          size: 11,
+                                          color: Color(0xFFE91E63),
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          'Female Rider • Verified',
+                                          style: TextStyle(
+                                            fontSize: layout.fontSize(9.5),
+                                            fontWeight: FontWeight.w800,
+                                            color: const Color(0xFFE91E63),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
@@ -3314,6 +3453,184 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  bool _shouldShowWomenDriverPromo(DriverProfile driver) {
+    if (_isWomenDriverPromoDismissed) return false;
+    final isFemale = driver.gender?.toLowerCase() == 'female';
+    final isUnverified = !driver.isVerified || !driver.isGenderVerified;
+    return isFemale || isUnverified || driver.gender == null;
+  }
+
+  Widget _buildWomenDriverPromoBanner({
+    required ResponsiveLayoutHelper layout,
+    required DriverProfile driver,
+    required DriverProvider driverProv,
+    required bool isDark,
+  }) {
+    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF880E4F), Color(0xFF4A148C)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF880E4F).withValues(alpha: 0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Padding(
+          padding: EdgeInsets.all(layout.scale(12)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified_user_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'NEW: Women Passengers Only Mode',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: layout.fontSize(12.5),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'Drive with complete peace of mind—accept rides exclusively from verified female passengers and keep 98% of every fare.',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            fontSize: layout.fontSize(10.5),
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: () {
+                      setState(() => _isWomenDriverPromoDismissed = true);
+                      NativeStorageService().setBool('promo_dismissed_women_driver_mode_v1', true);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      child: const Icon(Icons.close, color: Colors.white70, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (driver.gender?.toLowerCase() == 'female' && isVerified && driver.isGenderVerified) {
+                        await _viewModel.toggleFemalePassengersOnly(driverProv: driverProv, enabled: true);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Women Passengers Only mode activated!'),
+                              backgroundColor: Color(0xFFE91E63),
+                            ),
+                          );
+                        }
+                      } else {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DriverVerificationScreen()),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF880E4F),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: Text(
+                      (driver.gender?.toLowerCase() == 'female' && isVerified && driver.isGenderVerified)
+                          ? 'Enable Women-Only Mode'
+                          : 'Verify CNIC to Unlock',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: layout.fontSize(11),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showWomenOnlyDriverGatingDialog(BuildContext context, String message, DriverProfile driver) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Row(
+          children: const [
+            Icon(Icons.female_rounded, color: Color(0xFFE91E63), size: 24),
+            SizedBox(width: 8),
+            Text('Women-Only Mode'),
+          ],
+        ),
+        content: Text(
+          message,
+          style: const TextStyle(fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Dismiss'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DriverVerificationScreen()),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFE91E63),
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Verify CNIC / Documents'),
+          ),
+        ],
+      ),
     );
   }
 }

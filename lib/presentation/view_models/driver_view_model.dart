@@ -394,6 +394,32 @@ class DriverViewModel extends ChangeNotifier {
     return null;
   }
 
+  /// Toggles Women Passengers Only mode for verified female captains.
+  Future<String?> toggleFemalePassengersOnly({
+    required DriverProvider driverProv,
+    required bool enabled,
+  }) async {
+    final driver = driverProv.driverProfile;
+    if (enabled) {
+      final isFemale = driver.gender?.toLowerCase() == 'female';
+      if (!isFemale) {
+        return 'Women Passengers Only mode is exclusively available for verified female captains.';
+      }
+      if (!driver.isVerified || !driver.isGenderVerified) {
+        return 'Please complete CNIC document verification first to unlock Women-Only mode.';
+      }
+    }
+
+    final error = await driverProv.toggleFemalePassengersOnly(enabled);
+    if (error == null) {
+      await _deviceService.triggerHaptic('selection');
+      if (enabled) {
+        _audioService.speak('Women Passengers Only mode activated.');
+      }
+    }
+    return error;
+  }
+
   void submitCounterOffer({
     required RideProvider rideProv,
     required DriverProfile driver,

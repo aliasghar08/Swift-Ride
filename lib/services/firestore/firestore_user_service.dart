@@ -363,6 +363,42 @@ class FirestoreUserService {
     }
   }
 
+  /// Sets user gender ('female' | 'male') and optionally locks verification status.
+  Future<bool> updateGender(String userId, String gender, {bool isVerified = false}) async {
+    final cur = _memoryCache[userId];
+    if (cur != null) {
+      _memoryCache[userId] = cur.copyWith(
+        gender: gender,
+        isGenderVerified: isVerified,
+      );
+    }
+
+    final fs = _firestore;
+    if (fs == null) return true;
+
+    try {
+      await fs.collection(AppConstants.usersCollection).doc(userId).set(
+        {
+          'gender': gender,
+          'isGenderVerified': isVerified,
+          'updatedAt': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+      final cached = _memoryCache[userId];
+      if (cached != null) {
+        _memoryCache[userId] = cached.copyWith(
+          gender: gender,
+          isGenderVerified: isVerified,
+        );
+      }
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreUserService] Error updating gender: $e');
+      return false;
+    }
+  }
+
   /// Convenience alias for addFcmToken
   Future<void> updateFcmToken(String userId, String token) => addFcmToken(userId, token);
 

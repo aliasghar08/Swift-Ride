@@ -75,6 +75,9 @@ class DriverProvider extends ChangeNotifier {
   bool get isOnline => _driverProfile.isOnline;
   double get totalEarnings => _driverProfile.totalEarnings;
   int get totalRides => _driverProfile.totalRides;
+  bool get femalePassengersOnly => _driverProfile.femalePassengersOnly;
+  bool get isGenderVerified => _driverProfile.isGenderVerified;
+  String? get gender => _driverProfile.gender;
 
   /// Changes availability, server-side.
   ///
@@ -90,6 +93,7 @@ class DriverProvider extends ChangeNotifier {
       isOnline: online,
       latitude: latitude,
       longitude: longitude,
+      femalePassengersOnly: _driverProfile.femalePassengersOnly,
     );
 
     if (error == null) {
@@ -100,6 +104,32 @@ class DriverProvider extends ChangeNotifier {
     }
     notifyListeners();
     return error;
+  }
+
+  /// Toggles female passengers only preference for verified female drivers.
+  Future<String?> toggleFemalePassengersOnly(bool enabled) async {
+    if (enabled) {
+      final isFemale = _driverProfile.gender?.toLowerCase() == 'female';
+      final isVerified = _driverProfile.isVerified || hasPassedAiVerification;
+      if (!isFemale) {
+        return 'Women Passengers Only mode is exclusively available for female drivers.';
+      }
+      if (!isVerified || !_driverProfile.isGenderVerified) {
+        return 'Please complete CNIC / document verification to unlock Women Passengers Only mode.';
+      }
+    }
+
+    final success = await _firestoreService.updateFemalePassengersOnly(
+      _driverProfile.userId,
+      enabled,
+    );
+    if (!success) {
+      return 'Failed to update preference. Please check your network.';
+    }
+
+    _driverProfile = _driverProfile.copyWith(femalePassengersOnly: enabled);
+    notifyListeners();
+    return null;
   }
 
   String? _availabilityError;

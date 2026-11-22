@@ -20,6 +20,12 @@ class AppUser {
   final String? photoUrl;
   final String? authProvider;
 
+  /// User's gender ('female' | 'male' | null).
+  final String? gender;
+
+  /// Whether user's gender has been verified via CNIC or official document.
+  final bool isGenderVerified;
+
   const AppUser({
     required this.id,
     this.phone = '',
@@ -33,6 +39,8 @@ class AppUser {
     required this.createdAt,
     this.photoUrl,
     this.authProvider,
+    this.gender,
+    this.isGenderVerified = false,
   });
 
   /// An empty signed-out user.
@@ -77,6 +85,8 @@ class AppUser {
     DateTime? createdAt,
     String? photoUrl,
     String? authProvider,
+    String? gender,
+    bool? isGenderVerified,
   }) {
     return AppUser(
       id: id ?? this.id,
@@ -91,6 +101,8 @@ class AppUser {
       createdAt: createdAt ?? this.createdAt,
       photoUrl: photoUrl ?? this.photoUrl,
       authProvider: authProvider ?? this.authProvider,
+      gender: gender ?? this.gender,
+      isGenderVerified: isGenderVerified ?? this.isGenderVerified,
     );
   }
 
@@ -108,6 +120,8 @@ class AppUser {
       'createdAt': createdAt.toIso8601String(),
       if (photoUrl != null) 'photoUrl': photoUrl,
       if (authProvider != null) 'authProvider': authProvider,
+      if (gender != null) 'gender': gender,
+      'isGenderVerified': isGenderVerified,
     };
   }
 
@@ -128,6 +142,8 @@ class AppUser {
           : DateTime.now(),
       photoUrl: map['photoUrl'] as String?,
       authProvider: map['authProvider'] as String?,
+      gender: map['gender'] as String?,
+      isGenderVerified: map['isGenderVerified'] == true,
     );
   }
 }

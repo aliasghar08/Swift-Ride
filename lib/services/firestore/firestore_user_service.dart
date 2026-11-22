@@ -5,7 +5,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/constants/app_constants.dart';
 import '../../domain/models/user_model.dart';
+import '../../domain/models/user_role.dart';
 import '../native/native_storage_service.dart';
+import 'firestore_driver_service.dart';
 
 /// Service managing user documents in Cloud Firestore (`users/{userId}`).
 class FirestoreUserService {
@@ -175,6 +177,18 @@ class FirestoreUserService {
           if (user.gender != null) 'gender': user.gender,
           'isGenderVerified': user.isGenderVerified,
         });
+      }
+
+      // In future, any account with the driver role is automatically provisioned
+      // in the root /drivers directory as well.
+      if (user.role == UserRole.driver && user.id.isNotEmpty && !user.id.startsWith('guest')) {
+        unawaited(FirestoreDriverService().ensureDriverProfileExists(
+          userId: user.id,
+          fullName: user.fullName,
+          phone: user.phone,
+          gender: user.gender,
+          isGenderVerified: user.isGenderVerified,
+        ));
       }
     } catch (e) {
       debugPrint('[FirestoreUserService] Error saving user ${user.id}: $e');

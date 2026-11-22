@@ -70,6 +70,10 @@ export const registerUser = onCall(
       });
     }
 
+    if (data.role === 'driver') {
+      await ensureDriverDocumentExists(caller.uid, { phone: finalPhone, fullName: data.fullName });
+    }
+
     return { success: true, userId: caller.uid, role: data.role };
   }
 );
@@ -94,6 +98,45 @@ const SetUserRoleSchema = z.object({
   role: z.enum(['passenger', 'rider', 'driver', 'admin']),
 });
 
+async function ensureDriverDocumentExists(userId: string, data: { phone?: string; fullName?: string }) {
+  const driverRef = db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(userId);
+  const driverDoc = await driverRef.get();
+  if (!driverDoc.exists) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+    await driverRef.set({
+      userId,
+      licenseNumber: 'PK-LIC-' + userId.substring(0, 6).toUpperCase(),
+      vehicleMake: 'Toyota',
+      vehicleModel: 'Corolla Altis',
+      vehiclePlate: 'LEA-786',
+      vehicleColor: 'White',
+      vehicleYear: 2022,
+      vehicleType: 'sedan',
+      hasAc: true,
+      seats: 4,
+      isVerified: true,
+      isOnline: false,
+      subscriptionStatus: 'ACTIVE',
+      subscriptionExpiresAt: expiresAt,
+      stripeAccountId: 'acct_mock_' + userId,
+      payoutStatus: 'ACTIVE',
+      rating: 5.0,
+      totalRides: 0,
+      totalEarnings: 0,
+      currentLocation: {
+        geopoint: {
+          latitude: 31.5204,
+          longitude: 74.3587,
+        },
+        geohash: 'ttnfgpc',
+      },
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+}
+
 export const setUserRole = onCall(
   { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
   async (request) => {
@@ -109,6 +152,10 @@ export const setUserRole = onCall(
       role: data.role,
       updatedAt: FieldValue.serverTimestamp(),
     });
+
+    if (data.role === 'driver') {
+      await ensureDriverDocumentExists(data.targetUserId, {});
+    }
 
     return { success: true, targetUserId: data.targetUserId, role: data.role };
   }

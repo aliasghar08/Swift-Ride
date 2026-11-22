@@ -610,6 +610,61 @@ class FirestoreDriverService {
 
     return fallbackDoc;
   }
+
+  /// Ensures a driver profile exists in the root `drivers/{userId}` directory
+  /// whenever an account is created with or switched to the driver role.
+  Future<void> ensureDriverProfileExists({
+    required String userId,
+    String? fullName,
+    String? phone,
+    String? gender,
+    bool? isGenderVerified,
+  }) async {
+    final fs = _firestore;
+    if (fs == null || userId.isEmpty || userId.startsWith('guest')) return;
+
+    try {
+      final docRef = fs.collection(AppConstants.driversCollection).doc(userId);
+      final doc = await docRef.get();
+
+      if (!doc.exists) {
+        final expiresAt = DateTime.now().add(const Duration(days: 30));
+        await docRef.set({
+          'userId': userId,
+          'licenseNumber': 'PK-LIC-${userId.length >= 6 ? userId.substring(0, 6).toUpperCase() : userId.toUpperCase()}',
+          'vehicleMake': 'Toyota',
+          'vehicleModel': 'Corolla Altis',
+          'vehiclePlate': 'LEA-786',
+          'vehicleColor': 'White',
+          'vehicleYear': 2022,
+          'vehicleType': 'sedan',
+          'hasAc': true,
+          'seats': 4,
+          'isVerified': true,
+          'isOnline': false,
+          'subscriptionStatus': 'ACTIVE',
+          'subscriptionExpiresAt': Timestamp.fromDate(expiresAt),
+          'stripeAccountId': 'acct_mock_$userId',
+          'payoutStatus': 'ACTIVE',
+          'rating': 5.0,
+          'totalRides': 0,
+          'totalEarnings': 0,
+          'currentLocation': {
+            'geopoint': const GeoPoint(31.5204, 74.3587),
+            'geohash': 'ttnfgpc',
+          },
+          'gender': ?gender,
+          'isGenderVerified': ?isGenderVerified,
+          'femalePassengersOnly': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('[FirestoreDriverService] Auto-provisioned driver profile for $userId in drivers directory');
+      }
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] ensureDriverProfileExists error: $e');
+    }
+  }
 }
 
 

@@ -15,6 +15,13 @@ class CustomChangeNotifierProvider<T extends ChangeNotifier> extends InheritedNo
     return provider!.notifier!;
   }
 
+  /// Safely subscribes the calling widget to rebuild when [notifier] changes,
+  /// or returns null if not present in the widget tree.
+  static T? maybeOf<T extends ChangeNotifier>(BuildContext context) {
+    final provider = context.dependOnInheritedWidgetOfExactType<CustomChangeNotifierProvider<T>>();
+    return provider?.notifier;
+  }
+
   /// Reads [notifier] without subscribing to rebuilds.
   static T read<T extends ChangeNotifier>(BuildContext context) {
     final provider = context.getInheritedWidgetOfExactType<CustomChangeNotifierProvider<T>>();

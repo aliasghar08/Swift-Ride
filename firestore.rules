@@ -55,10 +55,17 @@ service cloud.firestore {
     //   - safetyFlags: list of strings
     //   - shareToken: string | null
     //   - pin: string (4 digits)
+    //   - typing: map | bool (optional)
     //   - femaleDriverOnly: bool (optional)
     //   - riderGender: string | null (optional)
     //   - createdAt: timestamp (immutable)
     //   - completedAt: timestamp | null
+    //
+    // Subcollection: rides/{rideId}/messages/{messageId}
+    //   - senderId: string (matches auth.uid)
+    //   - text: string (1-500 chars)
+    //   - createdAt: timestamp
+    //   - readAt: timestamp | null
     //
     // Collection: ride_offers/{offerId}
     //   - rideId: string, driverId: string
@@ -204,6 +211,10 @@ service cloud.firestore {
         data.riderId is string &&
         data.status in ['REQUESTED', 'ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
         data.offeredFare is number && data.offeredFare > 0 &&
+        // typing: optional map or bool
+        (!('typing' in data) ||
+          data.typing is map ||
+          data.typing is bool) &&
         // femaleDriverOnly: optional bool
         (!('femaleDriverOnly' in data) ||
           data.femaleDriverOnly is bool) &&
@@ -283,13 +294,50 @@ service cloud.firestore {
         request.resource.data.status == 'REQUESTED' &&
         isValidRide(request.resource.data);
       allow update: if isAuthenticated() &&
-        isValidRide(request.resource.data) &&
-        isValidStatusTransition(resource.data.status, request.resource.data.status) &&
-        (isAdmin() ||
-         resource.data.riderId == request.auth.uid ||
-         (resource.data.driverId == request.auth.uid && resource.data.status != 'REQUESTED')) &&
-        areImmutableFieldsUnchanged(['riderId', 'createdAt']);
+        (
+          // Allow typing indicator update by rider or assigned driver
+          ((resource.data.riderId == request.auth.uid || resource.data.driverId == request.auth.uid) &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['typing']) &&
+           (!('typing' in request.resource.data) || request.resource.data.typing is map || request.resource.data.typing is bool)) ||
+          // General ride update
+          (isValidRide(request.resource.data) &&
+           isValidStatusTransition(resource.data.status, request.resource.data.status) &&
+           (isAdmin() ||
+            resource.data.riderId == request.auth.uid ||
+            (resource.data.driverId == request.auth.uid && resource.data.status != 'REQUESTED')) &&
+           areImmutableFieldsUnchanged(['riderId', 'createdAt']))
+        );
       allow delete: if isAdmin();
+
+      // Active Ride In-App Chat Subcollection
+      match /messages/{messageId} {
+        // Read allowed if user is either rider or driver of the ride
+        allow read: if isAuthenticated() && (
+          get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
+          get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+        );
+
+        // Create allowed if senderId is the current user, text is non-empty string <= 500 chars,
+        // and user is rider or driver of the ride
+        allow create: if isAuthenticated()
+          && request.resource.data.senderId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 500
+          && (
+            get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
+            get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+          );
+
+        // Update allowed only by the recipient to mark the message as read (affecting only 'readAt')
+        allow update: if isAuthenticated()
+          && resource.data.senderId != request.auth.uid
+          && (
+            get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
+            get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
+          )
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+      }
     }
 
     // Ride Offers (Driver Bidding)

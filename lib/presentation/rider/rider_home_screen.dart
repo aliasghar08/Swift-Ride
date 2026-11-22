@@ -37,6 +37,8 @@ import '../widgets/trip_economics_sheet.dart';
 import '../auth/phone_auth_screen.dart';
 import '../../services/ad_service.dart';
 import '../../services/native/native_storage_service.dart';
+import '../../services/ride_chat_service.dart';
+import '../widgets/ride_chat_sheet.dart';
 import '../../ai/ai.dart';
 
 class RiderHomeScreen extends StatefulWidget {
@@ -2860,6 +2862,45 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                         icon: const Icon(Icons.phone),
                         tooltip: 'Call Driver',
                         onPressed: () => _showCallDriverSheet(context, layout),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: layout.touchTarget(48),
+                      width: layout.touchTarget(48),
+                      child: StreamBuilder<int>(
+                        stream: RideChatService().streamUnreadCount(
+                          rideId: ride.id,
+                          currentUserId: authProv.currentUser.id,
+                        ),
+                        builder: (context, snap) {
+                          final unread = snap.data ?? 0;
+                          return Badge(
+                            isLabelVisible: unread > 0,
+                            label: Text('$unread', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                            backgroundColor: AppTheme.sunsetCoral,
+                            child: IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.primaryBlue.withValues(
+                                  alpha: 0.15,
+                                ),
+                                foregroundColor: AppTheme.primaryBlue,
+                              ),
+                              icon: const Icon(Icons.chat_bubble_rounded),
+                              tooltip: 'Chat with Driver',
+                              onPressed: () {
+                                RideChatSheet.show(
+                                  context,
+                                  rideId: ride.id,
+                                  currentUserId: authProv.currentUser.id,
+                                  currentUserRole: 'rider',
+                                  otherUserName: _driverName ?? 'Driver',
+                                  otherUserId: ride.driverId ?? '',
+                                );
+                              },
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: 8),

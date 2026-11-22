@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/provider/custom_provider.dart';
 import 'core/routing/app_router.dart';
 import 'core/theme/app_theme.dart';
-import 'domain/models/user_role.dart';
+import 'core/theme/theme_provider.dart';
 import 'providers/admin_provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/driver_provider.dart';
@@ -150,6 +150,10 @@ Future<void> main() async {
               notifier: SafetyCheckProvider(),
               child: child,
             ),
+        (child) => CustomChangeNotifierProvider<ThemeProvider>(
+              notifier: ThemeProvider(),
+              child: child,
+            ),
       ],
       child: SwiftRideApp(initialRoute: startRoute),
     ),
@@ -202,6 +206,12 @@ class _SwiftRideAppState extends State<SwiftRideApp> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    final themeProv = CustomChangeNotifierProvider.maybeOf<ThemeProvider>(context);
+    final themeData = themeProv?.themeData ?? AppTheme.darkTheme;
+    final themeMode = themeProv != null
+        ? (themeProv.isDarkMode ? ThemeMode.dark : ThemeMode.light)
+        : ThemeMode.dark;
+
     return CustomConsumer<AuthProvider>(
       builder: (context, auth, _) {
         final effectiveRoute = widget.initialRoute ?? AppRouter.initialRoute;
@@ -223,9 +233,9 @@ class _SwiftRideAppState extends State<SwiftRideApp> with WidgetsBindingObserver
           navigatorKey: _navigatorKey,
           title: 'SwiftRide - 2% Commission Platform',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: auth.activeRole == UserRole.driver ? ThemeMode.dark : ThemeMode.light,
+          theme: themeData,
+          darkTheme: themeData,
+          themeMode: themeMode,
           initialRoute: effectiveRoute,
           onGenerateInitialRoutes: (String initialRouteName) {
             return [

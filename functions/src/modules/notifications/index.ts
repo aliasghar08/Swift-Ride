@@ -13,6 +13,7 @@ export interface SwiftRidePushPayload {
     | 'SAFETY_ALERT'
     | 'RIDE_REQUEST'
     | 'RIDE_STATUS_UPDATE'
+    | 'NEW_CHAT_MESSAGE'
     | 'SOS';
   rideId: string;
   extraData?: Record<string, string>;

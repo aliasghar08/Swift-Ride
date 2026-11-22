@@ -47,6 +47,7 @@ export {
   onRideUpdated,
   onPaymentCreated,
   onDriverDocUploaded,
+  onChatMessageCreated,
 } from './triggers';
 
 // 9. Scheduled Jobs (Cloud Scheduler)

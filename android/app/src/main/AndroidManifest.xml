@@ -82,6 +82,12 @@
                     android:pathPrefix="/__/auth/handler" />
             </intent-filter>
         </activity>
+        <service
+            android:name=".NativeLocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

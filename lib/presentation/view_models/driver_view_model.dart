@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import '../../services/native/native_channel_constants.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/ride_model.dart';
 import '../../domain/models/ride_status.dart';
@@ -379,6 +381,17 @@ class DriverViewModel extends ChangeNotifier {
 
     // Persist whether driver explicitly toggled offline (defaulting to false / online by default)
     await _storage.setBool('driver_explicitly_offline', !online);
+
+    // Sync state with native Android Location Service for swipe-kill survival & battery throttling
+    try {
+      await MethodChannel(NativeChannelConstants.locationChannel).invokeMethod(
+        NativeChannelConstants.methodSetDriverOnlineState,
+        {
+          'isOnline': online,
+          'driverUid': driverProv.driverProfile.id,
+        },
+      );
+    } catch (_) {}
 
     if (online) {
       locProv.startBroadcaster();

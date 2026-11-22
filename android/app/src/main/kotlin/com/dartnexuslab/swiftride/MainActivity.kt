@@ -503,7 +503,7 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
 
     override fun onDestroy() {
         tts?.shutdown()
-        nativeLocationService?.onDestroy()
+        nativeLocationService?.onActivityDestroyed()
         super.onDestroy()
     }
 }

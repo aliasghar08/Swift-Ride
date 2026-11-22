@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../services/native/native_channel_constants.dart';
 
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
@@ -36,11 +37,14 @@ import '../common/exact_change_dialog.dart';
 import '../../services/route_corridor_service.dart';
 import 'widgets/driver_analytics_drawer.dart';
 import 'widgets/driver_name_dialog.dart';
+import 'widgets/driver_status_credibility_dialog.dart';
 import 'driver_verification_screen.dart';
 import '../../domain/models/user_role.dart';
 import '../../services/ad_service.dart';
 import '../../services/native/native_storage_service.dart';
 import '../../services/push_notification_service.dart';
+import '../../services/ride_chat_service.dart';
+import '../widgets/ride_chat_sheet.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class DriverHomeScreen extends StatefulWidget {
@@ -62,6 +66,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   DateTime _lastTelemetryPublish = DateTime.fromMillisecondsSinceEpoch(0);
   double _lastPublishedLat = 0.0;
   double _lastPublishedLng = 0.0;
+  bool? _lastReportedHasActiveRide;
   GoogleMapController? _mapController;
   bool _isMapPanned = false;
   bool _is3DNavigationMode = true;
@@ -181,6 +186,15 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   /// Throttled by both distance (>= 10m) and time (>= 4s) to avoid redundant radio wakeups.
   void _publishTelemetry(double latitude, double longitude, double heading) {
     final activeRide = _rideProv?.activeRide;
+    final hasActiveRide = activeRide != null;
+    if (_lastReportedHasActiveRide != hasActiveRide) {
+      _lastReportedHasActiveRide = hasActiveRide;
+      MethodChannel(NativeChannelConstants.locationChannel).invokeMethod(
+        NativeChannelConstants.methodSetHasActiveRide,
+        {'hasActiveRide': hasActiveRide},
+      ).catchError((_) => null);
+    }
+
     if (activeRide != null) {
       final now = DateTime.now();
       final distMeters = _lastPublishedLat == 0.0
@@ -958,7 +972,16 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                     value: driverProv.isOnline,
                                     activeThumbColor: AppTheme.accentCyan,
                                     onChanged: (val) async {
-                                      if (val) {
+                                      if (!val) {
+                                        // Switching OFF: show credibility & status confirmation first
+                                        final confirmed = await DriverStatusCredibilityDialog.show(
+                                          context,
+                                          isGoingOnline: false,
+                                        );
+                                        if (confirmed != true || !context.mounted) {
+                                          return;
+                                        }
+                                      } else {
                                         if (!driver.vehicle.isConfigured || (!driver.isVerified && !driverProv.hasPassedAiVerification)) {
                                           _showVehicleSetupRequiredDialog(context);
                                           return;
@@ -1024,6 +1047,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         // location flow; own disclosure first.
                                         await PermissionDisclosures
                                             .ensureNotifications(context);
+                                        if (context.mounted) {
+                                          DriverStatusCredibilityDialog.show(
+                                            context,
+                                            isGoingOnline: true,
+                                          );
+                                        }
                                       }
                                     },
                                   ),
@@ -3239,6 +3268,45 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   onPressed: _riderPhone == null
                       ? null
                       : () => _viewModel.callRider(_riderPhone!),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: layout.touchTarget(48),
+                width: layout.touchTarget(48),
+                child: StreamBuilder<int>(
+                  stream: RideChatService().streamUnreadCount(
+                    rideId: ride.id,
+                    currentUserId: authProv.currentUser.id,
+                  ),
+                  builder: (context, snap) {
+                    final unread = snap.data ?? 0;
+                    return Badge(
+                      isLabelVisible: unread > 0,
+                      label: Text('$unread', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                      backgroundColor: AppTheme.sunsetCoral,
+                      child: IconButton(
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.primaryBlue.withValues(
+                            alpha: 0.15,
+                          ),
+                          foregroundColor: AppTheme.primaryBlue,
+                        ),
+                        icon: const Icon(Icons.chat_bubble_rounded),
+                        tooltip: 'Chat with Rider',
+                        onPressed: () {
+                          RideChatSheet.show(
+                            context,
+                            rideId: ride.id,
+                            currentUserId: authProv.currentUser.id,
+                            currentUserRole: 'driver',
+                            otherUserName: 'Rider',
+                            otherUserId: ride.riderId,
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
               ),
               const SizedBox(width: 8),

@@ -8,6 +8,7 @@ import 'package:swiftride/providers/auth_provider.dart';
 import 'package:swiftride/providers/driver_provider.dart';
 import 'package:swiftride/providers/location_provider.dart';
 import 'package:swiftride/providers/ride_provider.dart';
+import 'package:swiftride/core/theme/theme_provider.dart';
 import 'package:swiftride/domain/models/location_point_model.dart';
 import 'package:swiftride/domain/models/ride_model.dart';
 import 'package:swiftride/domain/models/ride_status.dart';
@@ -29,6 +30,7 @@ void main() {
     final safetyCheckProvider = SafetyCheckProvider();
     final aiChatProvider = AiChatProvider();
     final earningsAdvisorProvider = EarningsAdvisorProvider();
+    final themeProvider = ThemeProvider();
 
     addTearDown(() {
       authProvider.dispose();
@@ -40,6 +42,7 @@ void main() {
       safetyCheckProvider.dispose();
       aiChatProvider.dispose();
       earningsAdvisorProvider.dispose();
+      themeProvider.dispose();
     });
 
     await tester.pumpWidget(
@@ -79,6 +82,10 @@ void main() {
               ),
           (child) => CustomChangeNotifierProvider<SafetyCheckProvider>(
                 notifier: safetyCheckProvider,
+                child: child,
+              ),
+          (child) => CustomChangeNotifierProvider<ThemeProvider>(
+                notifier: themeProvider,
                 child: child,
               ),
         ],

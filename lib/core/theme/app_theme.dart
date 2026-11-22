@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
+import 'theme_provider.dart';
 
 class AppTheme {
   // ---------------------------------------------------------------- brand
@@ -91,25 +92,51 @@ class AppTheme {
   );
 
   // ---------------------------------------------------------------- themes
-  static ThemeData get lightTheme => _build(Brightness.light, AppColors.light);
+  static ThemeData get lightTheme => buildFromPreset(SwiftThemePreset.daylightPearl);
 
-  static ThemeData get darkTheme => _build(Brightness.dark, AppColors.dark);
+  static ThemeData get darkTheme => buildFromPreset(SwiftThemePreset.obsidianGlass);
+
+  /// Builds a fully configured ThemeData dynamically for any theme preset and layout mode.
+  static ThemeData buildFromPreset(
+    SwiftThemePreset preset, [
+    SwiftUiLayoutMode layoutMode = SwiftUiLayoutMode.modernFloating,
+  ]) {
+    final colors = AppColors.forPreset(preset, layoutMode);
+    final brightness = preset == SwiftThemePreset.daylightPearl
+        ? Brightness.light
+        : Brightness.dark;
+    return _build(brightness, colors);
+  }
 
   static ThemeData _build(Brightness brightness, AppColors c) {
     final isDark = brightness == Brightness.dark;
 
+    final primary = switch (c.preset) {
+      SwiftThemePreset.emeraldGold => const Color(0xFFF59E0B),
+      SwiftThemePreset.daylightPearl => const Color(0xFF1D4ED8),
+      SwiftThemePreset.amoledPitch => accentCyan,
+      SwiftThemePreset.obsidianGlass => accentCyan,
+    };
+
+    final secondary = switch (c.preset) {
+      SwiftThemePreset.emeraldGold => emeraldGreen,
+      SwiftThemePreset.daylightPearl => accentCyan,
+      SwiftThemePreset.amoledPitch => const Color(0xFFF59E0B),
+      SwiftThemePreset.obsidianGlass => primaryBlue,
+    };
+
     final colorScheme = isDark
         ? ColorScheme.dark(
-            primary: accentCyan,
-            secondary: primaryBlue,
+            primary: primary,
+            secondary: secondary,
             surface: c.surface,
             error: sunsetCoral,
             onPrimary: c.onBrand,
             onSurface: c.textPrimary,
           )
         : ColorScheme.light(
-            primary: primaryBlue,
-            secondary: accentCyan,
+            primary: primary,
+            secondary: secondary,
             surface: c.surface,
             error: sunsetCoral,
             onPrimary: c.onBrand,
@@ -120,7 +147,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       fontFamily: fontFamily,
-      primaryColor: isDark ? accentCyan : primaryBlue,
+      primaryColor: primary,
       scaffoldBackgroundColor: c.canvas,
       colorScheme: colorScheme,
       extensions: <ThemeExtension<dynamic>>[c],
@@ -130,7 +157,7 @@ class AppTheme {
         elevation: isDark ? 0 : 2,
         shadowColor: Colors.black.withValues(alpha: 0.06),
         shape: RoundedRectangleBorder(
-          borderRadius: Radii.lgAll,
+          borderRadius: BorderRadius.circular(c.cardRadius),
           side: isDark ? BorderSide(color: c.border) : BorderSide.none,
         ),
       ),

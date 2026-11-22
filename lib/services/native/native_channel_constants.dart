@@ -19,6 +19,8 @@ class NativeChannelConstants {
   static const String methodRequestBackgroundLocationPermission = 'requestBackgroundLocationPermission';
   static const String methodStartLocationUpdates = 'startLocationUpdates';
   static const String methodStopLocationUpdates = 'stopLocationUpdates';
+  static const String methodSetDriverOnlineState = 'setDriverOnlineState';
+  static const String methodSetHasActiveRide = 'setHasActiveRide';
   static const String methodReverseGeocode = 'reverseGeocode';
 
   // Payment methods

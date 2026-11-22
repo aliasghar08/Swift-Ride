@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
+import '../../core/theme/design_tokens.dart';
 import '../../domain/models/ride_status.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
@@ -63,25 +64,30 @@ class ReservedBottomAdBar extends StatelessWidget {
     }
 
     // 4. Passenger (Rider) Mode OR Driver Offline: Render reserved 60 dp solid bar
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF141B2D) : const Color(0xFFFFFFFF);
-    final borderColor = isDark ? const Color(0x1FFFFFFF) : const Color(0x14000000);
+    final c = Theme.of(context).extension<AppColors>() ??
+        (Theme.of(context).brightness == Brightness.dark ? AppColors.dark : AppColors.light);
 
     return SafeArea(
       top: false,
-      child: Container(
-        key: const Key('reserved_bottom_ad_bar'),
+      child: SizedBox(
         height: barHeight,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: bgColor,
-          border: Border(
-            top: BorderSide(color: borderColor, width: 1.0),
-          ),
-        ),
-        child: const Center(
-          child: AdBannerWidget(
-            padding: EdgeInsets.zero,
+        child: Center(
+          child: Container(
+            key: const Key('reserved_bottom_ad_bar'),
+            height: barHeight,
+            width: double.infinity,
+            constraints: const BoxConstraints(maxWidth: 600),
+            decoration: BoxDecoration(
+              color: c.surface,
+              border: Border(
+                top: BorderSide(color: c.border, width: 1.0),
+              ),
+            ),
+            child: const Center(
+              child: AdBannerWidget(
+                padding: EdgeInsets.zero,
+              ),
+            ),
           ),
         ),
       ),

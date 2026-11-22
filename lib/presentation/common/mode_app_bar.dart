@@ -14,6 +14,7 @@ import 'staggered_animation.dart';
 import 'trusted_contacts_screen.dart';
 import 'legal_terms_modal.dart';
 import 'ai_consent_dialog.dart';
+import 'appearance_settings_sheet.dart';
 import '../auth/phone_auth_screen.dart';
 
 class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -421,6 +422,25 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                   onTap: () {
                     Navigator.pop(ctx);
                     _showEditProfileDialog(context, auth);
+                  },
+                ),
+                ListTile(
+                  key: const Key('mode_app_bar_appearance_tile'),
+                  leading: const Icon(
+                    Icons.palette_outlined,
+                    color: AppTheme.accentCyan,
+                  ),
+                  title: const Text(
+                    'Appearance & Interface',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text(
+                    'Obsidian Glass, Daylight Pearl, AMOLED & layout density',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    AppearanceSettingsSheet.show(context);
                   },
                 ),
                 ListTile(

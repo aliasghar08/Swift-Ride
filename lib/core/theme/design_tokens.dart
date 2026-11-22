@@ -1,4 +1,6 @@
+import 'dart:ui' show lerpDouble;
 import 'package:flutter/material.dart';
+import 'theme_provider.dart';
 
 /// Spacing scale on a 4pt baseline.
 ///
@@ -101,6 +103,15 @@ class AppColors extends ThemeExtension<AppColors> {
   final Color danger;
   final Color info;
 
+  /// Visual theme and layout mode configuration tokens.
+  final SwiftThemePreset preset;
+  final SwiftUiLayoutMode layoutMode;
+  final double glassBlurSigma;
+  final double cardRadius;
+  final double contentScale;
+  final double buttonMinHeight;
+  final bool isBlurEnabled;
+
   const AppColors({
     required this.canvas,
     required this.surface,
@@ -117,6 +128,13 @@ class AppColors extends ThemeExtension<AppColors> {
     required this.warning,
     required this.danger,
     required this.info,
+    this.preset = SwiftThemePreset.obsidianGlass,
+    this.layoutMode = SwiftUiLayoutMode.modernFloating,
+    this.glassBlurSigma = 16.0,
+    this.cardRadius = 24.0,
+    this.contentScale = 1.0,
+    this.buttonMinHeight = 50.0,
+    this.isBlurEnabled = true,
   });
 
   static const AppColors light = AppColors(
@@ -135,25 +153,112 @@ class AppColors extends ThemeExtension<AppColors> {
     warning: Color(0xFFF59E0B),
     danger: Color(0xFFEF4444),
     info: Color(0xFF2563EB),
+    preset: SwiftThemePreset.daylightPearl,
   );
 
   static const AppColors dark = AppColors(
-    canvas: Color(0xFF0B0F19),
+    canvas: Color(0xFF0B1120),
     surface: Color(0xFF131D31),
-    surfaceMuted: Color(0xFF162036),
+    surfaceMuted: Color(0xFF1A263D),
     surfaceRaised: Color(0xFF1E293B),
-    border: Color(0xFF1E293B),
+    border: Color(0xFF23324E),
     textPrimary: Color(0xFFF1F5F9),
     textSecondary: Color(0xFFCBD5E1),
     textMuted: Color(0xFF94A3B8),
     onBrand: Color(0xFF0A1128),
     mapChrome: Color(0xE00F172A),
-    mapChromeStrong: Color(0xFF0B0F19),
+    mapChromeStrong: Color(0xFF0B1120),
     success: Color(0xFF10B981),
     warning: Color(0xFFF59E0B),
     danger: Color(0xFFEF4444),
     info: Color(0xFF00E5FF),
+    preset: SwiftThemePreset.obsidianGlass,
   );
+
+  static const AppColors amoledPitch = AppColors(
+    canvas: Color(0xFF000000),
+    surface: Color(0xFF050505),
+    surfaceMuted: Color(0xFF111111),
+    surfaceRaised: Color(0xFF18181B),
+    border: Color(0xFF27272A),
+    textPrimary: Color(0xFFFFFFFF),
+    textSecondary: Color(0xFFA1A1AA),
+    textMuted: Color(0xFF71717A),
+    onBrand: Color(0xFF000000),
+    mapChrome: Color(0xE6000000),
+    mapChromeStrong: Color(0xFF000000),
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444),
+    info: Color(0xFF00E5FF),
+    preset: SwiftThemePreset.amoledPitch,
+  );
+
+  static const AppColors emeraldGold = AppColors(
+    canvas: Color(0xFF071A15),
+    surface: Color(0xFF0E2E25),
+    surfaceMuted: Color(0xFF143B30),
+    surfaceRaised: Color(0xFF1C4D40),
+    border: Color(0xFF255E4E),
+    textPrimary: Color(0xFFF0FDF4),
+    textSecondary: Color(0xFFA7F3D0),
+    textMuted: Color(0xFF6EE7B7),
+    onBrand: Color(0xFF071A15),
+    mapChrome: Color(0xE6071A15),
+    mapChromeStrong: Color(0xFF071A15),
+    success: Color(0xFF10B981),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF4444),
+    info: Color(0xFFF59E0B),
+    preset: SwiftThemePreset.emeraldGold,
+  );
+
+  /// Resolves the semantic color and layout tokens for a given preset and mode.
+  static AppColors forPreset(
+    SwiftThemePreset preset, [
+    SwiftUiLayoutMode layoutMode = SwiftUiLayoutMode.modernFloating,
+  ]) {
+    final base = switch (preset) {
+      SwiftThemePreset.daylightPearl => light,
+      SwiftThemePreset.amoledPitch => amoledPitch,
+      SwiftThemePreset.emeraldGold => emeraldGold,
+      SwiftThemePreset.obsidianGlass => dark,
+    };
+
+    final blurSigma = switch (layoutMode) {
+      SwiftUiLayoutMode.easyRead => 0.0,
+      SwiftUiLayoutMode.compactCockpit => 12.0,
+      SwiftUiLayoutMode.modernFloating => 16.0,
+    };
+
+    final radius = switch (layoutMode) {
+      SwiftUiLayoutMode.compactCockpit => 14.0,
+      SwiftUiLayoutMode.easyRead => 16.0,
+      SwiftUiLayoutMode.modernFloating => 24.0,
+    };
+
+    final scale = switch (layoutMode) {
+      SwiftUiLayoutMode.compactCockpit => 0.92,
+      SwiftUiLayoutMode.easyRead => 1.15,
+      SwiftUiLayoutMode.modernFloating => 1.0,
+    };
+
+    final minH = switch (layoutMode) {
+      SwiftUiLayoutMode.compactCockpit => 44.0,
+      SwiftUiLayoutMode.easyRead => 56.0,
+      SwiftUiLayoutMode.modernFloating => 50.0,
+    };
+
+    return base.copyWith(
+      preset: preset,
+      layoutMode: layoutMode,
+      glassBlurSigma: blurSigma,
+      cardRadius: radius,
+      contentScale: scale,
+      buttonMinHeight: minH,
+      isBlurEnabled: layoutMode != SwiftUiLayoutMode.easyRead,
+    );
+  }
 
   static AppColors of(BuildContext context) =>
       Theme.of(context).extension<AppColors>() ?? light;
@@ -175,6 +280,13 @@ class AppColors extends ThemeExtension<AppColors> {
     Color? warning,
     Color? danger,
     Color? info,
+    SwiftThemePreset? preset,
+    SwiftUiLayoutMode? layoutMode,
+    double? glassBlurSigma,
+    double? cardRadius,
+    double? contentScale,
+    double? buttonMinHeight,
+    bool? isBlurEnabled,
   }) {
     return AppColors(
       canvas: canvas ?? this.canvas,
@@ -192,6 +304,13 @@ class AppColors extends ThemeExtension<AppColors> {
       warning: warning ?? this.warning,
       danger: danger ?? this.danger,
       info: info ?? this.info,
+      preset: preset ?? this.preset,
+      layoutMode: layoutMode ?? this.layoutMode,
+      glassBlurSigma: glassBlurSigma ?? this.glassBlurSigma,
+      cardRadius: cardRadius ?? this.cardRadius,
+      contentScale: contentScale ?? this.contentScale,
+      buttonMinHeight: buttonMinHeight ?? this.buttonMinHeight,
+      isBlurEnabled: isBlurEnabled ?? this.isBlurEnabled,
     );
   }
 
@@ -214,6 +333,13 @@ class AppColors extends ThemeExtension<AppColors> {
       warning: Color.lerp(warning, other.warning, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
       info: Color.lerp(info, other.info, t)!,
+      preset: t < 0.5 ? preset : other.preset,
+      layoutMode: t < 0.5 ? layoutMode : other.layoutMode,
+      glassBlurSigma: lerpDouble(glassBlurSigma, other.glassBlurSigma, t) ?? glassBlurSigma,
+      cardRadius: lerpDouble(cardRadius, other.cardRadius, t) ?? cardRadius,
+      contentScale: lerpDouble(contentScale, other.contentScale, t) ?? contentScale,
+      buttonMinHeight: lerpDouble(buttonMinHeight, other.buttonMinHeight, t) ?? buttonMinHeight,
+      isBlurEnabled: t < 0.5 ? isBlurEnabled : other.isBlurEnabled,
     );
   }
 }

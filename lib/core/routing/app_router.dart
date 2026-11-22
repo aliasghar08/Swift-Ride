@@ -4,6 +4,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../services/fcm_service.dart';
 import '../../services/push_notification_service.dart';
+import '../../presentation/widgets/ride_chat_sheet.dart';
 import '../../providers/ride_provider.dart';
 import '../../domain/models/user_role.dart';
 import '../../presentation/common/mode_app_bar.dart';
@@ -150,6 +151,29 @@ class AppRouter {
           }
         } catch (_) {}
       }
+    }
+
+    if (type == 'NEW_CHAT_MESSAGE' && rideId != null) {
+      navigatorKey.currentState?.pushNamedAndRemoveUntil('/', (route) => false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = navigatorKey.currentContext;
+        if (ctx != null) {
+          try {
+            final auth = CustomChangeNotifierProvider.of<AuthProvider>(ctx);
+            final currentUserId = auth.currentUser.id;
+            final isDriver = auth.activeRole == UserRole.driver;
+            RideChatSheet.show(
+              ctx,
+              rideId: rideId,
+              currentUserId: currentUserId,
+              currentUserRole: isDriver ? 'driver' : 'rider',
+              otherUserName: isDriver ? 'Rider' : 'Driver',
+              otherUserId: '',
+            );
+          } catch (_) {}
+        }
+      });
+      return;
     }
 
     // Route active ride / dispatch / offer notifications to active screen

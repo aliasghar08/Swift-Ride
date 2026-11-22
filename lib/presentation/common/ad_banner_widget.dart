@@ -23,16 +23,15 @@ class AdBannerWidget extends StatefulWidget {
 
 class _AdBannerWidgetState extends State<AdBannerWidget> {
   BannerAd? _bannerAd;
-  Timer? _deferTimer;
   bool _isLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _scheduleLoadBanner();
+    _initAndLoadBanner();
   }
 
-  void _scheduleLoadBanner() {
+  Future<void> _initAndLoadBanner() async {
     if (kIsWeb) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
@@ -40,17 +39,12 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
       return;
     }
 
-    if (AdService.instance.isInitialized) {
-      debugPrint('[AdBannerWidget] AdService already initialized; loading banner immediately.');
+    try {
+      await AdService.instance.ensureInitialized();
+      if (!mounted) return;
       _loadBanner();
-    } else {
-      debugPrint('[AdBannerWidget] Waiting for background AdService initialization before creating banner...');
-      _deferTimer = Timer(const Duration(seconds: 4), () {
-        if (mounted) {
-          debugPrint('[AdBannerWidget] Defer timer expired; triggering banner load.');
-          _loadBanner();
-        }
-      });
+    } catch (e) {
+      debugPrint('[AdBannerWidget] Initialization error: $e');
     }
   }
 
@@ -58,28 +52,17 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
     if (kIsWeb || !mounted) return;
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
-      if (!AdService.instance.isInitialized) {
-        debugPrint('[AdBannerWidget] AdService not yet initialized; requesting initialization now.');
-        AdService.instance.initialize().then((_) {
-          if (mounted && AdService.instance.isInitialized) {
-            _createBannerAd();
-          }
-        });
-        return;
-      }
       _createBannerAd();
     } catch (e) {
       debugPrint('[AdBannerWidget] Banner load error: $e');
     }
   }
 
-  void _createBannerAd({bool useFallback = false}) {
+  void _createBannerAd() {
     if (kIsWeb || !mounted || _bannerAd != null) return;
     try {
-      final unitId = useFallback
-          ? AdService.testAndroidBannerId
-          : AdService.instance.bannerAdUnitId;
-      debugPrint('[AdBannerWidget] Creating BannerAd with adUnitId: $unitId (fallback=$useFallback)');
+      final unitId = AdService.instance.bannerAdUnitId;
+      debugPrint('[AdBannerWidget] Creating BannerAd with adUnitId: $unitId');
       _bannerAd = BannerAd(
         adUnitId: unitId,
         size: AdSize.banner,
@@ -93,12 +76,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
             debugPrint('[AdBannerWidget] Banner failed to load: code=${error.code}, message=${error.message}');
             ad.dispose();
             _bannerAd = null;
-            // If live ad failed with no inventory (Code 3) or not yet filled, fallback to sample banner
-            if (!useFallback && unitId != AdService.testAndroidBannerId) {
-              debugPrint('[AdBannerWidget] Live ad unfilled (code ${error.code}); falling back to Google sample banner ad to verify display.');
-              _createBannerAd(useFallback: true);
-              return;
-            }
+            // Cleanly collapse to SizedBox.shrink(); no sample test-ad fallback in release mode
             if (mounted) setState(() => _isLoaded = false);
           },
         ),
@@ -110,7 +88,6 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
 
   @override
   void dispose() {
-    _deferTimer?.cancel();
     _bannerAd?.dispose();
     super.dispose();
   }

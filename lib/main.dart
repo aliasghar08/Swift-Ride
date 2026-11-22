@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'core/provider/custom_provider.dart';
@@ -73,21 +74,15 @@ Future<void> main() async {
     debugPrint('[FirebaseInit] Running in local/test profile: $e');
   }
 
-  // Defer non-critical background services until 3 seconds after the first frame has rendered,
-  // ensuring Chromium WebView (AdMob) and HTTP scraping never contend with cold startup.
+  // Trigger non-blocking background services immediately after the first frame has rendered,
+  // without artificial delays, keeping frame rendering fluid and non-blocking.
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    debugPrint('[Main] First UI frame rendered successfully. Scheduling background services in 3s...');
-    Future.delayed(const Duration(seconds: 3), () {
-      debugPrint('[Main] Triggering deferred FuelPriceService & AdService background initialization...');
-      FuelPriceService().fetchLivePrices();
-      AdService.instance.initialize().catchError((adErr) {
-        debugPrint('[AdMob] AdService background init notice: $adErr');
-      });
-      PushNotificationService.instance.initialize(
-        onNotificationTap: AppRouter.handleNotificationTap,
-      ).catchError((pushErr) {
-        debugPrint('[FCM] PushNotificationService init notice: $pushErr');
-      });
+    debugPrint('[Main] First UI frame rendered successfully. Triggering background services...');
+    FuelPriceService().fetchLivePrices();
+    PushNotificationService.instance.initialize(
+      onNotificationTap: AppRouter.handleNotificationTap,
+    ).catchError((pushErr) {
+      debugPrint('[FCM] PushNotificationService init notice: $pushErr');
     });
   });
 
@@ -158,6 +153,7 @@ Future<void> main() async {
       child: SwiftRideApp(initialRoute: startRoute),
     ),
   );
+  unawaited(AdService.instance.initialize());
 }
 
 class SwiftRideApp extends StatefulWidget {

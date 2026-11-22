@@ -19,6 +19,11 @@ void main() {
       expect(AdService.liveAndroidInterstitialId, 'ca-app-pub-9402443776639153/3739839885');
     });
 
+    test('AdService ensureInitialized completes without throwing', () async {
+      final service = AdService.instance;
+      await expectLater(service.ensureInitialized(), completes);
+    });
+
     test('showPostRideInterstitial invokes onDismissed safely when no ad is loaded', () {
       var dismissed = false;
       AdService.instance.showPostRideInterstitial(onDismissed: () {

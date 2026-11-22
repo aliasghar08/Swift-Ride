@@ -20,19 +20,29 @@ class AdService {
   static const String testAndroidInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
 
   bool _initialized = false;
-  bool _initializing = false;
   bool get isInitialized => _initialized;
+  Future<void>? _initFuture;
 
   InterstitialAd? _postRideInterstitial;
   bool _isLoadingInterstitial = false;
 
-  /// Initializes the Google Mobile Ads SDK safely in the background.
-  Future<void> initialize() async {
-    if (kIsWeb || _initialized || _initializing) return;
+  /// Exposes SDK readiness directly so widgets can await without polling or sleeping.
+  Future<void> ensureInitialized() => initialize();
+
+  /// Initializes the Google Mobile Ads SDK safely in the background (idempotent).
+  Future<void> initialize() {
+    if (kIsWeb) return Future.value();
+    if (_initialized) return Future.value();
+    if (_initFuture != null) return _initFuture!;
+
+    _initFuture = _doInitialize();
+    return _initFuture!;
+  }
+
+  Future<void> _doInitialize() async {
     try {
       if (!Platform.isAndroid && !Platform.isIOS) return;
-      _initializing = true;
-      debugPrint('[AdService] Starting background MobileAds initialization...');
+      debugPrint('[AdService] Starting non-blocking MobileAds initialization...');
       final initStatus = await MobileAds.instance.initialize();
       _initialized = true;
       debugPrint('[AdService] MobileAds initialized successfully. Adapters count: ${initStatus.adapterStatuses.length}');
@@ -40,15 +50,9 @@ class AdService {
         debugPrint('[AdService] Adapter [$key]: state=${status.state}, desc=${status.description}');
       });
 
-      // Delay interstitial preloading by 10 seconds so it never contends with initial app interaction
-      Future.delayed(const Duration(seconds: 10), () {
-        debugPrint('[AdService] Triggering background preloading of post-ride interstitial ad...');
-        loadPostRideInterstitial();
-      });
+      // Interstitial preloading disabled (banner-only mode).
     } catch (e) {
       debugPrint('[AdService] MobileAds initialization skipped or failed: $e');
-    } finally {
-      _initializing = false;
     }
   }
 

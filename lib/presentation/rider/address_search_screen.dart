@@ -14,6 +14,7 @@ import '../common/prominent_disclosure_dialog.dart';
 import '../common/glass_container.dart';
 import '../common/skeleton.dart';
 import '../common/reserved_bottom_ad_bar.dart';
+import '../view_models/responsive_layout_helper.dart';
 
 /// Hybrid signal returned when rider chooses to select location on map.
 /// Inherits from [LocationPoint] for compatibility with [Navigator.push<LocationPoint>]
@@ -276,316 +277,275 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final c = AppColors.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final trimmed = _searchController.text.trim();
-
-    return Scaffold(
-      backgroundColor: c.canvas,
-      bottomNavigationBar: const ReservedBottomAdBar(),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text(
-            widget.title,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 18,
-              color: c.textPrimary,
+  Future<void> _handleUseCurrentLocation() async {
+    final loc = CustomChangeNotifierProvider.read<LocationProvider>(
+      context,
+    );
+    double lat = loc.latitude;
+    double lng = loc.longitude;
+    if (!loc.hasRealFix) {
+      await PermissionDisclosures.ensureForegroundLocation(context);
+      if (!mounted) return;
+      final fix = await loc.waitForFirstFix(
+        timeout: const Duration(seconds: 4),
+      );
+      if (fix != null) {
+        lat = fix.latitude;
+        lng = fix.longitude;
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Acquiring GPS location... Please ensure location permissions are enabled.',
+              ),
+              duration: Duration(seconds: 3),
             ),
+          );
+        }
+        return;
+      }
+    }
+
+    String address = loc.address;
+    if (address.isEmpty || !NativeMapService.isGranularAddress(address)) {
+      try {
+        final resolved = await _mapService.reverseGeocode(
+          lat,
+          lng,
+        );
+        if (resolved.isNotEmpty &&
+            !resolved.startsWith('Location (') &&
+            !resolved.startsWith('Pinned Spot')) {
+          if (NativeMapService.isGranularAddress(resolved) ||
+              !NativeMapService.isGranularAddress(address) ||
+              address.isEmpty) {
+            address = resolved;
+          }
+        }
+      } catch (_) {}
+    }
+    if (address.isEmpty) address = 'Current Location';
+    if (!mounted) return;
+    Navigator.of(context).pop(
+      LocationPoint(
+        latitude: lat,
+        longitude: lng,
+        address: address,
+      ),
+    );
+  }
+
+  Widget _buildChooseOnMapActionBar({
+    required BuildContext context,
+    required AppColors c,
+    required bool isDark,
+    required double verticalPadding,
+    required double horizontalPadding,
+    required double badgePadding,
+    required double iconSize,
+    required double titleFontSize,
+    required double subtitleFontSize,
+    required double chevronSize,
+    required double borderRadius,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(borderRadius),
+      onTap: () {
+        Navigator.of(context).pop(
+          ChooseOnMapSignal(isPickup: widget.isPickup),
+        );
+      },
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
         ),
-        leading: IconButton(
-          tooltip: 'Back',
-          icon: Icon(
-            Icons.arrow_back_ios_new,
-            color: c.textPrimary,
-            size: 20,
+        decoration: BoxDecoration(
+          color: isDark
+              ? AppTheme.accentCyan.withValues(alpha: 0.1)
+              : AppTheme.primaryBlue.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(borderRadius),
+          border: Border.all(
+            color: isDark
+                ? AppTheme.accentCyan.withValues(alpha: 0.28)
+                : AppTheme.primaryBlue.withValues(alpha: 0.22),
           ),
-          onPressed: () => Navigator.of(context).pop(),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: EdgeInsets.all(badgePadding),
+              decoration: BoxDecoration(
+                gradient: AppTheme.brandGradient,
+                shape: BoxShape.circle,
+                boxShadow: AppTheme.glowShadow(
+                  AppTheme.primaryBlue,
+                  blur: 8,
+                  opacity: 0.25,
+                ),
+              ),
+              child: Icon(
+                Icons.map_rounded,
+                color: Colors.white,
+                size: iconSize,
+              ),
+            ),
+            SizedBox(width: (horizontalPadding * 0.85).clamp(8.0, 14.0)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Choose on Map',
+                    style: TextStyle(
+                      color: c.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: titleFontSize,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Pinpoint exact spot with interactive map pin',
+                    style: TextStyle(
+                      color: c.textSecondary,
+                      fontSize: subtitleFontSize,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+              size: chevronSize,
+            ),
+          ],
         ),
       ),
-      body: SafeArea(
+    );
+  }
+
+  Widget _buildQuickActionTile({
+    required BuildContext context,
+    required AppColors c,
+    required bool isDark,
+    required IconData icon,
+    required Color iconColor,
+    required Color badgeBgColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required double badgeDiameter,
+    required double iconSize,
+    required double titleFontSize,
+    required double subtitleFontSize,
+    required double horizontalPadding,
+    required double verticalPadding,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding,
+          vertical: verticalPadding,
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: badgeDiameter,
+              height: badgeDiameter,
+              decoration: BoxDecoration(
+                color: badgeBgColor,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: iconSize,
+                ),
+              ),
+            ),
+            SizedBox(width: (horizontalPadding * 0.9).clamp(8.0, 14.0)),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: c.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: titleFontSize,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: c.textSecondary,
+                      fontSize: subtitleFontSize,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyStatePrompt({
+    required AppColors c,
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? actionWidget,
+    required double iconSize,
+    required double titleFontSize,
+    required double subtitleFontSize,
+    required double minHeight,
+    required double gap,
+  }) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(minHeight: minHeight),
+      child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Search Input Box
-              GlassContainer(
-                backgroundColor: isDark ? c.surfaceRaised : c.surface,
-                borderColor: c.border,
-                isDark: isDark,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.search,
-                      color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        style: TextStyle(
-                          color: c.textPrimary,
-                          fontSize: 16,
-                        ),
-                        textInputAction: TextInputAction.search,
-                        onSubmitted: (val) => _handleSubmit(val),
-                        decoration: InputDecoration(
-                          hintText:
-                              'Search street, Plus Code, coordinates...',
-                          hintStyle: TextStyle(
-                            color: c.textMuted,
-                            fontSize: 14,
-                          ),
-                          border: InputBorder.none,
-                        ),
-                        onChanged: _onQueryChanged,
-                      ),
-                    ),
-                    if (_isLoading)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: isDark
-                                ? AppTheme.accentCyan
-                                : AppTheme.primaryBlue,
-                          ),
-                        ),
-                      )
-                    else if (trimmed.isNotEmpty)
-                      IconButton(
-                        tooltip: 'Clear search',
-                        icon: Icon(
-                          Icons.close,
-                          color: c.textMuted,
-                          size: 18,
-                        ),
-                        onPressed: () {
-                          _searchController.clear();
-                          _debounce?.cancel();
-                          setState(() {
-                            _suggestions = [];
-                            _hasSearched = false;
-                          });
-                        },
-                      ),
-                  ],
+              Icon(icon, color: c.textMuted, size: iconSize),
+              SizedBox(height: gap),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: c.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: titleFontSize,
                 ),
               ),
-
-              const SizedBox(height: 12),
-
-              // Professional "Choose on Map" Action Bar
-              InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: () {
-                  Navigator.of(context).pop(
-                    ChooseOnMapSignal(isPickup: widget.isPickup),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppTheme.accentCyan.withValues(alpha: 0.1)
-                        : AppTheme.primaryBlue.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? AppTheme.accentCyan.withValues(alpha: 0.28)
-                          : AppTheme.primaryBlue.withValues(alpha: 0.22),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(7),
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.brandGradient,
-                          shape: BoxShape.circle,
-                          boxShadow: AppTheme.glowShadow(
-                            AppTheme.primaryBlue,
-                            blur: 8,
-                            opacity: 0.25,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.map_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Choose on Map',
-                              style: TextStyle(
-                                color: c.textPrimary,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Pinpoint exact spot with interactive map pin',
-                              style: TextStyle(
-                                color: c.textSecondary,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                        size: 22,
-                      ),
-                    ],
+              if (subtitle != null) ...[
+                SizedBox(height: (gap * 0.65).clamp(4.0, 8.0)),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: c.textSecondary,
+                    fontSize: subtitleFontSize,
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 10),
-
-              if (_isLoading)
-                LinearProgressIndicator(
-                  backgroundColor: Colors.transparent,
-                  color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                  minHeight: 2,
-                ),
-
-              const SizedBox(height: 8),
-
-              // Suggestions list
-              Expanded(
-                child: _suggestions.isEmpty
-                    ? (_isLoading
-                          ? ListView.separated(
-                              itemCount: 4,
-                              separatorBuilder: (_, index) =>
-                                  const SizedBox(height: 4),
-                              itemBuilder: (context, index) =>
-                                  const _SuggestionSkeletonRow(),
-                            )
-                          : _buildEmptyState(trimmed, c))
-                    : ListView.separated(
-                        itemCount: _suggestions.length,
-                        separatorBuilder: (_, index) => Divider(
-                          color: c.border,
-                          height: 1,
-                        ),
-                        itemBuilder: (context, index) {
-                          final item = _suggestions[index];
-                          final isPinned = item.placeId.startsWith('pinned:') ||
-                              item.placeId.startsWith('plus:') ||
-                              item.placeId.startsWith('coord:');
-
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 4,
-                            ),
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isPinned
-                                    ? (isDark
-                                        ? AppTheme.accentCyan.withValues(alpha: 0.18)
-                                        : AppTheme.emeraldGreen.withValues(alpha: 0.15))
-                                    : (isDark ? c.surfaceRaised : c.surfaceMuted),
-                                shape: BoxShape.circle,
-                              ),
-                              child: Icon(
-                                isPinned
-                                    ? Icons.push_pin_rounded
-                                    : Icons.location_on,
-                                color: isPinned
-                                    ? (isDark
-                                        ? AppTheme.accentCyan
-                                        : AppTheme.emeraldGreen)
-                                    : (isDark
-                                        ? AppTheme.accentCyan
-                                        : AppTheme.primaryBlue),
-                                size: 20,
-                              ),
-                            ),
-                            title: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    item.mainText,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: isPinned
-                                          ? (isDark
-                                              ? AppTheme.accentCyan
-                                              : AppTheme.primaryBlue)
-                                          : c.textPrimary,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                if (isPinned)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: (isDark
-                                              ? AppTheme.accentCyan
-                                              : AppTheme.emeraldGreen)
-                                          .withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'PINNED',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        color: isDark
-                                            ? AppTheme.accentCyan
-                                            : AppTheme.emeraldGreen,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                            subtitle: item.secondaryText.isNotEmpty
-                                ? Text(
-                                    item.secondaryText,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: c.textSecondary,
-                                      fontSize: 12,
-                                    ),
-                                  )
-                                : null,
-                            onTap: () => _selectPlace(item),
-                          );
-                        },
-                      ),
-              ),
+              ],
+              if (actionWidget != null) ...[
+                SizedBox(height: (gap * 1.2).clamp(10.0, 18.0)),
+                actionWidget,
+              ],
             ],
           ),
         ),
@@ -593,216 +553,513 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     );
   }
 
-  Widget _buildEmptyState(String trimmed, AppColors c) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildEmptyState({
+    required BuildContext context,
+    required String trimmed,
+    required AppColors c,
+    required bool isDark,
+    required BoxConstraints constraints,
+    required double verticalGap,
+    required double badgeDiameter,
+    required double actionIconSize,
+    required double actionTitleFontSize,
+    required double actionSubtitleFontSize,
+    required double actionTileHorizontalPadding,
+    required double actionTileVerticalPadding,
+    required double emptyIconSize,
+    required double emptyPromptMinHeight,
+  }) {
     if (trimmed.isEmpty && !_hasSearched) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 4,
-            ),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+      return LayoutBuilder(
+        builder: (context, scrollConstraints) {
+          return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: scrollConstraints.maxHeight,
               ),
-              child: const Icon(
-                Icons.my_location,
-                color: AppTheme.emeraldGreen,
-                size: 20,
-              ),
-            ),
-            title: Text(
-              'Use Current Location',
-              style: TextStyle(
-                color: c.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-            subtitle: Text(
-              'Start trip from your GPS position',
-              style: TextStyle(
-                color: c.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-            onTap: () async {
-              final loc = CustomChangeNotifierProvider.read<LocationProvider>(
-                context,
-              );
-              double lat = loc.latitude;
-              double lng = loc.longitude;
-              if (!loc.hasRealFix) {
-                await PermissionDisclosures.ensureForegroundLocation(context);
-                if (!context.mounted) return;
-                final fix = await loc.waitForFirstFix(
-                  timeout: const Duration(seconds: 4),
-                );
-                if (fix != null) {
-                  lat = fix.latitude;
-                  lng = fix.longitude;
-                } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Acquiring GPS location... Please ensure location permissions are enabled.',
-                        ),
-                        duration: Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                  return;
-                }
-              }
-
-              String address = 'Current Location';
-              try {
-                final resolved = await _mapService.reverseGeocode(
-                  lat,
-                  lng,
-                );
-                if (resolved.isNotEmpty) address = resolved;
-              } catch (_) {}
-              if (!mounted) return;
-              Navigator.of(context).pop(
-                LocationPoint(
-                  latitude: lat,
-                  longitude: lng,
-                  address: address,
-                ),
-              );
-            },
-          ),
-          Divider(color: c.border, height: 1),
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 4,
-            ),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: (isDark ? AppTheme.accentCyan : AppTheme.primaryBlue)
-                    .withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.pin_drop_rounded,
-                color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
-                size: 20,
-              ),
-            ),
-            title: Text(
-              'Set Location on Map',
-              style: TextStyle(
-                color: c.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-            subtitle: Text(
-              'Move and place pin directly on the map',
-              style: TextStyle(
-                color: c.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-            onTap: () {
-              Navigator.of(context).pop(
-                const LocationPoint(
-                  latitude: 0,
-                  longitude: 0,
-                  address: '__CHOOSE_ON_MAP__',
-                ),
-              );
-            },
-          ),
-          Divider(color: c.border, height: 1),
-          const SizedBox(height: 24),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.search, color: c.textMuted, size: 32),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Type a destination or area name',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: c.textSecondary, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tip: paste coordinates to set exact location',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: c.textMuted,
-                      fontSize: 12,
+              child: IntrinsicHeight(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildQuickActionTile(
+                      context: context,
+                      c: c,
+                      isDark: isDark,
+                      icon: Icons.my_location,
+                      iconColor: AppTheme.emeraldGreen,
+                      badgeBgColor:
+                          AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                      title: 'Use Current Location',
+                      subtitle: 'Start trip from your GPS position',
+                      badgeDiameter: badgeDiameter,
+                      iconSize: actionIconSize,
+                      titleFontSize: actionTitleFontSize,
+                      subtitleFontSize: actionSubtitleFontSize,
+                      horizontalPadding: actionTileHorizontalPadding,
+                      verticalPadding: actionTileVerticalPadding,
+                      onTap: _handleUseCurrentLocation,
                     ),
-                  ),
-                ],
+                    Divider(color: c.border, height: 1),
+                    _buildQuickActionTile(
+                      context: context,
+                      c: c,
+                      isDark: isDark,
+                      icon: Icons.pin_drop_rounded,
+                      iconColor:
+                          isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
+                      badgeBgColor: (isDark
+                              ? AppTheme.accentCyan
+                              : AppTheme.primaryBlue)
+                          .withValues(alpha: 0.15),
+                      title: 'Set Location on Map',
+                      subtitle: 'Move and place pin directly on the map',
+                      badgeDiameter: badgeDiameter,
+                      iconSize: actionIconSize,
+                      titleFontSize: actionTitleFontSize,
+                      subtitleFontSize: actionSubtitleFontSize,
+                      horizontalPadding: actionTileHorizontalPadding,
+                      verticalPadding: actionTileVerticalPadding,
+                      onTap: () {
+                        Navigator.of(context).pop(
+                          ChooseOnMapSignal(isPickup: widget.isPickup),
+                        );
+                      },
+                    ),
+                    Divider(color: c.border, height: 1),
+                    Expanded(
+                      child: _buildEmptyStatePrompt(
+                        c: c,
+                        icon: Icons.search,
+                        title: 'Type a destination or area name',
+                        subtitle:
+                            'Tip: paste coordinates to set exact location',
+                        iconSize: emptyIconSize,
+                        titleFontSize: actionTitleFontSize,
+                        subtitleFontSize: actionSubtitleFontSize,
+                        minHeight: emptyPromptMinHeight,
+                        gap: (verticalGap * 0.9).clamp(6.0, 12.0),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       );
     } else if (trimmed.isEmpty || trimmed.length < 2) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.travel_explore, color: c.textMuted, size: 32),
-              const SizedBox(height: 12),
-              Text(
-                'Type at least 2 characters to search',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.textSecondary, fontSize: 14),
-              ),
-            ],
-          ),
+      return SingleChildScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: _buildEmptyStatePrompt(
+          c: c,
+          icon: Icons.travel_explore,
+          title: 'Type at least 2 characters to search',
+          iconSize: emptyIconSize,
+          titleFontSize: actionTitleFontSize,
+          subtitleFontSize: actionSubtitleFontSize,
+          minHeight: (constraints.maxHeight * 0.35).clamp(120.0, 300.0),
+          gap: (verticalGap * 0.9).clamp(6.0, 12.0),
         ),
       );
     }
 
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.location_off_outlined, color: c.textMuted, size: 32),
-            const SizedBox(height: 12),
-            Text(
-              'No places found for "$trimmed"',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: c.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
+    return SingleChildScrollView(
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: _buildEmptyStatePrompt(
+        c: c,
+        icon: Icons.location_off_outlined,
+        title: 'No places found for "$trimmed"',
+        subtitle: 'Try a different street name or city.',
+        actionWidget: OutlinedButton.icon(
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Retry Search'),
+          onPressed: () => _fetchSuggestions(trimmed),
+        ),
+        iconSize: emptyIconSize,
+        titleFontSize: actionTitleFontSize,
+        subtitleFontSize: actionSubtitleFontSize,
+        minHeight: (constraints.maxHeight * 0.35).clamp(120.0, 300.0),
+        gap: (verticalGap * 0.9).clamp(6.0, 12.0),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final trimmed = _searchController.text.trim();
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final isKeyboardOpen = viewInsets.bottom > 0;
+    final responsive = ResponsiveLayoutHelper(context);
+
+    return Scaffold(
+      backgroundColor: c.canvas,
+      resizeToAvoidBottomInset: true,
+      bottomNavigationBar: isKeyboardOpen ? null : const ReservedBottomAdBar(),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: Text(
+          widget.title,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: responsive.fontSize(18),
+            color: c.textPrimary,
+          ),
+        ),
+        leading: IconButton(
+          tooltip: 'Back',
+          icon: Icon(
+            Icons.arrow_back_ios_new,
+            color: c.textPrimary,
+            size: responsive.scale(20).clamp(18.0, 24.0),
+          ),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth;
+            final availableHeight = constraints.maxHeight;
+
+            // 1. Horizontal screen padding clamped to safe ergonomic ranges
+            final horizontalPadding =
+                (availableWidth * 0.045).clamp(14.0, 24.0);
+
+            // 2. Vertical section gaps clamped to safe ergonomic ranges
+            final verticalGap = (availableHeight * 0.018).clamp(6.0, 16.0);
+
+            // 3. Search input dynamic sizing & padding
+            final searchMinHeight =
+                (availableHeight * 0.065).clamp(44.0, 56.0);
+            final searchHorizontalPadding =
+                (availableWidth * 0.035).clamp(10.0, 16.0);
+            final searchIconSize = (availableWidth * 0.055).clamp(18.0, 24.0);
+            final searchFontSize = (availableWidth * 0.04).clamp(14.0, 16.0);
+            final searchHintFontSize =
+                (availableWidth * 0.035).clamp(12.0, 14.0);
+            final searchBorderRadius =
+                (availableWidth * 0.035).clamp(12.0, 16.0);
+
+            // 4. Quick-action tile & badge dynamic sizing
+            final actionVerticalPadding =
+                (availableHeight * 0.014).clamp(8.0, 14.0);
+            final actionHorizontalPadding =
+                (availableWidth * 0.035).clamp(10.0, 16.0);
+            final actionBadgePadding = (availableWidth * 0.02).clamp(6.0, 8.0);
+            final actionMapIconSize =
+                (availableWidth * 0.042).clamp(14.0, 18.0);
+            final actionTitleFontSize =
+                (availableWidth * 0.038).clamp(13.0, 15.0);
+            final actionSubtitleFontSize =
+                (availableWidth * 0.032).clamp(11.0, 13.0);
+            final actionChevronSize = (availableWidth * 0.05).clamp(18.0, 24.0);
+            final actionBorderRadius =
+                (availableWidth * 0.03).clamp(10.0, 14.0);
+
+            // Quick-action tiles (Current Location / Set Location on Map)
+            final badgeDiameter = (availableWidth * 0.10).clamp(36.0, 46.0);
+            final quickActionIconSize =
+                (availableWidth * 0.05).clamp(18.0, 24.0);
+            final tileHorizontalPadding =
+                (availableWidth * 0.03).clamp(8.0, 14.0);
+            final tileVerticalPadding =
+                (availableHeight * 0.008).clamp(2.0, 8.0);
+
+            // 5. Empty-state search icon & prompt dynamic sizing
+            final emptyIconSize = (availableHeight * 0.08).clamp(28.0, 52.0);
+            final emptyPromptMinHeight =
+                (availableHeight * 0.22).clamp(72.0, 220.0);
+
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: Column(
+                    children: [
+                      SizedBox(height: (verticalGap * 0.5).clamp(2.0, 6.0)),
+                      // Search Input Box
+                      ConstrainedBox(
+                        constraints: BoxConstraints(minHeight: searchMinHeight),
+                        child: GlassContainer(
+                          backgroundColor:
+                              isDark ? c.surfaceRaised : c.surface,
+                          borderColor: c.border,
+                          isDark: isDark,
+                          borderRadius: searchBorderRadius,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: searchHorizontalPadding,
+                            vertical: 4,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.search,
+                                color: isDark
+                                    ? AppTheme.accentCyan
+                                    : AppTheme.primaryBlue,
+                                size: searchIconSize,
+                              ),
+                              SizedBox(
+                                width: (searchHorizontalPadding * 0.75)
+                                    .clamp(6.0, 12.0),
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  controller: _searchController,
+                                  autofocus: true,
+                                  style: TextStyle(
+                                    color: c.textPrimary,
+                                    fontSize: searchFontSize,
+                                  ),
+                                  textInputAction: TextInputAction.search,
+                                  onSubmitted: (val) => _handleSubmit(val),
+                                  decoration: InputDecoration(
+                                    hintText:
+                                        'Search street, Plus Code, coordinates...',
+                                    hintStyle: TextStyle(
+                                      color: c.textMuted,
+                                      fontSize: searchHintFontSize,
+                                    ),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                  ),
+                                  onChanged: _onQueryChanged,
+                                ),
+                              ),
+                              if (_isLoading)
+                                Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: (searchHorizontalPadding * 0.6)
+                                        .clamp(6.0, 10.0),
+                                  ),
+                                  child: SizedBox(
+                                    width: (searchIconSize * 0.85)
+                                        .clamp(16.0, 20.0),
+                                    height: (searchIconSize * 0.85)
+                                        .clamp(16.0, 20.0),
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: isDark
+                                          ? AppTheme.accentCyan
+                                          : AppTheme.primaryBlue,
+                                    ),
+                                  ),
+                                )
+                              else if (trimmed.isNotEmpty)
+                                IconButton(
+                                  tooltip: 'Clear search',
+                                  icon: Icon(
+                                    Icons.close,
+                                    color: c.textMuted,
+                                    size: searchIconSize * 0.85,
+                                  ),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    _debounce?.cancel();
+                                    setState(() {
+                                      _suggestions = [];
+                                      _hasSearched = false;
+                                    });
+                                  },
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      SizedBox(height: verticalGap),
+
+                      // Professional "Choose on Map" Action Bar
+                      _buildChooseOnMapActionBar(
+                        context: context,
+                        c: c,
+                        isDark: isDark,
+                        verticalPadding: actionVerticalPadding,
+                        horizontalPadding: actionHorizontalPadding,
+                        badgePadding: actionBadgePadding,
+                        iconSize: actionMapIconSize,
+                        titleFontSize: actionTitleFontSize,
+                        subtitleFontSize: actionSubtitleFontSize,
+                        chevronSize: actionChevronSize,
+                        borderRadius: actionBorderRadius,
+                      ),
+
+                      SizedBox(height: (verticalGap * 0.8).clamp(4.0, 10.0)),
+
+                      if (_isLoading)
+                        LinearProgressIndicator(
+                          backgroundColor: Colors.transparent,
+                          color: isDark
+                              ? AppTheme.accentCyan
+                              : AppTheme.primaryBlue,
+                          minHeight: 2,
+                        ),
+
+                      SizedBox(height: (verticalGap * 0.6).clamp(2.0, 8.0)),
+
+                      // Suggestions or Keyboard-aware Scrollable Content
+                      Expanded(
+                        child: _suggestions.isEmpty
+                            ? (_isLoading
+                                ? ListView.separated(
+                                    keyboardDismissBehavior:
+                                        ScrollViewKeyboardDismissBehavior.onDrag,
+                                    itemCount: 4,
+                                    separatorBuilder: (_, index) =>
+                                        const SizedBox(height: 4),
+                                    itemBuilder: (_, index) =>
+                                        const _SuggestionSkeletonRow(),
+                                  )
+                                : _buildEmptyState(
+                                    context: context,
+                                    trimmed: trimmed,
+                                    c: c,
+                                    isDark: isDark,
+                                    constraints: constraints,
+                                    verticalGap: verticalGap,
+                                    badgeDiameter: badgeDiameter,
+                                    actionIconSize: quickActionIconSize,
+                                    actionTitleFontSize: actionTitleFontSize,
+                                    actionSubtitleFontSize:
+                                        actionSubtitleFontSize,
+                                    actionTileHorizontalPadding:
+                                        tileHorizontalPadding,
+                                    actionTileVerticalPadding:
+                                        tileVerticalPadding,
+                                    emptyIconSize: emptyIconSize,
+                                    emptyPromptMinHeight:
+                                        emptyPromptMinHeight,
+                                  ))
+                            : ListView.separated(
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
+                                physics:
+                                    const AlwaysScrollableScrollPhysics(),
+                                itemCount: _suggestions.length,
+                                separatorBuilder: (_, index) => Divider(
+                                  color: c.border,
+                                  height: 1,
+                                ),
+                                itemBuilder: (context, index) {
+                                  final item = _suggestions[index];
+                                  final isPinned =
+                                      item.placeId.startsWith('pinned:') ||
+                                          item.placeId.startsWith('plus:') ||
+                                          item.placeId.startsWith('coord:');
+
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.symmetric(
+                                      horizontal: tileHorizontalPadding,
+                                      vertical: tileVerticalPadding,
+                                    ),
+                                    leading: Container(
+                                      width: badgeDiameter,
+                                      height: badgeDiameter,
+                                      decoration: BoxDecoration(
+                                        color: isPinned
+                                            ? (isDark
+                                                ? AppTheme.accentCyan
+                                                    .withValues(alpha: 0.18)
+                                                : AppTheme.emeraldGreen
+                                                    .withValues(alpha: 0.15))
+                                            : (isDark
+                                                ? c.surfaceRaised
+                                                : c.surfaceMuted),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Icon(
+                                          isPinned
+                                              ? Icons.push_pin_rounded
+                                              : Icons.location_on,
+                                          color: isPinned
+                                              ? (isDark
+                                                  ? AppTheme.accentCyan
+                                                  : AppTheme.emeraldGreen)
+                                              : (isDark
+                                                  ? AppTheme.accentCyan
+                                                  : AppTheme.primaryBlue),
+                                          size: quickActionIconSize,
+                                        ),
+                                      ),
+                                    ),
+                                    title: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            item.mainText,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: isPinned
+                                                  ? (isDark
+                                                      ? AppTheme.accentCyan
+                                                      : AppTheme.primaryBlue)
+                                                  : c.textPrimary,
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: actionTitleFontSize,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isPinned)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: (isDark
+                                                      ? AppTheme.accentCyan
+                                                      : AppTheme.emeraldGreen)
+                                                  .withValues(alpha: 0.15),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'PINNED',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w800,
+                                                color: isDark
+                                                    ? AppTheme.accentCyan
+                                                    : AppTheme.emeraldGreen,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    subtitle: item.secondaryText.isNotEmpty
+                                        ? Text(
+                                            item.secondaryText,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: c.textSecondary,
+                                              fontSize:
+                                                  actionSubtitleFontSize,
+                                            ),
+                                          )
+                                        : null,
+                                    onTap: () => _selectPlace(item),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Try a different street name or city.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.textSecondary, fontSize: 12),
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.refresh, size: 16),
-              label: const Text('Retry Search'),
-              onPressed: () => _fetchSuggestions(trimmed),
-            ),
-          ],
+            );
+          },
         ),
       ),
     );

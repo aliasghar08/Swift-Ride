@@ -1,8 +1,24 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swiftride/services/map_service.dart';
 import 'package:swiftride/services/native_map_service.dart';
 
+class _UnreachableHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    throw const SocketException('Backend unreachable in unit test');
+  }
+}
+
 void main() {
+  setUp(() {
+    HttpOverrides.global = _UnreachableHttpOverrides();
+  });
+
+  tearDown(() {
+    HttpOverrides.global = null;
+  });
+
   group('MapService.searchPlaces', () {
     test('never invents a destination for an unmatched query', () async {
       final results = await MapService().searchPlaces('zzzz-no-such-place-zzzz');
@@ -159,6 +175,118 @@ void main() {
       expect(NativeMapService.isGranularAddress('Police Lines, Jhang Sadar, Jhang'), isTrue);
       expect(NativeMapService.isGranularAddress('DSP Patrolling Office, Police Lines, Jhang'), isTrue);
       expect(NativeMapService.isGranularAddress('Police Lines, Jhang'), isTrue);
+    });
+
+    test('GeoGuard quarantines dirty Google Places city metadata (Sargodha -> Jhang) at (31.26320, 72.35184)', () {
+      final service = MapService();
+      // Exact mock of dirty Google Place record found at user coordinates in Satellite Town, Jhang
+      final dirtyPlace = {
+        'displayName': {'text': 'Dr Azra Baloch Clinic'},
+        'formattedAddress': 'H, 755, Satellite Block A Town, Sargodha, 40100, Pakistan',
+        'location': {'latitude': 31.2633055, 'longitude': 72.3515775},
+        'addressComponents': [
+          {'longText': 'H', 'types': ['subpremise']},
+          {'longText': '755', 'types': ['premise']},
+          {'longText': 'Satellite', 'types': ['neighborhood']},
+          {'longText': 'Block A', 'types': ['sublocality_level_2']},
+          {'longText': 'Town', 'types': ['sublocality_level_1']},
+          {'longText': 'Sargodha', 'types': ['locality']},
+          {'longText': 'Jhang', 'types': ['administrative_area_level_2']},
+          {'longText': 'Punjab', 'types': ['administrative_area_level_1']},
+          {'longText': 'Pakistan', 'types': ['country']},
+          {'longText': '40100', 'types': ['postal_code']},
+        ],
+      };
+
+      final formatted = service.buildPreciseAddressFromPlacesPlaceForTest(
+        dirtyPlace,
+        userLat: 31.26320,
+        userLng: 72.35184,
+      );
+
+      // Must enforce authoritative city (Jhang) and quarantine Sargodha
+      expect(formatted, contains('Jhang'));
+      expect(formatted, isNot(contains('Sargodha')));
+      expect(formatted, isNot(contains('40100')));
+      expect(formatted, isNot(contains('35200')));
+      expect(formatted, isNot(contains('Satellite Town Block A Satellite Town')));
+      expect(formatted, contains('755'));
+    });
+
+    test('GeoGuard distant city quarantine helper replaces distant city (>45km away)', () {
+      final enforced = MapService.enforceAuthoritativeCity(31.26320, 72.35184, 'Sargodha');
+      expect(enforced, equals('Jhang'));
+
+      final validCity = MapService.enforceAuthoritativeCity(31.26320, 72.35184, 'Jhang');
+      expect(validCity, equals('Jhang'));
+    });
+
+    test('sanitizeAddressWithGeoGuard strips foreign postal codes and distant cities', () {
+      const dirty = ' 35200, Green Belt, Satellite Town Block A Satellite Town, Jhang, 35200, Pakistan';
+      final clean = MapService.sanitizeAddressWithGeoGuard(31.26320, 72.35184, dirty);
+      expect(clean, isNot(contains('35200')));
+      expect(clean, isNot(contains('Pakistan')));
+      expect(clean, isNot(contains('Satellite Town Block A Satellite Town')));
+      expect(clean, contains('Green Belt'));
+      expect(clean, contains('Satellite Town Block A'));
+      expect(clean, contains('Jhang'));
+    });
+
+    test('extracts spaced rooftop plots (e.g. 772 A, 763 A, 694 A, 4) cleanly with Plot prefix', () {
+      final service = MapService();
+      final results772 = [
+        {
+          'types': ['street_address'],
+          'geometry': {'location_type': 'ROOFTOP'},
+          'formatted_address': '772 A, Usmania Road, Satellite Town Block A, Jhang, Pakistan',
+          'address_components': [
+            {'long_name': '772 A', 'types': ['street_number']},
+            {'long_name': 'Usmania Road', 'types': ['route']},
+            {'long_name': 'Satellite Town Block A', 'types': ['sublocality_level_1']},
+            {'long_name': 'Jhang', 'types': ['locality']},
+          ],
+        },
+      ];
+      final formatted772 = service.buildPrecisePropertyAddressForTest(results772);
+      expect(formatted772, equals('Plot 772 A, Usmania Road, Satellite Town Block A, Jhang'));
+
+      final resultsPolice = [
+        {
+          'types': ['premise'],
+          'geometry': {'location_type': 'ROOFTOP'},
+          'formatted_address': 'Plot 4, Police Lines, Jhang Sadar, Jhang, Pakistan',
+          'address_components': [
+            {'long_name': '4', 'types': ['street_number']},
+            {'long_name': 'Police Lines', 'types': ['route']},
+            {'long_name': 'Jhang Sadar', 'types': ['neighborhood']},
+            {'long_name': 'Jhang', 'types': ['locality']},
+          ],
+        },
+      ];
+      final formattedPolice = service.buildPrecisePropertyAddressForTest(resultsPolice);
+      expect(formattedPolice, equals('Plot 4, Police Lines, Jhang Sadar, Jhang'));
+    });
+
+    test('snapToNearestRoad handles network exception non-blocking without throwing', () async {
+      final service = MapService();
+      final result = await service.snapToNearestRoad(31.26320, 72.35184);
+      expect(result, isNull);
+    });
+
+    test('snapBreadcrumbsToRoads returns original raw points on network exception', () async {
+      final service = MapService();
+      final rawPoints = [
+        const LatLng(31.26320, 72.35184),
+        const LatLng(31.26300, 72.35200),
+      ];
+      final snapped = await service.snapBreadcrumbsToRoads(rawPoints);
+      expect(snapped, equals(rawPoints));
+    });
+
+    test('validateAddress returns null non-blocking on network failure or unsupported region', () async {
+      final service = MapService();
+      final result = await service.validateAddress('Satellite Town, Jhang', regionCode: 'PK');
+      expect(result, isNull);
     });
   });
 }

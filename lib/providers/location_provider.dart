@@ -6,6 +6,7 @@ import '../core/utils/geohash_util.dart';
 import '../domain/models/location_point_model.dart';
 import '../services/coordinate_parser.dart';
 import '../services/map_service.dart';
+import '../services/native_map_service.dart';
 
 enum LocationTrackingMode { idle, balanced, highAccuracy }
 
@@ -23,6 +24,7 @@ class LocationProvider extends ChangeNotifier {
   bool _isBroadcasting = false;
   bool _hasRealFix = false;
   String _address = '';
+  NativeGeocodedAddress? _detailedAddress;
   double _lastGeotaggedLat = 0.0;
   double _lastGeotaggedLng = 0.0;
   LocationTrackingMode _trackingMode = LocationTrackingMode.balanced;
@@ -52,14 +54,30 @@ class LocationProvider extends ChangeNotifier {
       }
 
       // Asynchronously resolve human-readable geotagged address when moved > 50m
-      if (_address.isEmpty ||
-          GeohashUtil.distanceKm(_latitude, _longitude, _lastGeotaggedLat, _lastGeotaggedLng) > 0.05) {
+      // or when current address is empty / non-granular (e.g. bare "Jhang")
+      final needsResolution = _address.isEmpty ||
+          !NativeMapService.isGranularAddress(_address) ||
+          GeohashUtil.distanceKm(_latitude, _longitude, _lastGeotaggedLat, _lastGeotaggedLng) > 0.05;
+
+      if (needsResolution) {
         _lastGeotaggedLat = _latitude;
         _lastGeotaggedLng = _longitude;
-        MapService.instance.reverseGeocode(_latitude, _longitude).then((addr) {
-          if (addr.isNotEmpty && !addr.startsWith('Location (')) {
-            _address = addr;
-            notifyListeners();
+        MapService.instance.reverseGeocodeDetailed(_latitude, _longitude).then((detailed) {
+          if (detailed != null) {
+            final trimmed = detailed.formattedAddress.trim();
+            if (trimmed.isNotEmpty &&
+                !trimmed.startsWith('Location (') &&
+                !trimmed.startsWith('Pinned Spot')) {
+              // Never overwrite an already-granular address with a bare city or non-granular fallback
+              if (detailed.isGranular ||
+                  NativeMapService.isGranularAddress(trimmed) ||
+                  _address.isEmpty ||
+                  !NativeMapService.isGranularAddress(_address)) {
+                _detailedAddress = detailed;
+                _address = trimmed;
+                notifyListeners();
+              }
+            }
           }
         }).catchError((_) {});
       }
@@ -79,6 +97,7 @@ class LocationProvider extends ChangeNotifier {
   bool get isBroadcasting => _isBroadcasting;
   bool get hasRealFix => _hasRealFix;
   String get address => _address;
+  NativeGeocodedAddress? get detailedAddress => _detailedAddress;
 
   /// Current location encoded as a precision-7 geohash.
   String get geohash => GeohashUtil.encode(_latitude, _longitude, 7);
@@ -108,9 +127,40 @@ class LocationProvider extends ChangeNotifier {
     final fix = await _locationService.waitForFirstFix(timeout: timeout);
     if (fix != null) {
       _hasRealFix = true;
+      _latitude = fix.latitude;
+      _longitude = fix.longitude;
+      _heading = fix.heading;
+      _speed = fix.speed;
+      unawaited(refreshAddress(force: true));
       notifyListeners();
     }
     return fix;
+  }
+
+  /// Resolves the current coordinates to a human-readable street/plot address via MapService.
+  Future<String> refreshAddress({bool force = false}) async {
+    if (!force && _address.isNotEmpty && NativeMapService.isGranularAddress(_address)) {
+      return _address;
+    }
+    try {
+      final detailed = await MapService.instance.reverseGeocodeDetailed(_latitude, _longitude);
+      if (detailed != null) {
+        final trimmed = detailed.formattedAddress.trim();
+        if (trimmed.isNotEmpty &&
+            !trimmed.startsWith('Location (') &&
+            !trimmed.startsWith('Pinned Spot')) {
+          if (detailed.isGranular ||
+              NativeMapService.isGranularAddress(trimmed) ||
+              _address.isEmpty ||
+              !NativeMapService.isGranularAddress(_address)) {
+            _detailedAddress = detailed;
+            _address = trimmed;
+            notifyListeners();
+          }
+        }
+      }
+    } catch (_) {}
+    return _address;
   }
 
   /// Whether foreground location permission is currently granted.

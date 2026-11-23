@@ -466,4 +466,32 @@ class GeohashUtil {
       return GeohashRange('$base${_base32[startValue]}', '$base${_base32[endValue]}');
     }
   }
+
+  /// Encodes coordinates to a short Open Location Code / Plus Code (e.g. "78HJ+6M").
+  static String encodePlusCodeShort(double lat, double lng) {
+    const alphabet = '23456789CFGHJMPQRVWX';
+    final clampedLat = lat.clamp(-90.0, 90.0);
+    final normalizedLng = (lng + 180.0) % 360.0 - 180.0;
+    double latVal = clampedLat + 90.0;
+    double lngVal = normalizedLng + 180.0;
+    const resolutions = [20.0, 1.0, 0.05, 0.0025, 0.000125];
+    final sb = StringBuffer();
+    for (int i = 0; i < resolutions.length; i++) {
+      final r = resolutions[i];
+      final latDigit = (latVal / r).floor().clamp(0, 19);
+      final lngDigit = (lngVal / r).floor().clamp(0, 19);
+      sb.write(alphabet[latDigit]);
+      sb.write(alphabet[lngDigit]);
+      latVal -= latDigit * r;
+      lngVal -= lngDigit * r;
+      if (i == 3) {
+        sb.write('+');
+      }
+    }
+    final full = sb.toString();
+    if (full.length >= 8) {
+      return full.substring(4);
+    }
+    return full;
+  }
 }

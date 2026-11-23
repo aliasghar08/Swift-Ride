@@ -63,11 +63,12 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    apiKey: 'AIzaSyA43Ral7l47XFAVOl1Q4hBbMp5uV8DEGeg',
     appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     authDomain: 'swift-ride-5ab75.firebaseapp.com',
+    databaseURL: 'https://swift-ride-5ab75-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
     iosClientId: '113634488038-s869tr34nd75rv4j18s6fv514bk94khd.apps.googleusercontent.com',
     iosBundleId: 'com.dartnexuslab.swiftride',
@@ -78,11 +79,12 @@ class DefaultFirebaseOptions {
   // registration, which is the existing convention in this repository. Register
   // a macOS app and re-run `flutterfire configure` if you need true separation.
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE',
+    apiKey: 'AIzaSyA43Ral7l47XFAVOl1Q4hBbMp5uV8DEGeg',
     appId: '1:113634488038:ios:3ada91b92c00566241d527',
     messagingSenderId: '113634488038',
     projectId: 'swift-ride-5ab75',
     authDomain: 'swift-ride-5ab75.firebaseapp.com',
+    databaseURL: 'https://swift-ride-5ab75-default-rtdb.asia-southeast1.firebasedatabase.app',
     storageBucket: 'swift-ride-5ab75.firebasestorage.app',
     iosClientId: '113634488038-s869tr34nd75rv4j18s6fv514bk94khd.apps.googleusercontent.com',
     iosBundleId: 'com.dartnexuslab.swiftride',

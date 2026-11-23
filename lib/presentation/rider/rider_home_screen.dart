@@ -175,10 +175,14 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         if (!mounted || _userCustomPickup) return;
         if (locProv.hasRealFix) {
           final cur = _viewModel.pickupLocation;
-          // Update pickup if unset or if user position changed significantly (> 50 meters)
-          if (cur == null ||
-              (cur.latitude - locProv.latitude).abs() > 0.0005 ||
-              (cur.longitude - locProv.longitude).abs() > 0.0005) {
+          final isCurGranular = cur != null && NativeMapService.isGranularAddress(cur.address);
+          final hasMoved = cur != null &&
+              ((cur.latitude - locProv.latitude).abs() > 0.0005 ||
+               (cur.longitude - locProv.longitude).abs() > 0.0005);
+
+          // Update pickup if unset, or if user position changed significantly (> 50 meters),
+          // or if the current pickup address is not granular (e.g. "Jhang") so it upgrades to street/plot detail
+          if (cur == null || hasMoved || !isCurGranular) {
             _locDebounceTimer?.cancel();
             _locDebounceTimer = Timer(const Duration(milliseconds: 500), () {
               if (!mounted || _userCustomPickup) return;
@@ -197,6 +201,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             if (_waitingForGps) {
               setState(() => _waitingForGps = false);
             }
+          } else if (locProv.address.isNotEmpty &&
+              NativeMapService.isGranularAddress(locProv.address) &&
+              !isCurGranular) {
+            _viewModel.updatePickupAddressIfBetter(locProv.address);
           }
         }
       };

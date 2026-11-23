@@ -4,7 +4,71 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'coordinate_parser.dart';
 import 'polyline_service.dart';
+
+/// Structured address returned from native platform geocoding engines.
+class NativeGeocodedAddress {
+  final String formattedAddress;
+  final String title;
+  final String subtitle;
+  final String plotNumber;
+  final String street;
+  final String neighborhood;
+  final String city;
+  final String provider;
+  final bool isGranular;
+  final double confidence;
+  final double distanceMeters;
+  final String quarantinedCity;
+
+  const NativeGeocodedAddress({
+    required this.formattedAddress,
+    this.title = '',
+    this.subtitle = '',
+    this.plotNumber = '',
+    this.street = '',
+    this.neighborhood = '',
+    this.city = '',
+    this.provider = '',
+    this.isGranular = false,
+    this.confidence = 0.0,
+    this.distanceMeters = 0.0,
+    this.quarantinedCity = '',
+  });
+
+  factory NativeGeocodedAddress.fromMap(Map<dynamic, dynamic> map) {
+    return NativeGeocodedAddress(
+      formattedAddress: (map['formattedAddress'] as String?) ?? '',
+      title: (map['title'] as String?) ?? '',
+      subtitle: (map['subtitle'] as String?) ?? '',
+      plotNumber: (map['plotNumber'] as String?) ?? '',
+      street: (map['street'] as String?) ?? '',
+      neighborhood: (map['neighborhood'] as String?) ?? '',
+      city: (map['city'] as String?) ?? '',
+      provider: (map['provider'] as String?) ?? '',
+      isGranular: (map['isGranular'] as bool?) ?? false,
+      confidence: ((map['confidence'] as num?) ?? 0.0).toDouble(),
+      distanceMeters: ((map['distanceMeters'] as num?) ?? 0.0).toDouble(),
+      quarantinedCity: (map['quarantinedCity'] as String?) ?? '',
+    );
+  }
+
+  Map<String, dynamic> toMap() => {
+        'formattedAddress': formattedAddress,
+        'title': title,
+        'subtitle': subtitle,
+        'plotNumber': plotNumber,
+        'street': street,
+        'neighborhood': neighborhood,
+        'city': city,
+        'provider': provider,
+        'isGranular': isGranular,
+        'confidence': confidence,
+        'distanceMeters': distanceMeters,
+        'quarantinedCity': quarantinedCity,
+      };
+}
 
 /// Representation of geographical coordinates (latitude, longitude).
 class LatLng {
@@ -645,6 +709,14 @@ class NativeMapService {
 
   /// Performs reverse geocoding via native Geocoder (Android) or CLGeocoder (iOS).
   Future<String?> reverseGeocode(double latitude, double longitude) async {
+    // 1. Try structured detailed geocode first
+    try {
+      final detailed = await reverseGeocodeDetailed(latitude, longitude);
+      if (detailed != null && detailed.formattedAddress.isNotEmpty) {
+        return detailed.formattedAddress;
+      }
+    } catch (_) {}
+
     final res = await _invokeWithFallback<String>(
       _locationChannel,
       _altLocationChannel,
@@ -652,6 +724,72 @@ class NativeMapService {
       {'latitude': latitude, 'longitude': longitude},
     );
     return res;
+  }
+
+  /// Performs structured reverse geocoding returning plot, street, landmark, and provider.
+  Future<NativeGeocodedAddress?> reverseGeocodeDetailed(
+    double latitude,
+    double longitude,
+  ) async {
+    final map = await _invokeWithFallback<Map<dynamic, dynamic>>(
+      _locationChannel,
+      _altLocationChannel,
+      'reverseGeocodeDetailed',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+    if (map != null) {
+      return NativeGeocodedAddress.fromMap(map);
+    }
+    final mapRes = await _invokeWithFallback<Map<dynamic, dynamic>>(
+      _mapChannel,
+      _altMapChannel,
+      'reverseGeocodeDetailed',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+    if (mapRes != null) {
+      return NativeGeocodedAddress.fromMap(mapRes);
+    }
+    return null;
+  }
+
+  /// Rapid map pan reverse geocoding with native cancellation of superseded tasks.
+  Future<NativeGeocodedAddress?> panReverseGeocode(
+    double latitude,
+    double longitude,
+  ) async {
+    final map = await _invokeWithFallback<Map<dynamic, dynamic>>(
+      _locationChannel,
+      _altLocationChannel,
+      'panReverseGeocode',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+    if (map != null) {
+      return NativeGeocodedAddress.fromMap(map);
+    }
+    final mapRes = await _invokeWithFallback<Map<dynamic, dynamic>>(
+      _mapChannel,
+      _altMapChannel,
+      'panReverseGeocode',
+      {'latitude': latitude, 'longitude': longitude},
+    );
+    if (mapRes != null) {
+      return NativeGeocodedAddress.fromMap(mapRes);
+    }
+    return null;
+  }
+
+  /// Cancels in-flight map pan geocoding on native platform.
+  Future<void> cancelPendingGeocode() async {
+    await _invokeWithFallback<dynamic>(
+      _locationChannel,
+      _altLocationChannel,
+      'cancelPendingGeocode',
+    );
+    await _invokeWithFallback<dynamic>(
+      _mapChannel,
+      _altMapChannel,
+      'cancelPendingGeocode',
+    );
   }
 
   /// Checks whether [address] contains granular plot, house, street, or premise
@@ -673,6 +811,17 @@ class NativeMapService {
       '',
     );
 
+    // Filter out bare city names, provinces, and generic administrative titles
+    final broadCities = [
+      'jhang', 'central jhang', 'jhang sadar', 'jhang city', 'lahore',
+      'faisalabad', 'karachi', 'islamabad', 'rawalpindi', 'multan',
+      'peshawar', 'quetta', 'sialkot', 'gujranwala', 'sargodha', 'toba tek singh'
+    ];
+    final cleanLower = withoutPlusCode.toLowerCase().trim();
+    if (broadCities.contains(cleanLower)) {
+      return false;
+    }
+
     final granularKeywords = RegExp(
       r'\b(plot|house|shop|flat|apt|apartment|suite|floor|unit|plaza|tower|center|centre|complex|arcade|heights|residency|villa|manzil|cottage|chambers|hospital|clinic|pharmacy|university|college|school|academy|institute|masjid|mosque|church|temple|market|bazaar|mall|mart|store|bank|hotel|restaurant|cafe|bakery|station|terminal|stop|park|stadium|club|gym|court|office|street|st|road|rd|avenue|ave|lane|ln|boulevard|blvd|chowk|bazar|gali|kucha|mohalla|mohallah|block|sector|phase|scheme|police|lines|cantonment|cantt|sadar|saddar|hall|markaz|branch|gate|pul|bridge|stand|adda|basti|kot|deh|chak|mouza|moza|deri|dhok|tehsil|headworks|patrolling|barracks)\b',
       caseSensitive: false,
@@ -686,14 +835,35 @@ class NativeMapService {
       return true;
     }
 
-    // If the address has 3+ comma-separated segments and the first segment is not a city/country,
-    // it likely starts with a named premise/landmark (e.g. "Al-Fatah, Gulberg III, Lahore").
+    // Filter out generic administrative segments like province and country to test true granularity
     final segments = withoutPlusCode
         .split(',')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
-    if (segments.length >= 3) {
+
+    final nonAdministrativeSegments = segments.where((s) {
+      final lower = s.toLowerCase();
+      if (lower == 'pakistan' || lower == 'pk') {
+        return false;
+      }
+      if (lower == 'punjab' || lower == 'sindh' || lower == 'kpk' ||
+          lower == 'khyber pakhtunkhwa' || lower == 'balochistan' ||
+          lower == 'islamabad capital territory' || lower == 'gilgit-baltistan' ||
+          lower == 'azad kashmir') {
+        return false;
+      }
+      if (broadCities.contains(lower) || CoordinateParser.pakistanCities.containsKey(lower)) {
+        return false;
+      }
+      if (lower.startsWith('central ') && broadCities.contains(lower.substring(8))) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    // If there are at least 2 non-administrative segments (e.g., "Al-Fatah, Gulberg III"), it represents a specific premise/colony
+    if (nonAdministrativeSegments.length >= 2) {
       return true;
     }
 

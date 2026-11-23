@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/utils/geohash_util.dart';
 import '../../services/native_map_service.dart';
 import '../../core/utils/distance_calculator.dart';
 import '../../domain/models/location_point_model.dart';
@@ -356,19 +358,31 @@ class RiderViewModel extends ChangeNotifier {
   /// invented coordinates — if the caller couldn't get a fix, it should not
   /// call this at all.
   Future<void> initializeFromCoordinates(double lat, double lng) async {
-    // Accept the coordinates verbatim.
+    // If the pickup is already set and is granular, do not overwrite unless moved significantly (> 50m)
+    final currentPickup = _pickupLocation;
+    final currentAddress = currentPickup?.address ?? '';
+    final isAlreadyGranular = NativeMapService.isGranularAddress(currentAddress);
+
+    if (currentPickup != null && isAlreadyGranular) {
+      final dist = GeohashUtil.distanceKm(lat, lng, currentPickup.latitude, currentPickup.longitude);
+      if (dist < 0.05) {
+        return;
+      }
+    }
+
     _pickupLocation = LocationPoint(
       latitude: lat,
       longitude: lng,
-      address: 'Current Location',
+      address: isAlreadyGranular ? currentAddress : 'Current Location',
     );
     _hasPickupFromGps = true;
 
     // Immediately populate the pickup input text so the user never sees a blank bar
     // while waiting for background geocoding.
     if (pickupController.text.trim().isEmpty ||
-        pickupController.text == 'Current Location') {
-      pickupController.text = 'Current Location';
+        pickupController.text == 'Current Location' ||
+        !NativeMapService.isGranularAddress(pickupController.text)) {
+      pickupController.text = isAlreadyGranular ? currentAddress : 'Current Location';
     }
 
     // Trigger route calculation immediately without waiting for reverse-geocoding
@@ -379,13 +393,42 @@ class RiderViewModel extends ChangeNotifier {
     try {
       final realAddress = await _mapService.reverseGeocode(lat, lng);
       if (_isDisposed) return;
-      if (realAddress.isNotEmpty) {
-        pickupController.text = realAddress;
-        _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
-        notifyListeners();
+      if (realAddress.isNotEmpty &&
+          !realAddress.startsWith('Location (') &&
+          !realAddress.startsWith('Pinned Spot')) {
+        // Only accept if it is granular or if current pickup address is not granular
+        if (NativeMapService.isGranularAddress(realAddress) ||
+            !NativeMapService.isGranularAddress(_pickupLocation?.address)) {
+          pickupController.text = realAddress;
+          _pickupLocation = _pickupLocation!.copyWith(address: realAddress);
+          notifyListeners();
+        }
       }
     } catch (e) {
       debugPrint('[RiderViewModel] reverseGeocode failed: $e');
+    }
+  }
+
+  /// Updates the pickup address if the provided [newAddress] is granular and the current pickup is not.
+  void updatePickupAddressIfBetter(String newAddress) {
+    if (_isDisposed) return;
+    final trimmed = newAddress.trim();
+    if (trimmed.isEmpty ||
+        trimmed.startsWith('Location (') ||
+        trimmed.startsWith('Pinned Spot') ||
+        trimmed == 'Current Location') {
+      return;
+    }
+    final currentAddr = _pickupLocation?.address ?? '';
+    if (NativeMapService.isGranularAddress(trimmed) &&
+        !NativeMapService.isGranularAddress(currentAddr)) {
+      _pickupLocation = (_pickupLocation ?? LocationPoint(
+        latitude: AppConstants.defaultLat,
+        longitude: AppConstants.defaultLng,
+        address: trimmed,
+      )).copyWith(address: trimmed);
+      pickupController.text = trimmed;
+      notifyListeners();
     }
   }
 
@@ -426,7 +469,7 @@ class RiderViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final realAddress = await _mapService.reverseGeocode(lat, lng);
+      final realAddress = await _mapService.panReverseGeocode(lat, lng);
       if (_isDisposed || reqId != _geocodeRequestId) return;
       _tempPinLocation = LocationPoint(
         latitude: lat,

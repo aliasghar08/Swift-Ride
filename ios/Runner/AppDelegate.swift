@@ -16,7 +16,8 @@ import Network
   private var recognitionTask: SFSpeechRecognitionTask?
   private let networkMonitor = NWPathMonitor()
   private var currentNetworkStatus: String = "wifi"
-  private var locationService: NativeLocationService?
+  private var locationService: IosLocationService?
+  private var geocodingService: IosGeocodingService?
   private var mapService: NativeMapService?
 
   override func application(
@@ -36,8 +37,9 @@ import Network
       let messenger = registrar.messenger()
       setupMethodChannels(binaryMessenger: messenger)
 
-      let locService = NativeLocationService.register(with: messenger)
+      let locService = IosLocationService.register(with: messenger)
       self.locationService = locService
+      self.geocodingService = IosGeocodingService.shared
       self.mapService = NativeMapService.register(with: messenger, locationService: locService)
 
       registrar.register(
@@ -65,7 +67,9 @@ import Network
     networkMonitor.start(queue: queue)
 
     UNUserNotificationCenter.current().delegate = self
+    #if !targetEnvironment(simulator)
     application.registerForRemoteNotifications()
+    #endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -183,9 +187,15 @@ import Network
     notificationChannel.setMethodCallHandler { (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "requestNotificationPermissions":
+        #if targetEnvironment(simulator)
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound, .provisional]) { granted, _ in
+          result(granted)
+        }
+        #else
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
           result(granted)
         }
+        #endif
       case "showNotification":
         guard let args = call.arguments as? [String: Any] else { result(false); return }
         let id = args["id"] as? Int ?? 1

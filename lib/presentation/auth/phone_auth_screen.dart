@@ -237,6 +237,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _setError(err);
         },
       );
+    } catch (e) {
+      if (mounted) {
+        _setError(e.toString());
+      }
     } finally {
       if (mounted) {
         setState(() => _isGoogleLoading = false);
@@ -263,6 +267,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _setError(err);
         },
       );
+    } catch (e) {
+      if (mounted) {
+        _setError(e.toString());
+      }
     } finally {
       if (mounted) {
         setState(() => _isAppleLoading = false);

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -9,8 +10,23 @@ import 'package:swiftride/services/location_service.dart';
 
 import '../core/constants/app_constants.dart';
 import '../core/utils/distance_calculator.dart';
+import '../core/utils/geohash_util.dart';
 import 'coordinate_parser.dart';
 import 'polyline_service.dart';
+
+class ValidatedAddressResult {
+  final String formattedAddress;
+  final String granularity; // e.g. PREMISE, SUB_PREMISE
+  final bool isComplete;
+  final LatLng? coordinates;
+
+  const ValidatedAddressResult({
+    required this.formattedAddress,
+    required this.granularity,
+    this.isComplete = false,
+    this.coordinates,
+  });
+}
 
 class PlaceSuggestion {
   final String placeId;
@@ -391,8 +407,111 @@ class MapService {
   static MapService get instance => _instance;
   MapService._internal();
 
+  /// Centralized Google Maps API key for direct Google Places & Geocoding REST calls.
+  /// On iOS & Android, uses the working key with Places API (New) enabled.
+  static String get googleMapsApiKey => 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+
   /// In-memory cache for reverse-geocoded addresses keyed by lat/lng rounded to 4 decimals (~11m).
   static final Map<String, String> _reverseGeocodeCache = <String, String>{};
+
+  /// Enforces geographic ground-truth consistency. If [candidateCity] is > 45km
+  /// away from [lat, lng], it is quarantined and replaced with the authoritative nearest city.
+  static String enforceAuthoritativeCity(double lat, double lng, String? candidateCity) {
+    final nearest = CoordinateParser.findNearestCity(lat, lng);
+    if (candidateCity == null || candidateCity.trim().isEmpty) {
+      return nearest.city;
+    }
+    final cleanCandidate = candidateCity.trim().toLowerCase();
+    final cityCoords = CoordinateParser.pakistanCities[cleanCandidate];
+    if (cityCoords != null) {
+      final dLat = (lat - cityCoords.lat) * 111.0;
+      final dLng = (lng - cityCoords.lng) * 96.0;
+      final distKm = math.sqrt(dLat * dLat + dLng * dLng);
+      if (distKm > 45.0) {
+        debugPrint(
+          '[MapService][GeoGuard] Quarantined dirty city "$candidateCity" '
+          '(${distKm.toStringAsFixed(1)}km away) -> enforced authoritative "${nearest.city}"',
+        );
+        return nearest.city;
+      }
+    }
+    return candidateCity.trim();
+  }
+
+  /// Sanitizes any resolved address string with GeoGuard to ensure no distant quarantined
+  /// city name (>45km away) or foreign postal code leaks through free-text fields.
+  static String sanitizeAddressWithGeoGuard(double lat, double lng, String address) {
+    final nearest = CoordinateParser.findNearestCity(lat, lng);
+    String sanitized = address;
+    for (final entry in CoordinateParser.pakistanCities.entries) {
+      if (entry.key == nearest.city.toLowerCase()) continue;
+      final dLat = (lat - entry.value.lat) * 111.0;
+      final dLng = (lng - entry.value.lng) * 96.0;
+      final distKm = math.sqrt(dLat * dLat + dLng * dLng);
+      if (distKm > 45.0) {
+        final regex = RegExp('\\b${RegExp.escape(entry.key)}\\b', caseSensitive: false);
+        if (regex.hasMatch(sanitized)) {
+          debugPrint(
+            '[MapService][GeoGuard] Sanitized distant city "${entry.key}" '
+            '(${distKm.toStringAsFixed(1)}km away) -> replaced with "${nearest.city}"',
+          );
+          sanitized = sanitized.replaceAll(regex, nearest.city);
+        }
+      }
+    }
+    return sanitized
+        .replaceAll(RegExp(r'\bNaya Shehar\b', caseSensitive: false), nearest.city)
+        .replaceAll(RegExp(r'^\s*\d{5},?\s*'), '')
+        .replaceAll(RegExp(r',\s*\d{5}\b'), '')
+        .replaceAll(RegExp(r'\b\d{5}\b'), '')
+        .replaceAll(RegExp(r',\s*Pakistan$', caseSensitive: false), '')
+        .replaceAll(RegExp(r',\s*Block,\s*', caseSensitive: false), ', ')
+        .replaceAll(RegExp(r'\bBlock,\s*', caseSensitive: false), '')
+        .replaceAll(RegExp(r'Satellite Town Block A Satellite Town', caseSensitive: false), 'Satellite Town Block A')
+        .replaceAll(RegExp(r'Satellite Block A Town', caseSensitive: false), 'Satellite Town Block A')
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e.toLowerCase() != 'block')
+        .join(', ')
+        .trim();
+  }
+
+  static String toTitleCase(String text) {
+    if (text.isEmpty) return text;
+    return text.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      if (word.toUpperCase() == word && word.length <= 4) return word;
+      if (word.contains('-')) {
+        return word.split('-').map((part) => toTitleCase(part)).join('-');
+      }
+      return '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}';
+    }).join(' ');
+  }
+
+  static String cleanSublocalityRepetitions(String raw) {
+    return raw
+        .replaceAll(RegExp(r'Satellite Town Block A Satellite Town', caseSensitive: false), 'Satellite Town Block A')
+        .replaceAll(RegExp(r'Satellite Block A Town', caseSensitive: false), 'Satellite Town Block A')
+        .trim();
+  }
+
+  /// Safely stores an address in cache only if it is not a bare single-word city or placeholder.
+  static void _cacheIfGranular(String cacheKey, String address) {
+    final trimmed = address.trim();
+    if (trimmed.isEmpty ||
+        trimmed.startsWith('Location (') ||
+        trimmed.startsWith('Pinned Spot') ||
+        trimmed.startsWith('Coordinates:')) {
+      return;
+    }
+    // Never cache single-word broad cities (like "Jhang") so subsequent retries can resolve street/plot detail
+    final isSingleWordCity = !trimmed.contains(',') &&
+        CoordinateParser.pakistanCities.containsKey(trimmed.toLowerCase());
+    if (isSingleWordCity) {
+      return;
+    }
+    _reverseGeocodeCache[cacheKey] = trimmed;
+  }
 
 
 
@@ -483,12 +602,20 @@ class MapService {
         : (getComp('establishment').isNotEmpty ? getComp('establishment') : getComp('landmark'));
     final route = getComp('route');
     final subloc2 = getComp('sublocality_level_2');
-    final sublocality = getComp('sublocality_level_1').isNotEmpty
+    final subloc1 = getComp('sublocality_level_1').isNotEmpty
         ? getComp('sublocality_level_1')
         : (getComp('sublocality').isNotEmpty ? getComp('sublocality') : getComp('neighborhood'));
-    final locality = getComp('locality').isNotEmpty
+    var locality = getComp('locality').isNotEmpty
         ? getComp('locality')
         : getComp('administrative_area_level_2');
+
+    final geom = best['geometry'] as Map?;
+    final locMap = geom?['location'] as Map?;
+    final pLat = (locMap?['lat'] as num?)?.toDouble();
+    final pLng = (locMap?['lng'] as num?)?.toDouble();
+    if (pLat != null && pLng != null) {
+      locality = enforceAuthoritativeCity(pLat, pLng, locality);
+    }
 
     final rawFormatted = ((best['formatted_address'] as String?) ?? '')
         .replaceAll(RegExp(r',\s*Pakistan$', caseSensitive: false), '')
@@ -496,11 +623,16 @@ class MapService {
         .trim();
 
     final parts = <String>[];
-    void addPart(String candidate) {
+    void addPart(String candidate, {bool isLocality = false}) {
       final clean = candidate.trim();
       if (clean.isEmpty) return;
       if (RegExp(r'^[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,5}$').hasMatch(clean)) return;
       final lower = clean.toLowerCase();
+      if (isLocality) {
+        if (parts.isNotEmpty && parts.last.toLowerCase() == lower) return;
+        parts.add(clean);
+        return;
+      }
       if (parts.any((existing) =>
           existing.toLowerCase() == lower || existing.toLowerCase().contains(lower))) {
         return;
@@ -515,23 +647,30 @@ class MapService {
     }
 
     if (streetNumber.isNotEmpty) {
-      final isPureNum = RegExp(r'^\d+[A-Za-z]?(-[A-Za-z0-9]+)?$').hasMatch(streetNumber);
+      final cleanNumber = streetNumber.trim();
+      final isPureNum = RegExp(r'^\d+\s*[A-Za-z]?(-[A-Za-z0-9]+)?$').hasMatch(cleanNumber);
       final hasPrefix = RegExp(
         r'^(plot|house|shop|flat|suite|unit|street|st|block|sector)\b',
         caseSensitive: false,
-      ).hasMatch(streetNumber);
-      addPart(isPureNum && !hasPrefix ? 'Plot $streetNumber' : streetNumber);
+      ).hasMatch(cleanNumber);
+      addPart(isPureNum && !hasPrefix ? 'Plot $cleanNumber' : cleanNumber);
     }
     if (subpremise.isNotEmpty) {
-      final isPureNum = RegExp(r'^\d+[A-Za-z]?$').hasMatch(subpremise);
-      addPart(isPureNum ? 'Unit $subpremise' : subpremise);
+      final cleanSubpremise = subpremise.trim();
+      final isPureNum = RegExp(r'^\d+\s*[A-Za-z]?$').hasMatch(cleanSubpremise);
+      addPart(isPureNum ? 'Unit $cleanSubpremise' : cleanSubpremise);
     }
     if (premise.isNotEmpty) addPart(premise);
-    if (poi.isNotEmpty) addPart(poi);
-    if (route.isNotEmpty) addPart(route);
-    if (subloc2.isNotEmpty) addPart(subloc2);
-    if (sublocality.isNotEmpty) addPart(sublocality);
-    if (locality.isNotEmpty) addPart(locality);
+    if (poi.isNotEmpty && poi.toLowerCase() != locality.toLowerCase()) addPart(poi);
+    if (route.isNotEmpty && route.toLowerCase() != 'block') addPart(toTitleCase(route));
+
+    if (subloc2.isNotEmpty && !subloc1.toLowerCase().contains(subloc2.toLowerCase())) {
+      addPart(toTitleCase(cleanSublocalityRepetitions(subloc2)));
+    }
+    if (subloc1.isNotEmpty) {
+      addPart(toTitleCase(cleanSublocalityRepetitions(subloc1)));
+    }
+    if (locality.isNotEmpty) addPart(toTitleCase(locality), isLocality: true);
 
     if (parts.isNotEmpty &&
         (streetNumber.isNotEmpty ||
@@ -551,7 +690,11 @@ class MapService {
         : (rawFormatted.isNotEmpty ? rawFormatted : (best['formatted_address'] as String? ?? ''));
   }
 
-  String _buildPreciseAddressFromPlacesPlace(Map<dynamic, dynamic> place) {
+  String _buildPreciseAddressFromPlacesPlace(
+    Map<dynamic, dynamic> place, {
+    double? userLat,
+    double? userLng,
+  }) {
     final rawFormatted = ((place['formattedAddress'] as String?) ?? '')
         .replaceAll(RegExp(r',\s*Pakistan$', caseSensitive: false), '')
         .replaceAll(RegExp(r'^[A-Za-z0-9]{4,8}\+[A-Za-z0-9]{2,5},?\s*'), '')
@@ -591,9 +734,21 @@ class MapService {
     final subloc1 = getComp('sublocality_level_1').isNotEmpty
         ? getComp('sublocality_level_1')
         : (getComp('sublocality').isNotEmpty ? getComp('sublocality') : getComp('neighborhood'));
-    final locality = getComp('locality').isNotEmpty
+    var locality = getComp('locality').isNotEmpty
         ? getComp('locality')
         : getComp('administrative_area_level_2');
+
+    // Apply GeoGuard check if coordinates are available
+    if (userLat != null && userLng != null) {
+      locality = enforceAuthoritativeCity(userLat, userLng, locality);
+    } else {
+      final locMap = place['location'] as Map?;
+      final pLat = (locMap?['latitude'] as num?)?.toDouble() ?? (locMap?['lat'] as num?)?.toDouble();
+      final pLng = (locMap?['longitude'] as num?)?.toDouble() ?? (locMap?['lng'] as num?)?.toDouble();
+      if (pLat != null && pLng != null) {
+        locality = enforceAuthoritativeCity(pLat, pLng, locality);
+      }
+    }
 
     // Filter out generic plus code from displayName
     final isNamePlusCode =
@@ -648,10 +803,18 @@ class MapService {
     if (poi.isNotEmpty) addPart(poi);
     if (effectiveName.isNotEmpty) addPart(effectiveName);
     if (landmark.isNotEmpty) addPart(landmark);
-    if (route.isNotEmpty) addPart(route);
-    if (subloc2.isNotEmpty) addPart(subloc2);
-    if (subloc1.isNotEmpty) addPart(subloc1);
-    if (locality.isNotEmpty) addPart(locality, isLocality: true);
+    String neighborhood = subloc1;
+    if (subloc2.isNotEmpty) {
+      if (neighborhood.isEmpty) {
+        neighborhood = subloc2;
+      } else if (!neighborhood.toLowerCase().contains(subloc2.toLowerCase())) {
+        neighborhood = '$neighborhood $subloc2';
+      }
+    }
+
+    if (route.isNotEmpty && route.toLowerCase() != 'block') addPart(toTitleCase(route));
+    if (neighborhood.isNotEmpty) addPart(toTitleCase(cleanSublocalityRepetitions(neighborhood)));
+    if (locality.isNotEmpty) addPart(toTitleCase(locality), isLocality: true);
 
     if (parts.isNotEmpty &&
         (streetNumber.isNotEmpty ||
@@ -672,73 +835,76 @@ class MapService {
   }
 
   Future<String?> _fetchPlacesNearbyReverseGeocode(double lat, double lng) async {
-    // Search in progressive radii (350m for tight neighborhood accuracy, 700m for broader suburban coverage)
-    for (final radius in const [350.0, 700.0]) {
-      HttpClient? client;
-      try {
-        client = HttpClient();
-        client.connectionTimeout = const Duration(seconds: 3);
-        final url = Uri.parse('https://places.googleapis.com/v1/places:searchNearby');
-        final req = await client.postUrl(url).timeout(const Duration(seconds: 3));
-        const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
-        req.headers.set('Content-Type', 'application/json');
-        req.headers.set('X-Goog-Api-Key', apiKey);
-        req.headers.set(
-          'X-Goog-FieldMask',
-          'places.displayName,places.formattedAddress,places.addressComponents',
-        );
-        if (Platform.isIOS) {
-          req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
-        } else if (Platform.isAndroid) {
-          req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
-        }
+    // Single low-latency 250m query with rankPreference: DISTANCE resolves nearest place in <500ms
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 3);
+      final url = Uri.parse('https://places.googleapis.com/v1/places:searchNearby');
+      final req = await client.postUrl(url).timeout(const Duration(seconds: 3));
+      final apiKey = googleMapsApiKey;
+      req.headers.set('Content-Type', 'application/json');
+      req.headers.set('X-Goog-Api-Key', apiKey);
+      req.headers.set(
+        'X-Goog-FieldMask',
+        'places.displayName,places.formattedAddress,places.location,places.addressComponents',
+      );
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
 
-        final body = jsonEncode({
-          'locationRestriction': {
-            'circle': {
-              'center': {'latitude': lat, 'longitude': lng},
-              'radius': radius,
-            },
+      final body = jsonEncode({
+        'locationRestriction': {
+          'circle': {
+            'center': {'latitude': lat, 'longitude': lng},
+            'radius': 250.0,
           },
-          'maxResultCount': 8,
-        });
-        req.write(body);
-        final resp = await req.close().timeout(const Duration(seconds: 3));
-        if (resp.statusCode == 200) {
-          final respBody = await resp
-              .transform(utf8.decoder)
-              .join()
-              .timeout(const Duration(seconds: 3));
-          final data = jsonDecode(respBody) as Map<String, dynamic>;
-          final places = data['places'] as List?;
-          if (places != null && places.isNotEmpty) {
-            String? bestAddress;
-            for (final p in places) {
-              if (p is Map) {
-                final formatted = _buildPreciseAddressFromPlacesPlace(p);
-                if (formatted.isNotEmpty &&
-                    !formatted.toLowerCase().startsWith('location (') &&
-                    !formatted.toLowerCase().startsWith('pinned spot')) {
-                  final segments = formatted.split(',').map((s) => s.trim()).toList();
-                  // An address with 2+ segments (e.g. "Police Lines, Jhang Sadar, Jhang" or "Gojra Road, Jhang")
-                  // contains specific street, colony, or establishment information.
-                  if (segments.length >= 2) {
-                    return formatted;
-                  }
-                  bestAddress ??= formatted;
+        },
+        'rankPreference': 'DISTANCE',
+        'maxResultCount': 8,
+      });
+      req.write(body);
+      final resp = await req.close().timeout(const Duration(seconds: 3));
+      if (resp.statusCode == 200) {
+        final respBody = await resp
+            .transform(utf8.decoder)
+            .join()
+            .timeout(const Duration(seconds: 3));
+        final data = jsonDecode(respBody) as Map<String, dynamic>;
+        final places = data['places'] as List?;
+        if (places != null && places.isNotEmpty) {
+          String? candidate;
+          for (final p in places) {
+            if (p is Map) {
+              final formatted = _buildPreciseAddressFromPlacesPlace(
+                p,
+                userLat: lat,
+                userLng: lng,
+              );
+              if (formatted.isNotEmpty &&
+                  !formatted.toLowerCase().startsWith('location (') &&
+                  !formatted.toLowerCase().startsWith('pinned spot')) {
+                // If this place is an exact plot, premise, or named establishment, return immediately!
+                if (NativeMapService.isGranularAddress(formatted)) {
+                  return formatted;
+                }
+                if (candidate == null && formatted.contains(',')) {
+                  candidate = formatted;
                 }
               }
             }
-            if (bestAddress != null && bestAddress.isNotEmpty) {
-              return bestAddress;
-            }
+          }
+          if (candidate != null) {
+            return candidate;
           }
         }
-      } catch (e) {
-        debugPrint('[MapService] Places API New searchNearby error: $e');
-      } finally {
-        client?.close();
       }
+    } catch (e) {
+      debugPrint('[MapService] Places API New searchNearby error: $e');
+    } finally {
+      client?.close();
     }
     return null;
   }
@@ -754,7 +920,7 @@ class MapService {
       client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places:searchText');
       final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
       req.headers.set(
@@ -793,7 +959,11 @@ class MapService {
 
           if (resLat != null && resLng != null) {
             final nearbyAddr = await _fetchPlacesNearbyReverseGeocode(resLat, resLng);
-            final builtAddr = _buildPreciseAddressFromPlacesPlace(first);
+            final builtAddr = _buildPreciseAddressFromPlacesPlace(
+              first,
+              userLat: resLat,
+              userLng: resLng,
+            );
             final finalAddr = (nearbyAddr != null &&
                     nearbyAddr.isNotEmpty &&
                     nearbyAddr.length > builtAddr.length &&
@@ -820,9 +990,9 @@ class MapService {
     try {
       client = HttpClient();
       client.connectionTimeout = const Duration(milliseconds: 2500);
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       final url = Uri.parse(
-        'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&key=$apiKey',
+        'https://maps.googleapis.com/maps/api/geocode/json?latlng=$lat,$lng&extra_computations=ADDRESS_DESCRIPTORS&key=$apiKey',
       );
       final req = await client.getUrl(url).timeout(const Duration(milliseconds: 2500));
       if (Platform.isIOS) {
@@ -878,7 +1048,7 @@ class MapService {
       try {
         final client = HttpClient();
         client.connectionTimeout = const Duration(seconds: 4);
-        const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+        final apiKey = googleMapsApiKey;
         final url = Uri.parse(
           'https://maps.googleapis.com/maps/api/geocode/json?address=${Uri.encodeComponent(cleanQuery)}&key=$apiKey',
         );
@@ -951,8 +1121,12 @@ class MapService {
       _buildPrecisePropertyAddress(results);
 
   /// Exposed for unit testing of Google Places API (New) response parsing.
-  String buildPreciseAddressFromPlacesPlaceForTest(Map<dynamic, dynamic> place) =>
-      _buildPreciseAddressFromPlacesPlace(place);
+  String buildPreciseAddressFromPlacesPlaceForTest(
+    Map<dynamic, dynamic> place, {
+    double? userLat,
+    double? userLng,
+  }) =>
+      _buildPreciseAddressFromPlacesPlace(place, userLat: userLat, userLng: userLng);
 
   Future<String> reverseGeocode(double lat, double lng) async {
     // 5 decimal places (~1.1m precision) ensures adjacent plots/houses do not collide in cache
@@ -962,17 +1136,78 @@ class MapService {
         cached.isNotEmpty &&
         !cached.startsWith('Location (') &&
         !cached.startsWith('Pinned Spot')) {
-      final isSingleBroadCity = !cached.contains(',') &&
-          CoordinateParser.pakistanCities.containsKey(cached.toLowerCase().trim());
+      final sanitized = sanitizeAddressWithGeoGuard(lat, lng, cached);
+      final isSingleBroadCity = !sanitized.contains(',') &&
+          CoordinateParser.pakistanCities.containsKey(sanitized.toLowerCase().trim());
       if (!isSingleBroadCity) {
-        return cached;
+        return sanitized;
       }
     }
 
     String? broadFallback;
 
-    // 1. TOP PRIORITY: Google Places API (New) Nearby Search
-    // Queries official Google Maps establishments, routes, and premises with progressive radii
+    // 1. On iOS, NativeMapService runs the dedicated native IosGeocodingService pipeline
+    // (Tier 1 Google Places searchNearby + Direct Geocoding via GMSApiKey, Tier 2 Nominatim zoom=18, Tier 3 CLGeocoder, Tier 4 Plus Code)
+    if (Platform.isIOS) {
+      try {
+        final detailed = await NativeMapService.instance
+            .reverseGeocodeDetailed(lat, lng)
+            .timeout(const Duration(milliseconds: 4000));
+        if (detailed != null && detailed.formattedAddress.isNotEmpty) {
+          final trimmed = detailed.formattedAddress.trim();
+          if (detailed.isGranular || NativeMapService.isGranularAddress(trimmed)) {
+            _cacheIfGranular(cacheKey, trimmed);
+            return trimmed;
+          }
+          broadFallback = trimmed;
+        } else {
+          final nativeIosAddr = await NativeMapService.instance
+              .reverseGeocode(lat, lng)
+              .timeout(const Duration(milliseconds: 3000));
+          if (nativeIosAddr != null &&
+              nativeIosAddr.trim().isNotEmpty &&
+              !nativeIosAddr.startsWith('Location (') &&
+              !nativeIosAddr.startsWith('Pinned Spot')) {
+            final trimmed = nativeIosAddr.trim();
+            if (NativeMapService.isGranularAddress(trimmed)) {
+              _cacheIfGranular(cacheKey, trimmed);
+              return trimmed;
+            }
+            broadFallback = trimmed;
+          }
+        }
+      } catch (e) {
+        debugPrint('[MapService] iOS native geocoding error: $e');
+      }
+    }
+
+    // 2. Direct Official Google Geocoding (Priority 1 for Rooftop Plot & Street Resolver)
+    // Queries Geocoding API with extra_computations=ADDRESS_DESCRIPTORS
+    try {
+      final directGoogle = await _fetchGoogleReverseGeocode(lat, lng)
+          .timeout(const Duration(milliseconds: 2500));
+      if (directGoogle != null &&
+          directGoogle.trim().isNotEmpty &&
+          !directGoogle.startsWith('Location (') &&
+          !directGoogle.startsWith('Pinned Spot')) {
+        final trimmedGoogle = directGoogle.trim();
+        // If Google Geocoding returned an exact plot/premise/house number, it takes absolute Priority 1!
+        if (NativeMapService.isGranularAddress(trimmedGoogle) &&
+            (trimmedGoogle.toLowerCase().contains('plot') ||
+                trimmedGoogle.toLowerCase().contains('house') ||
+                trimmedGoogle.toLowerCase().contains('unit') ||
+                trimmedGoogle.toLowerCase().contains('flat'))) {
+          _cacheIfGranular(cacheKey, trimmedGoogle);
+          return trimmedGoogle;
+        }
+        if (NativeMapService.isGranularAddress(trimmedGoogle)) {
+          broadFallback ??= trimmedGoogle;
+        }
+      }
+    } catch (_) {}
+
+    // 3. Google Places API (New) Nearby Search
+    // Resolves micro-landmarks, named buildings, and geotagged places with progressive radii
     try {
       final nearby = await _fetchPlacesNearbyReverseGeocode(lat, lng)
           .timeout(const Duration(milliseconds: 3200));
@@ -982,7 +1217,7 @@ class MapService {
           !nearby.startsWith('Pinned Spot')) {
         final trimmedNearby = nearby.trim();
         if (NativeMapService.isGranularAddress(trimmedNearby) || trimmedNearby.contains(',')) {
-          _reverseGeocodeCache[cacheKey] = trimmedNearby;
+          _cacheIfGranular(cacheKey, trimmedNearby);
           return trimmedNearby;
         }
         broadFallback = trimmedNearby;
@@ -991,44 +1226,7 @@ class MapService {
       debugPrint('[MapService] Google Places nearby reverseGeocode error: $e');
     }
 
-    // 2. FAST-PATH: Native OS Geocoder (Android Geocoder / iOS CLGeocoder)
-    // Only return immediately if it includes a granular plot, house, street, or premise;
-    // otherwise retain as a fallback.
-    try {
-      final nativeAddr = await NativeMapService.instance
-          .reverseGeocode(lat, lng)
-          .timeout(const Duration(milliseconds: 2500));
-      if (nativeAddr != null &&
-          nativeAddr.trim().isNotEmpty &&
-          !nativeAddr.startsWith('Location (') &&
-          !nativeAddr.startsWith('Pinned Spot')) {
-        final trimmedNative = nativeAddr.trim();
-        if (NativeMapService.isGranularAddress(trimmedNative)) {
-          _reverseGeocodeCache[cacheKey] = trimmedNative;
-          return trimmedNative;
-        }
-        broadFallback ??= trimmedNative;
-      }
-    } catch (_) {}
-
-    // 3. Direct Google Geocoding API with rooftop & plot/premise precision
-    try {
-      final directGoogle = await _fetchGoogleReverseGeocode(lat, lng)
-          .timeout(const Duration(milliseconds: 2500));
-      if (directGoogle != null &&
-          directGoogle.trim().isNotEmpty &&
-          !directGoogle.startsWith('Location (') &&
-          !directGoogle.startsWith('Pinned Spot')) {
-        final trimmedGoogle = directGoogle.trim();
-        if (NativeMapService.isGranularAddress(trimmedGoogle)) {
-          _reverseGeocodeCache[cacheKey] = trimmedGoogle;
-          return trimmedGoogle;
-        }
-        broadFallback ??= trimmedGoogle;
-      }
-    } catch (_) {}
-
-    // 4. Firebase Functions (with server-side buildPrecisePropertyAddress)
+    // 3. Authenticated Firebase Cloud Functions (with server-side buildPrecisePropertyAddress)
     if (Firebase.apps.isNotEmpty) {
       try {
         if (FirebaseAuth.instance.currentUser == null) {
@@ -1053,12 +1251,34 @@ class MapService {
             address.trim().isNotEmpty &&
             !address.startsWith('Pinned Spot') &&
             !address.startsWith('Location (')) {
-          _reverseGeocodeCache[cacheKey] = address.trim();
-          return address.trim();
+          final trimmed = address.trim();
+          _cacheIfGranular(cacheKey, trimmed);
+          return trimmed;
         }
       } catch (e) {
         debugPrint('[MapService] Firebase Functions reverseGeocode error: $e');
       }
+    }
+
+    // 4. Native OS Geocoder (Android Geocoder) as a fallback layer
+    // (On Android, calls NativeLocationService.kt -> android.location.Geocoder)
+    if (!Platform.isIOS) {
+      try {
+        final nativeAddr = await NativeMapService.instance
+            .reverseGeocode(lat, lng)
+            .timeout(const Duration(milliseconds: 2500));
+        if (nativeAddr != null &&
+            nativeAddr.trim().isNotEmpty &&
+            !nativeAddr.startsWith('Location (') &&
+            !nativeAddr.startsWith('Pinned Spot')) {
+          final trimmedNative = nativeAddr.trim();
+          if (NativeMapService.isGranularAddress(trimmedNative)) {
+            _cacheIfGranular(cacheKey, trimmedNative);
+            return trimmedNative;
+          }
+          broadFallback ??= trimmedNative;
+        }
+      } catch (_) {}
     }
 
     // 5. OpenStreetMap Nominatim reverse geocode with 3s timeout and bilingual English/Urdu tagging
@@ -1112,7 +1332,7 @@ class MapService {
 
           if (parts.isNotEmpty) {
             final formatted = parts.join(', ');
-            _reverseGeocodeCache[cacheKey] = formatted;
+            _cacheIfGranular(cacheKey, formatted);
             return formatted;
           }
         }
@@ -1121,7 +1341,7 @@ class MapService {
           final segments =
               displayName.split(',').map((s) => s.trim()).take(3).join(', ');
           if (segments.isNotEmpty) {
-            _reverseGeocodeCache[cacheKey] = segments;
+            _cacheIfGranular(cacheKey, segments);
             return segments;
           }
         }
@@ -1136,14 +1356,288 @@ class MapService {
         broadFallback.isNotEmpty &&
         !broadFallback.startsWith('Location (') &&
         !broadFallback.startsWith('Pinned Spot')) {
-      _reverseGeocodeCache[cacheKey] = broadFallback;
+      if (!NativeMapService.isGranularAddress(broadFallback)) {
+        final shortPlus = GeohashUtil.encodePlusCodeShort(lat, lng);
+        final anchored = '$shortPlus, $broadFallback';
+        _cacheIfGranular(cacheKey, anchored);
+        return anchored;
+      }
+      _cacheIfGranular(cacheKey, broadFallback);
       return broadFallback;
     }
 
     // 6. ROBUST OFFLINE GEOTAG: High-accuracy locality and Plus Code
-    // (Never return raw raw coordinates or "Location (x, y)")
+    // (Never return raw coordinates or "Location (x, y)")
     final robustOfflineGeotag = CoordinateParser.formatOfflineGeotag(lat, lng);
     return robustOfflineGeotag;
+  }
+
+  /// Performs structured reverse geocoding via native platforms.
+  Future<NativeGeocodedAddress?> reverseGeocodeDetailed(double lat, double lng) async {
+    if (Platform.isIOS) {
+      try {
+        final detailed = await NativeMapService.instance.reverseGeocodeDetailed(lat, lng);
+        if (detailed != null && detailed.formattedAddress.isNotEmpty) {
+          final sanitized = sanitizeAddressWithGeoGuard(lat, lng, detailed.formattedAddress);
+          return NativeGeocodedAddress(
+            formattedAddress: sanitized,
+            title: detailed.title,
+            subtitle: detailed.subtitle,
+            plotNumber: detailed.plotNumber,
+            street: detailed.street,
+            neighborhood: detailed.neighborhood,
+            city: enforceAuthoritativeCity(lat, lng, detailed.city),
+            provider: detailed.provider,
+            isGranular: detailed.isGranular,
+            confidence: detailed.confidence,
+            distanceMeters: detailed.distanceMeters,
+            quarantinedCity: detailed.quarantinedCity,
+          );
+        }
+      } catch (_) {}
+    }
+    final formatted = await reverseGeocode(lat, lng);
+    return NativeGeocodedAddress(
+      formattedAddress: formatted,
+      title: formatted,
+      city: enforceAuthoritativeCity(lat, lng, null),
+      isGranular: NativeMapService.isGranularAddress(formatted),
+    );
+  }
+
+  /// Snaps off-road/indoor pins to the nearest drivable road segment using Google Roads API.
+  /// Resolves the approach street name via reverse geocoding placeId if available.
+  Future<({double lat, double lng, String? roadName})?> snapToNearestRoad(
+    double lat,
+    double lng,
+  ) async {
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2500);
+      final apiKey = googleMapsApiKey;
+      final url = Uri.parse(
+        'https://roads.googleapis.com/v1/nearestRoads?points=$lat,$lng&key=$apiKey',
+      );
+      final req = await client.getUrl(url).timeout(const Duration(milliseconds: 2500));
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+      final resp = await req.close().timeout(const Duration(milliseconds: 2500));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final points = data['snappedPoints'] as List?;
+        if (points != null && points.isNotEmpty) {
+          final first = points.first as Map<String, dynamic>;
+          final loc = first['location'] as Map<String, dynamic>?;
+          final sLat = (loc?['latitude'] as num?)?.toDouble() ?? lat;
+          final sLng = (loc?['longitude'] as num?)?.toDouble() ?? lng;
+          final placeId = first['placeId'] as String?;
+
+          String? roadName;
+          if (placeId != null && placeId.isNotEmpty) {
+            roadName = await _fetchRoadNameFromPlaceId(placeId);
+          }
+
+          return (lat: sLat, lng: sLng, roadName: roadName);
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Roads API nearestRoads error: $e');
+    } finally {
+      client?.close();
+    }
+    return null;
+  }
+
+  Future<String?> _fetchRoadNameFromPlaceId(String placeId) async {
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2000);
+      final apiKey = googleMapsApiKey;
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/geocode/json?place_id=$placeId&key=$apiKey',
+      );
+      final req = await client.getUrl(url).timeout(const Duration(milliseconds: 2000));
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+      final resp = await req.close().timeout(const Duration(milliseconds: 2000));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final results = data['results'] as List?;
+        if (results != null && results.isNotEmpty) {
+          final first = results.first as Map;
+          final comps = (first['address_components'] as List?)?.whereType<Map>().toList() ?? [];
+          for (final c in comps) {
+            final types = (c['types'] as List?)?.map((t) => t.toString()).toList() ?? [];
+            if (types.contains('route')) {
+              final name = ((c['long_name'] as String?) ?? (c['short_name'] as String?) ?? '').trim();
+              if (name.isNotEmpty) return name;
+            }
+          }
+        }
+      }
+    } catch (_) {
+    } finally {
+      client?.close();
+    }
+    return null;
+  }
+
+  /// Snaps active vehicle breadcrumb GPS traces to the physical road network using Google Roads API.
+  /// Automatically interpolates missing geometry and enforces the 100-point API limit.
+  Future<List<LatLng>> snapBreadcrumbsToRoads(List<LatLng> rawPoints) async {
+    if (rawPoints.length < 2) return rawPoints;
+
+    // Google Roads API enforces a maximum of 100 points per request
+    final cappedPoints = rawPoints.length > 100 ? rawPoints.sublist(rawPoints.length - 100) : rawPoints;
+    final pathParam = cappedPoints.map((p) => '${p.latitude},${p.longitude}').join('|');
+
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 3500);
+      final apiKey = googleMapsApiKey;
+      final url = Uri.parse(
+        'https://roads.googleapis.com/v1/snapToRoads?path=$pathParam&interpolate=true&key=$apiKey',
+      );
+      final req = await client.getUrl(url).timeout(const Duration(milliseconds: 3500));
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+      final resp = await req.close().timeout(const Duration(milliseconds: 3500));
+      if (resp.statusCode == 200) {
+        final body = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(body) as Map<String, dynamic>;
+        final points = data['snappedPoints'] as List?;
+        if (points != null && points.isNotEmpty) {
+          final snapped = <LatLng>[];
+          for (final p in points) {
+            if (p is Map) {
+              final loc = p['location'] as Map?;
+              final pLat = (loc?['latitude'] as num?)?.toDouble();
+              final pLng = (loc?['longitude'] as num?)?.toDouble();
+              if (pLat != null && pLng != null) {
+                snapped.add(LatLng(pLat, pLng));
+              }
+            }
+          }
+          if (snapped.isNotEmpty) {
+            return snapped;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Roads API snapToRoads error: $e');
+    } finally {
+      client?.close();
+    }
+    return rawPoints;
+  }
+
+  /// Normalizes user-typed destination text using Google Address Validation API.
+  /// Only adopts validated corrections if granularity is PREMISE/SUB_PREMISE and passes GeoGuard.
+  /// Returns null for unsupported regions (e.g. PK) or low-confidence results as non-blocking pass-through.
+  Future<ValidatedAddressResult?> validateAddress(
+    String rawAddress, {
+    String regionCode = 'PK',
+    double? nearLat,
+    double? nearLng,
+  }) async {
+    final clean = rawAddress.trim();
+    if (clean.isEmpty) return null;
+
+    HttpClient? client;
+    try {
+      client = HttpClient();
+      client.connectionTimeout = const Duration(milliseconds: 2500);
+      final apiKey = googleMapsApiKey;
+      final url = Uri.parse(
+        'https://addressvalidation.googleapis.com/v1:validateAddress?key=$apiKey',
+      );
+      final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
+      req.headers.set('Content-Type', 'application/json');
+      if (Platform.isIOS) {
+        req.headers.set('X-Ios-Bundle-Identifier', 'com.dartnexuslab.swiftride');
+      } else if (Platform.isAndroid) {
+        req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
+      }
+
+      final body = jsonEncode({
+        'address': {
+          'regionCode': regionCode,
+          'addressLines': [clean],
+        },
+      });
+      req.write(body);
+
+      final resp = await req.close().timeout(const Duration(milliseconds: 2500));
+      if (resp.statusCode == 200) {
+        final respBody = await resp.transform(utf8.decoder).join();
+        final data = jsonDecode(respBody) as Map<String, dynamic>;
+        final result = data['result'] as Map<String, dynamic>?;
+        final verdict = result?['verdict'] as Map<String, dynamic>?;
+        final granularity = (verdict?['validationGranularity'] as String?) ?? '';
+        final isComplete = (verdict?['addressComplete'] as bool?) ?? false;
+
+        // Only adopt if granularity is exact property-level (PREMISE or SUB_PREMISE)
+        if (granularity == 'PREMISE' || granularity == 'SUB_PREMISE') {
+          final addressObj = result?['address'] as Map<String, dynamic>?;
+          final formatted = (addressObj?['formattedAddress'] as String?) ?? '';
+          final geocode = result?['geocode'] as Map<String, dynamic>?;
+          final location = geocode?['location'] as Map<String, dynamic>?;
+          final vLat = (location?['latitude'] as num?)?.toDouble();
+          final vLng = (location?['longitude'] as num?)?.toDouble();
+
+          // GeoGuard distance gate: verify within 45km of user location
+          if (nearLat != null && nearLng != null && vLat != null && vLng != null) {
+            final distKm = DistanceCalculator.haversineDistance(nearLat, nearLng, vLat, vLng);
+            if (distKm > 45.0) {
+              debugPrint('[MapService][AddressValidation] Quarantined distant result ($distKm km away)');
+              return null;
+            }
+          }
+
+          if (formatted.isNotEmpty) {
+            return ValidatedAddressResult(
+              formattedAddress: formatted,
+              granularity: granularity,
+              isComplete: isComplete,
+              coordinates: vLat != null && vLng != null ? LatLng(vLat, vLng) : null,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[MapService] Address Validation API error: $e');
+    } finally {
+      client?.close();
+    }
+    // Non-blocking pass-through
+    return null;
+  }
+
+  /// Map pan reverse geocoding with native cancellation of superseded tasks.
+  Future<String> panReverseGeocode(double lat, double lng) async {
+    if (Platform.isIOS) {
+      try {
+        final detailed = await NativeMapService.instance.panReverseGeocode(lat, lng);
+        if (detailed != null && detailed.formattedAddress.isNotEmpty) {
+          return detailed.formattedAddress;
+        }
+      } catch (_) {}
+    }
+    return reverseGeocode(lat, lng);
   }
 
   Future<List<PlaceSuggestion>> searchPlaces(
@@ -1203,7 +1697,7 @@ class MapService {
       client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places:autocomplete');
       final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
       if (Platform.isIOS) {
@@ -1274,7 +1768,7 @@ class MapService {
       client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places:searchText');
       final req = await client.postUrl(url).timeout(const Duration(milliseconds: 2500));
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
       req.headers.set(
@@ -1412,7 +1906,7 @@ class MapService {
       client.connectionTimeout = const Duration(milliseconds: 2500);
       final url = Uri.parse('https://places.googleapis.com/v1/places/$cleanId');
       final req = await client.getUrl(url).timeout(const Duration(milliseconds: 2500));
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       req.headers.set('X-Goog-Api-Key', apiKey);
       req.headers.set('X-Goog-FieldMask', 'location');
       if (Platform.isIOS) {
@@ -1849,7 +2343,7 @@ class MapService {
       );
       final req = await client.postUrl(url).timeout(const Duration(seconds: 4));
 
-      const apiKey = 'AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE';
+      final apiKey = googleMapsApiKey;
       req.headers.set('Content-Type', 'application/json');
       req.headers.set('X-Goog-Api-Key', apiKey);
       if (Platform.isIOS) {

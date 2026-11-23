@@ -42,10 +42,46 @@ public class NativeMapService: NSObject {
         case "checkLocationPermissions",
              "requestLocationPermissions",
              "getCurrentLocation",
-             "reverseGeocode",
              "startLocationUpdates",
              "stopLocationUpdates":
             locationService.handle(call, result: result)
+
+        case "reverseGeocode":
+            guard let args = call.arguments as? [String: Any],
+                  let lat = args["latitude"] as? Double,
+                  let lng = args["longitude"] as? Double else {
+                result(FlutterError(code: "INVALID_ARGS", message: "latitude and longitude required", details: nil))
+                return
+            }
+            IosGeocodingService.shared.reverseGeocode(latitude: lat, longitude: lng) { formatted in
+                result(formatted)
+            }
+
+        case "reverseGeocodeDetailed":
+            guard let args = call.arguments as? [String: Any],
+                  let lat = args["latitude"] as? Double,
+                  let lng = args["longitude"] as? Double else {
+                result(FlutterError(code: "INVALID_ARGS", message: "latitude and longitude required", details: nil))
+                return
+            }
+            IosGeocodingService.shared.reverseGeocodeDetailed(latitude: lat, longitude: lng) { dict in
+                result(dict)
+            }
+
+        case "panReverseGeocode":
+            guard let args = call.arguments as? [String: Any],
+                  let lat = args["latitude"] as? Double,
+                  let lng = args["longitude"] as? Double else {
+                result(FlutterError(code: "INVALID_ARGS", message: "latitude and longitude required", details: nil))
+                return
+            }
+            IosGeocodingService.shared.panReverseGeocode(latitude: lat, longitude: lng) { dict in
+                result(dict)
+            }
+
+        case "cancelPendingGeocode":
+            IosGeocodingService.shared.cancelPendingGeocode()
+            result(true)
 
         case "animateCamera", "addMarker", "clearMarkers", "setPolyline":
             result(true)

@@ -104,13 +104,17 @@ export function buildPrecisePropertyAddress(results: GeocodeResult[]): {
   };
 
   if (streetNumber) {
-    const formattedNumber = /^\d+[A-Za-z-]?$/.test(streetNumber)
-      ? `Plot ${streetNumber}`
-      : streetNumber;
+    const cleanNum = streetNumber.trim();
+    const hasPrefix = /^(plot|house|flat|unit|shop)\b/i.test(cleanNum);
+    const formattedNumber = (!hasPrefix && /^\d+\s*[A-Za-z-]?$/i.test(cleanNum))
+      ? `Plot ${cleanNum}`
+      : cleanNum;
     addUniquePart(formattedNumber);
   }
   if (subpremise) {
-    addUniquePart(subpremise);
+    const cleanSub = subpremise.trim();
+    const isNum = /^\d+\s*[A-Za-z]?$/i.test(cleanSub);
+    addUniquePart(isNum ? `Unit ${cleanSub}` : cleanSub);
   }
   if (premise) {
     addUniquePart(premise);
@@ -124,11 +128,20 @@ export function buildPrecisePropertyAddress(results: GeocodeResult[]): {
   if (route) {
     addUniquePart(route);
   }
+
+  let neighborhood = sublocality1;
   if (sublocality2) {
-    addUniquePart(sublocality2);
+    if (!neighborhood) {
+      neighborhood = sublocality2;
+    } else if (!neighborhood.toLowerCase().includes(sublocality2.toLowerCase())) {
+      neighborhood = `${neighborhood} ${sublocality2}`;
+    }
   }
-  if (sublocality1) {
-    addUniquePart(sublocality1);
+  if (neighborhood) {
+    const cleanNeighborhood = neighborhood
+      .replace(/Satellite Town Block A Satellite Town/gi, 'Satellite Town Block A')
+      .replace(/Satellite Block A Town/gi, 'Satellite Town Block A');
+    addUniquePart(cleanNeighborhood);
   }
   if (locality) {
     addUniquePart(locality);
@@ -183,7 +196,7 @@ export const reverseGeocode = onCall(
     if (key && !key.includes('placeholder') && !key.includes('your-')) {
       try {
         const url = `https://maps.googleapis.com/maps/api/geocode/json`;
-        const params: Record<string, string> = { key };
+        const params: Record<string, string> = { key, extra_computations: 'ADDRESS_DESCRIPTORS' };
         if (queryAddress) {
           params.address = queryAddress;
         } else {

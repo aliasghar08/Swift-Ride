@@ -60,6 +60,8 @@
 	<string>113634488038-8hsg8je0gp7jbdi2j8ic5cmhnviir3to.apps.googleusercontent.com</string>
 	<key>GMSApiKey</key>
 	<string>AIzaSyCYoOQudTzIwOginG9jXv9itTGUXV6PqME</string>
+	<key>PlacesApiKey</key>
+	<string>AIzaSyAph82ESQ7BZkhIoaGm5BFv5wMfP1qOwqE</string>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>NSUserTrackingUsageDescription</key>

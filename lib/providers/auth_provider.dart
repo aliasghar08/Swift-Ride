@@ -127,7 +127,18 @@ class AuthProvider extends ChangeNotifier {
               (profile.phone.isNotEmpty ||
                   (profile.id.isNotEmpty && !profile.id.startsWith('guest')))) {
             _currentUser = profile;
-            _activeRole = profile.role;
+            final savedRole = await _storage.getString('active_user_role');
+            if (savedRole != null && savedRole.isNotEmpty) {
+              if (savedRole == 'driver') {
+                _activeRole = UserRole.driver;
+              } else if (savedRole == 'admin' && profile.role == UserRole.admin) {
+                _activeRole = UserRole.admin;
+              } else {
+                _activeRole = UserRole.passenger;
+              }
+            } else {
+              _activeRole = profile.role;
+            }
             _persistCurrentUser();
             notifyListeners();
           } else if (user.phoneNumber != null && user.phoneNumber!.isNotEmpty) {
@@ -337,8 +348,6 @@ class AuthProvider extends ChangeNotifier {
 
       if (user == null) {
         // User cancelled flow without error
-        _isLoading = false;
-        notifyListeners();
         return false;
       }
 
@@ -346,17 +355,16 @@ class AuthProvider extends ChangeNotifier {
       _activeRole = user.role;
       _storage.setString('active_user_role', _activeRole.name);
       _persistCurrentUser();
-      _isLoading = false;
-      notifyListeners();
       onSuccess?.call();
       return true;
     } catch (e) {
-      _isLoading = false;
       final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
       _authError = errMsg;
-      notifyListeners();
       onError?.call(errMsg);
       return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -379,8 +387,6 @@ class AuthProvider extends ChangeNotifier {
 
       if (user == null) {
         // User cancelled flow without error
-        _isLoading = false;
-        notifyListeners();
         return false;
       }
 
@@ -388,17 +394,16 @@ class AuthProvider extends ChangeNotifier {
       _activeRole = user.role;
       _storage.setString('active_user_role', _activeRole.name);
       _persistCurrentUser();
-      _isLoading = false;
-      notifyListeners();
       onSuccess?.call();
       return true;
     } catch (e) {
-      _isLoading = false;
       final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();
       _authError = errMsg;
-      notifyListeners();
       onError?.call(errMsg);
       return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 

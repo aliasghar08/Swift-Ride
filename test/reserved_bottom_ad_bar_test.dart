@@ -48,12 +48,12 @@ void main() {
   }
 
   group('ReservedBottomAdBar Tests', () {
-    testWidgets('Hides for unauthenticated users', (tester) async {
+    testWidgets('Shows for unauthenticated users (login / phone auth screen)', (tester) async {
       final auth = AuthProvider();
       await tester.pumpWidget(buildTestHost(auth: auth));
       await tester.pump();
 
-      expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsNothing);
+      expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsOneWidget);
     });
 
     testWidgets('Hides for Admin role', (tester) async {
@@ -88,6 +88,39 @@ void main() {
       expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsOneWidget);
       final size = tester.getSize(find.byKey(const Key('reserved_bottom_ad_bar')));
       expect(size.height, 60.0);
+    });
+
+    testWidgets('Shows for Rider role even during active ride / driving', (tester) async {
+      final user = AppUser(
+        id: 'rider_1',
+        phone: '+923001234567',
+        fullName: 'Rider User',
+        role: UserRole.rider,
+        createdAt: DateTime.now(),
+      );
+      final auth = AuthProvider(initialUser: user, initialRole: UserRole.rider);
+
+      final activeRide = RideModel(
+        id: 'ride_1',
+        riderId: 'rider_1',
+        driverId: 'driver_1',
+        pickup: const LocationPoint(latitude: 31.0, longitude: 72.0, address: 'Pickup'),
+        dropoff: const LocationPoint(latitude: 31.1, longitude: 72.1, address: 'Dropoff'),
+        offeredFare: 200,
+        suggestedFare: 200,
+        distanceKm: 5.0,
+        durationMin: 15,
+        pin: '1234',
+        status: RideStatus.inProgress,
+        createdAt: DateTime.now(),
+      );
+      final ride = RideProvider(initialRide: activeRide);
+
+      await tester.pumpWidget(buildTestHost(auth: auth, ride: ride));
+      await tester.pump();
+
+      // Passengers always see ads even while driving
+      expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsOneWidget);
     });
 
     testWidgets('Shows for Driver when Offline and no active ride', (tester) async {
@@ -127,7 +160,7 @@ void main() {
       expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsOneWidget);
     });
 
-    testWidgets('Hides for Driver when Online', (tester) async {
+    testWidgets('Shows for Driver when Online and idle (no active ride)', (tester) async {
       final user = AppUser(
         id: 'driver_1',
         phone: '+923001234567',
@@ -161,10 +194,11 @@ void main() {
       await tester.pumpWidget(buildTestHost(auth: auth, driver: driver, ride: ride));
       await tester.pump();
 
-      expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsNothing);
+      // Driver waiting for rides sees ads on screens
+      expect(find.byKey(const Key('reserved_bottom_ad_bar')), findsOneWidget);
     });
 
-    testWidgets('Hides for Driver during active ride even if offline', (tester) async {
+    testWidgets('Hides for Driver during active ride (driving)', (tester) async {
       final user = AppUser(
         id: 'driver_1',
         phone: '+923001234567',
@@ -187,7 +221,7 @@ void main() {
             color: 'White',
             type: 'car',
           ),
-          isOnline: false,
+          isOnline: true,
           subscriptionExpiresAt: DateTime.now().add(const Duration(days: 30)),
           createdAt: DateTime.now(),
         ),

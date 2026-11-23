@@ -8,6 +8,7 @@ import '../../../providers/ride_provider.dart';
 import '../../../providers/safety_provider.dart';
 import '../dialogs/ai_consent_dialog.dart';
 import '../../../presentation/common/glass_container.dart';
+import '../../../presentation/common/reserved_bottom_ad_bar.dart';
 import '../../../presentation/common/staggered_animation.dart';
 import '../providers/ai_chat_provider.dart';
 import '../widgets/ai_message_bubble.dart';
@@ -231,6 +232,7 @@ class _AiChatScreenState extends State<AiChatScreen> {
               _buildInputBar(context, chatProv, userRole, isDark),
             ],
           ),
+          bottomNavigationBar: const ReservedBottomAdBar(),
         );
       },
     );

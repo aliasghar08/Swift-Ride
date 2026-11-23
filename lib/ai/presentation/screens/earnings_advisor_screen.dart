@@ -5,6 +5,7 @@ import '../../../core/utils/currency_formatter.dart';
 import '../../../providers/driver_provider.dart';
 import '../dialogs/ai_consent_dialog.dart';
 import '../../../presentation/common/glass_container.dart';
+import '../../../presentation/common/reserved_bottom_ad_bar.dart';
 import '../../../presentation/common/staggered_animation.dart';
 import '../providers/earnings_advisor_provider.dart';
 import '../widgets/ai_insight_card.dart';
@@ -268,6 +269,7 @@ class _EarningsAdvisorScreenState extends State<EarningsAdvisorScreen> {
               ],
             ),
           ),
+          bottomNavigationBar: const ReservedBottomAdBar(),
         );
       },
     );

@@ -10,6 +10,7 @@ import '../../domain/models/vehicle_info_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../common/ai_consent_dialog.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 import '../view_models/responsive_layout_helper.dart';
 
 /// Screen allowing drivers to input vehicle legal and visual specifications,
@@ -684,6 +685,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: const ReservedBottomAdBar(),
     );
   }
 

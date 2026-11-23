@@ -6,6 +6,7 @@ import '../../core/theme/design_tokens.dart';
 import '../../services/map_service.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 import '../view_models/rider_view_model.dart';
 
 class RoutePreviewScreen extends StatefulWidget {
@@ -870,6 +871,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
           ),
         ],
       ),
+      bottomNavigationBar: const ReservedBottomAdBar(),
     );
   }
 

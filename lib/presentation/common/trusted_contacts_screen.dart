@@ -6,6 +6,7 @@ import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore/firestore_user_service.dart';
+import 'reserved_bottom_ad_bar.dart';
 
 /// Lets a user manage the people notified when they raise an SOS.
 ///
@@ -249,6 +250,7 @@ class _TrustedContactsScreenState extends State<TrustedContactsScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: const ReservedBottomAdBar(),
     );
   }
 }

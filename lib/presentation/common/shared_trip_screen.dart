@@ -9,6 +9,7 @@ import 'glass_container.dart';
 import 'skeleton.dart';
 import 'google_map_view.dart';
 import 'map_markers.dart';
+import 'reserved_bottom_ad_bar.dart';
 import 'staggered_animation.dart';
 
 /// Public read-only view of a trip opened through a share link.
@@ -53,6 +54,7 @@ class _SharedTripScreenState extends State<SharedTripScreen> {
           extendBodyBehindAppBar: true,
           appBar: _buildAppBar(layout),
           body: _buildBody(layout),
+          bottomNavigationBar: const ReservedBottomAdBar(),
         );
       },
     );

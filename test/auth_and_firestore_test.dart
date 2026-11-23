@@ -358,6 +358,7 @@ void main() {
         await tester.pump();
 
         // Tap Continue with Phone
+        await tester.ensureVisible(find.text('Continue with Phone'));
         await tester.tap(find.text('Continue with Phone'));
         await tester.pump(const Duration(milliseconds: 400));
         await tester.pumpAndSettle();

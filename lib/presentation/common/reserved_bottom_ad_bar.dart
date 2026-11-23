@@ -4,7 +4,6 @@ import '../../core/theme/design_tokens.dart';
 import '../../domain/models/ride_status.dart';
 import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/driver_provider.dart';
 import '../../providers/ride_provider.dart';
 import 'ad_banner_widget.dart';
 
@@ -12,7 +11,7 @@ import 'ad_banner_widget.dart';
 ///
 /// Ensures zero hardware layer overlap with Google Maps on Mali GPUs (Infinix, Xiaomi),
 /// prevents layout jumps by reserving a solid 60 dp bar, and strictly hides
-/// during active driving, driver online status, emergency SOS, or when the
+/// during active driving for drivers, emergency SOS, or when the
 /// keyboard is open.
 class ReservedBottomAdBar extends StatelessWidget {
   const ReservedBottomAdBar({super.key});
@@ -28,7 +27,6 @@ class ReservedBottomAdBar extends StatelessWidget {
     }
 
     AuthProvider? auth;
-    DriverProvider? driverProv;
     RideProvider? rideProv;
 
     try {
@@ -36,34 +34,36 @@ class ReservedBottomAdBar extends StatelessWidget {
     } catch (_) {}
 
     try {
-      driverProv = CustomChangeNotifierProvider.of<DriverProvider>(context);
-    } catch (_) {}
-
-    try {
       rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     } catch (_) {}
 
-    // 2. Hide for unauthenticated users, auth login step, or admin dashboard
-    if (auth == null || !auth.isAuthenticated || auth.activeRole == UserRole.admin) {
+    // 2. Hide for admin dashboard
+    if (auth?.activeRole == UserRole.admin) {
       return const SizedBox.shrink();
     }
 
-    // 3. Driver Mode Visibility Rules:
-    // HIDE if driver is Online OR has an active ride / incoming request / SOS active
-    if (auth.activeRole == UserRole.driver) {
-      final isOnline = driverProv?.isOnline ?? false;
+    // 3. Emergency SOS: Safety critical, hide ad bar for all users during active SOS
+    final isSosActive = rideProv?.activeSos != null;
+    if (isSosActive) {
+      return const SizedBox.shrink();
+    }
+
+    // 4. Driver Mode Visibility Rules:
+    // HIDE only while actively driving a trip (in-progress ride).
+    // Available on all screens for driver when idle, waiting, or offline.
+    if (auth?.activeRole == UserRole.driver) {
       final currentRide = rideProv?.currentRide;
       final hasActiveRide = currentRide != null &&
           currentRide.status != RideStatus.completed &&
           currentRide.status != RideStatus.cancelled;
-      final isSosActive = rideProv?.activeSos != null;
 
-      if (isOnline || hasActiveRide || isSosActive) {
+      if (hasActiveRide) {
         return const SizedBox.shrink();
       }
     }
 
-    // 4. Passenger (Rider) Mode OR Driver Offline: Render reserved 60 dp solid bar
+    // 5. Passenger (Rider) Mode (even during driving!), Driver Idle/Offline, or Unauthenticated/Login:
+    // Render reserved 60 dp solid bar.
     final c = Theme.of(context).extension<AppColors>() ??
         (Theme.of(context).brightness == Brightness.dark ? AppColors.dark : AppColors.light);
 

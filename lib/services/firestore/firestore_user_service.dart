@@ -66,18 +66,32 @@ class FirestoreUserService {
   }
 
   void _indexUserInMemoryAndStorage(AppUser user) {
-    if (user.id.isNotEmpty) {
-      _memoryCache[user.id] = user;
+    var effectiveUser = user;
+    if (user.id.isNotEmpty && _memoryCache.containsKey(user.id)) {
+      final existing = _memoryCache[user.id]!;
+      final finalPhone = (user.phone.isNotEmpty) ? user.phone : existing.phone;
+      final mergedProviders = <String>{
+        ...existing.linkedProviders,
+        ...user.linkedProviders,
+      }.toList();
+      effectiveUser = user.copyWith(
+        phone: finalPhone,
+        linkedProviders: mergedProviders,
+      );
     }
-    final key = _phoneLookupKey(user.phone);
+
+    if (effectiveUser.id.isNotEmpty) {
+      _memoryCache[effectiveUser.id] = effectiveUser;
+    }
+    final key = _phoneLookupKey(effectiveUser.phone);
     if (key.length >= 9 &&
-        user.fullName.isNotEmpty &&
-        user.fullName != 'Guest User') {
-      _phoneMemoryCache[key] = user;
+        effectiveUser.fullName.isNotEmpty &&
+        effectiveUser.fullName != 'Guest User') {
+      _phoneMemoryCache[key] = effectiveUser;
       if (key.length == 10) {
-        _phoneMemoryCache[key.substring(1)] = user;
+        _phoneMemoryCache[key.substring(1)] = effectiveUser;
       }
-      _persistPhoneProfileEntry(key, user);
+      _persistPhoneProfileEntry(key, effectiveUser);
     }
   }
 
@@ -162,18 +176,28 @@ class FirestoreUserService {
           'location': null,
           if (user.photoUrl != null) 'photoUrl': user.photoUrl,
           if (user.authProvider != null) 'authProvider': user.authProvider,
+          if (user.linkedProviders.isNotEmpty) 'linkedProviders': user.linkedProviders,
           if (user.gender != null) 'gender': user.gender,
           'isGenderVerified': user.isGenderVerified,
         });
       } else {
+        final existingData = docSnap.data();
+        final existingPhone = existingData?['phone'] as String?;
+        // Preserve existing non-empty phone during social profile updates
+        final finalPhone = (user.phone.isNotEmpty)
+            ? user.phone
+            : (existingPhone ?? '');
+
         await docRef.update({
           'fullName': user.fullName,
-          'phone': user.phone,
+          'phone': finalPhone,
           'email': user.email,
           'role': user.role.toDbString(),
           'updatedAt': FieldValue.serverTimestamp(),
           if (user.photoUrl != null) 'photoUrl': user.photoUrl,
           if (user.authProvider != null) 'authProvider': user.authProvider,
+          if (user.linkedProviders.isNotEmpty)
+            'linkedProviders': FieldValue.arrayUnion(user.linkedProviders),
           if (user.gender != null) 'gender': user.gender,
           'isGenderVerified': user.isGenderVerified,
         });

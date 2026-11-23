@@ -2,7 +2,14 @@
 // Force redeploy & refresh IAM policies: 2026-10-07
 
 // 1. Auth Module
-export { registerUser, verifyOtp, setUserRole, deleteUserAccount } from './modules/auth';
+export {
+  registerUser,
+  verifyOtp,
+  setUserRole,
+  deleteUserAccount,
+  registerTrustedDevice,
+  resolveSocialSession,
+} from './modules/auth';
 
 // 2. Rides Module (Lifecycle & dynamic price negotiation)
 export {

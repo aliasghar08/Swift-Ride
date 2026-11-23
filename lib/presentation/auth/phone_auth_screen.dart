@@ -224,8 +224,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     setState(() => _isGoogleLoading = true);
     final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
     try {
-      await auth.signInWithGoogle(
+      final success = await auth.signInWithGoogle(
         selectedRole: _selectedRole.name,
+        candidatePhone: _phoneController.text.trim().isNotEmpty
+            ? _phoneController.text.trim()
+            : null,
         fullName: _nameController.text.trim().isNotEmpty
             ? _nameController.text.trim()
             : null,
@@ -238,6 +241,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _setError(err);
         },
       );
+      if (auth.needsPhoneVerification && mounted) {
+        _showExistingAccountOtpPrompt(context, auth);
+      } else if (success && mounted) {
+        _onSuccessNavigate();
+      }
     } catch (e) {
       if (mounted) {
         _setError(e.toString());
@@ -254,8 +262,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     setState(() => _isAppleLoading = true);
     final auth = CustomChangeNotifierProvider.read<AuthProvider>(context);
     try {
-      await auth.signInWithApple(
+      final success = await auth.signInWithApple(
         selectedRole: _selectedRole.name,
+        candidatePhone: _phoneController.text.trim().isNotEmpty
+            ? _phoneController.text.trim()
+            : null,
         fullName: _nameController.text.trim().isNotEmpty
             ? _nameController.text.trim()
             : null,
@@ -268,6 +279,11 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
           _setError(err);
         },
       );
+      if (auth.needsPhoneVerification && mounted) {
+        _showExistingAccountOtpPrompt(context, auth);
+      } else if (success && mounted) {
+        _onSuccessNavigate();
+      }
     } catch (e) {
       if (mounted) {
         _setError(e.toString());
@@ -277,6 +293,78 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         setState(() => _isAppleLoading = false);
       }
     }
+  }
+
+  void _showExistingAccountOtpPrompt(BuildContext context, AuthProvider auth) {
+    final masked = auth.verificationMaskedPhone ?? 'your phone';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final c = AppColors.of(context);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.phonelink_lock, color: AppTheme.primaryBlue, size: 24),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    'Existing Account Found',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : AppTheme.darkNavy,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'A SwiftRide account is already linked to $masked. '
+              'To protect your ride history and restore your previous session, please complete a 1-step SMS verification.',
+              style: TextStyle(fontSize: 13, color: c.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                auth.clearPhoneVerificationNotice();
+                if (_phoneController.text.trim().isNotEmpty) {
+                  _handleSendOtp();
+                }
+              },
+              child: const Text('Verify with SMS Code'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                auth.clearPhoneVerificationNotice();
+                _onSuccessNavigate();
+              },
+              child: const Text('Continue as New Profile'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _startResendTimer() {

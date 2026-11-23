@@ -9,6 +9,7 @@ import '../../core/routing/app_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
 import '../../domain/models/user_role.dart';
+import '../../domain/models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import 'staggered_animation.dart';
@@ -390,26 +391,103 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
                             ],
                           ),
                           const SizedBox(height: 2),
-                          Text(
-                            user.phone.isNotEmpty
-                                ? user.phone
-                                : 'Not verified with phone',
-                            style: TextStyle(
-                              fontSize: layout.fontSize(13),
-                              color: AppTheme.slateMuted,
+                          if (user.phone.isNotEmpty)
+                            Row(
+                              children: [
+                                Text(
+                                  user.phone,
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(13),
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark ? Colors.white70 : AppTheme.darkNavy,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.verified, size: 10, color: AppTheme.emeraldGreen),
+                                      SizedBox(width: 2),
+                                      Text(
+                                        'Verified',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppTheme.emeraldGreen,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            InkWell(
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                PhoneAuthScreen.navigate(context);
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 2, bottom: 2),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryBlue.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: AppTheme.primaryBlue.withValues(alpha: 0.3)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.add_link, size: 12, color: AppTheme.primaryBlue),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Add / Link Phone',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppTheme.primaryBlue,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
                           if (user.email != null && user.email!.isNotEmpty) ...[
                             const SizedBox(height: 2),
-                            Text(
-                              user.email!,
-                              style: TextStyle(
-                                fontSize: layout.fontSize(12),
-                                color: AppTheme.slateMuted,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Icon(
+                                  user.authProvider == 'apple' ? Icons.apple : Icons.alternate_email,
+                                  size: 12,
+                                  color: AppTheme.slateMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    user.email!,
+                                    style: TextStyle(
+                                      fontSize: layout.fontSize(12),
+                                      color: AppTheme.slateMuted,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
+                          const SizedBox(height: 5),
+                          Wrap(
+                            spacing: 4,
+                            runSpacing: 4,
+                            children: _buildProviderChips(user),
+                          ),
                         ],
                       ),
                     ),
@@ -699,6 +777,67 @@ class ModeAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
       },
     );
+  }
+
+  static List<Widget> _buildProviderChips(AppUser user) {
+    final chips = <Widget>[];
+    final providers = user.linkedProviders.toSet();
+    if (user.phone.isNotEmpty) providers.add('phone');
+    if (user.authProvider != null && user.authProvider!.isNotEmpty) providers.add(user.authProvider!);
+
+    for (final p in providers) {
+      IconData icon;
+      String label;
+      Color color;
+
+      switch (p.toLowerCase()) {
+        case 'google':
+        case 'google.com':
+          icon = Icons.g_mobiledata_rounded;
+          label = 'Google';
+          color = const Color(0xFF4285F4);
+          break;
+        case 'apple':
+        case 'apple.com':
+          icon = Icons.apple;
+          label = 'Apple';
+          color = Colors.grey.shade700;
+          break;
+        case 'phone':
+        default:
+          icon = Icons.phone_android;
+          label = 'Phone';
+          color = AppTheme.emeraldGreen;
+          break;
+      }
+
+      chips.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: color.withValues(alpha: 0.3), width: 0.8),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 11, color: color),
+              const SizedBox(width: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    return chips;
   }
 
   void _showEditProfileDialog(BuildContext context, AuthProvider auth) {

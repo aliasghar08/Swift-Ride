@@ -27,6 +27,9 @@ class AuthProvider extends ChangeNotifier {
   int? _resendToken;
   int _signOutGeneration = 0;
   StreamSubscription<User?>? _authSubscription;
+  bool _needsPhoneVerification = false;
+  String? _verificationMaskedPhone;
+  String? _verificationTargetUid;
 
   AuthProvider({
     AppUser? initialUser,
@@ -67,6 +70,16 @@ class AuthProvider extends ChangeNotifier {
   String? get verificationId => _verificationId;
   int? get resendToken => _resendToken;
   int get signOutGeneration => _signOutGeneration;
+  bool get needsPhoneVerification => _needsPhoneVerification;
+  String? get verificationMaskedPhone => _verificationMaskedPhone;
+  String? get verificationTargetUid => _verificationTargetUid;
+
+  void clearPhoneVerificationNotice() {
+    _needsPhoneVerification = false;
+    _verificationMaskedPhone = null;
+    _verificationTargetUid = null;
+    notifyListeners();
+  }
   bool get isAuthenticated =>
       _authService.isAuthenticated ||
       _currentUser.phone.isNotEmpty ||
@@ -282,6 +295,7 @@ class AuthProvider extends ChangeNotifier {
       final credential = await _authService.verifyOtpAndSignIn(
         verificationId: vId ?? '',
         smsCode: smsCode,
+        phoneNumber: phoneNumber,
       );
 
       // Resolve valid UID from credential, active session, or phone identity
@@ -333,18 +347,30 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithGoogle({
     required String selectedRole,
     String? fullName,
+    String? candidatePhone,
     void Function()? onSuccess,
     void Function(String error)? onError,
   }) async {
     _isLoading = true;
     _authError = null;
+    _needsPhoneVerification = false;
+    _verificationMaskedPhone = null;
+    _verificationTargetUid = null;
     notifyListeners();
 
     try {
       final user = await _authService.signInWithGoogle(
         selectedRole: selectedRole,
         fullName: fullName,
+        candidatePhone: candidatePhone,
       );
+
+      final lastSession = _authService.lastSocialSessionResult;
+      if (lastSession?.action == SocialSessionAction.needsPhoneVerification) {
+        _needsPhoneVerification = true;
+        _verificationMaskedPhone = lastSession?.maskedPhone;
+        _verificationTargetUid = lastSession?.targetUid;
+      }
 
       if (user == null) {
         // User cancelled flow without error
@@ -372,18 +398,30 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signInWithApple({
     required String selectedRole,
     String? fullName,
+    String? candidatePhone,
     void Function()? onSuccess,
     void Function(String error)? onError,
   }) async {
     _isLoading = true;
     _authError = null;
+    _needsPhoneVerification = false;
+    _verificationMaskedPhone = null;
+    _verificationTargetUid = null;
     notifyListeners();
 
     try {
       final user = await _authService.signInWithApple(
         selectedRole: selectedRole,
         fullName: fullName,
+        candidatePhone: candidatePhone,
       );
+
+      final lastSession = _authService.lastSocialSessionResult;
+      if (lastSession?.action == SocialSessionAction.needsPhoneVerification) {
+        _needsPhoneVerification = true;
+        _verificationMaskedPhone = lastSession?.maskedPhone;
+        _verificationTargetUid = lastSession?.targetUid;
+      }
 
       if (user == null) {
         // User cancelled flow without error

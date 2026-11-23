@@ -17,11 +17,16 @@ service cloud.firestore {
     //   - authProvider: string | null (optional, "google" | "apple" | "phone" etc., max 50 chars)
     //   - photoUrl: string | null (optional, valid URL format, max 1000 chars)
     //   - trustedContacts: list of strings (max 5 contacts)
+    //   - linkedProviders: list of strings (optional, max 5 providers)
     //   - gender: string | null (optional, 'female' | 'male')
     //   - isGenderVerified: bool (optional, default false, immutable by client)
     //   - createdAt: timestamp (immutable)
     //   - updatedAt: timestamp
     //   - location: map | null
+    //
+    // Subcollection: users/{userId}/trustedDevices/{deviceId}
+    //   - deviceId: string, tokenHash: string, phoneNumber: string, platform: string
+    //   - Managed exclusively by Firebase Admin SDK in Cloud Functions (client access denied)
     //
     // Collection: drivers/{driverId}
     //   - userId: string (matches document id and auth.uid)
@@ -206,7 +211,10 @@ service cloud.firestore {
           (data.fcmTokens is list && data.fcmTokens.size() <= 10)) &&
         // Trusted contacts feed the SOS fan-out, so bound how many can be set.
         (!('trustedContacts' in data) ||
-          (data.trustedContacts is list && data.trustedContacts.size() <= 5));
+          (data.trustedContacts is list && data.trustedContacts.size() <= 5)) &&
+        // Linked social auth providers list (max 5 providers)
+        (!('linkedProviders' in data) ||
+          (data.linkedProviders is list && data.linkedProviders.size() <= 5));
     }
 
     // Driver Validators
@@ -305,6 +313,11 @@ service cloud.firestore {
           (!('isGenderVerified' in resource.data) || resource.data.isGenderVerified != true ||
            areImmutableFieldsUnchanged(['gender']))));
       allow delete: if isAdmin();
+
+      // Trusted Devices Subcollection (strictly server-side via Cloud Functions)
+      match /trustedDevices/{deviceId} {
+        allow read, write: if false;
+      }
     }
 
     // Driver Profiles

@@ -8,6 +8,29 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../domain/models/user_model.dart';
 import '../domain/models/user_role.dart';
 import 'firestore/firestore_user_service.dart';
+import 'native/native_storage_service.dart';
+
+enum SocialSessionAction { keepCurrent, restoredSession, needsPhoneVerification }
+
+class SocialSessionResult {
+  final SocialSessionAction action;
+  final AppUser? user;
+  final String? phoneNumber;
+  final String? email;
+  final String? maskedPhone;
+  final bool hasExistingAccount;
+  final String? targetUid;
+
+  const SocialSessionResult({
+    required this.action,
+    this.user,
+    this.phoneNumber,
+    this.email,
+    this.maskedPhone,
+    this.hasExistingAccount = false,
+    this.targetUid,
+  });
+}
 
 /// Production-ready Firebase Phone Authentication service.
 /// Supports OTP verification, auto-retrieval, resend token management,
@@ -37,6 +60,13 @@ class AuthService {
   }
 
   final FirestoreUserService _userService = FirestoreUserService();
+  final NativeStorageService _storage = NativeStorageService();
+  static const String keyLastVerifiedPhone = 'last_verified_phone';
+  static const String keyTrustedDeviceId = 'trusted_device_id';
+  static const String keyDeviceTrustToken = 'device_trust_token';
+
+  SocialSessionResult? _lastSocialSessionResult;
+  SocialSessionResult? get lastSocialSessionResult => _lastSocialSessionResult;
 
   /// Stream of authentication state changes.
   Stream<User?> get authStateChanges {
@@ -139,6 +169,7 @@ class AuthService {
         forceResendingToken: forceResendingToken,
         verificationCompleted: (PhoneAuthCredential credential) async {
           debugPrint('[AuthService] Auto-verification completed.');
+          unawaited(registerTrustedDevice(phoneNumber));
           if (onAutoVerified != null) {
             onAutoVerified(credential);
           } else {
@@ -221,6 +252,7 @@ class AuthService {
   Future<UserCredential?> verifyOtpAndSignIn({
     required String verificationId,
     required String smsCode,
+    String? phoneNumber,
   }) async {
     final auth = _auth;
     if (auth == null) {
@@ -281,7 +313,11 @@ class AuthService {
         }
       }
 
-      return await auth.signInWithCredential(credential);
+      final userCred = await auth.signInWithCredential(credential);
+      if (phoneNumber != null && phoneNumber.isNotEmpty) {
+        unawaited(registerTrustedDevice(phoneNumber));
+      }
+      return userCred;
     } on FirebaseAuthException catch (e) {
       debugPrint('[AuthService] OTP verification failed: [${e.code}] ${e.message}');
       rethrow;
@@ -324,27 +360,164 @@ class AuthService {
     );
   }
 
+  /// Registers a cryptographically random device trust token in Firestore via Cloud Functions.
+  /// Stored securely on the local device to allow automatic session restoration when signing in
+  /// with Google or Apple on this same device.
+  Future<void> registerTrustedDevice(String phoneNumber) async {
+    try {
+      final auth = _auth;
+      final phone = (auth?.currentUser?.phoneNumber != null &&
+              auth!.currentUser!.phoneNumber!.isNotEmpty)
+          ? auth.currentUser!.phoneNumber!
+          : phoneNumber;
+      if (phone.isEmpty) return;
+
+      var deviceId = await _storage.getString(keyTrustedDeviceId);
+      if (deviceId == null || deviceId.isEmpty) {
+        final rand = DateTime.now().microsecondsSinceEpoch.toString();
+        deviceId = 'dev_${kIsWeb ? "web" : defaultTargetPlatform.name}_$rand';
+        await _storage.setString(keyTrustedDeviceId, deviceId);
+      }
+
+      await _storage.setString(keyLastVerifiedPhone, phone);
+
+      if (Firebase.apps.isNotEmpty) {
+        final callable = FirebaseFunctions.instanceFor(region: 'asia-south1')
+            .httpsCallable('registerTrustedDevice');
+        final res = await callable.call<Map<String, dynamic>>({
+          'deviceId': deviceId,
+          'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+        });
+
+        final rawToken = res.data['deviceTrustToken'] as String?;
+        if (rawToken != null && rawToken.isNotEmpty) {
+          await _storage.setString(keyDeviceTrustToken, rawToken);
+          debugPrint('[AuthService] Registered trusted device token successfully.');
+        }
+      }
+    } catch (e) {
+      debugPrint('[AuthService] registerTrustedDevice non-fatal notice: $e');
+    }
+  }
+
+  /// Calls the `resolveSocialSession` Cloud Function to verify user identity,
+  /// detect existing phone accounts, and safely restore the previous session if trusted.
+  Future<SocialSessionResult> resolveSocialSession({
+    required String provider,
+    String? candidatePhone,
+    OAuthCredential? originalCredential,
+  }) async {
+    final auth = _auth;
+    if (auth == null || auth.currentUser == null) {
+      return const SocialSessionResult(action: SocialSessionAction.keepCurrent);
+    }
+
+    try {
+      final storedPhone = await _storage.getString(keyLastVerifiedPhone);
+      final deviceId = await _storage.getString(keyTrustedDeviceId);
+      final deviceTrustToken = await _storage.getString(keyDeviceTrustToken);
+
+      final phone = (auth.currentUser?.phoneNumber != null &&
+              auth.currentUser!.phoneNumber!.isNotEmpty)
+          ? auth.currentUser!.phoneNumber!
+          : (candidatePhone != null && candidatePhone.trim().isNotEmpty
+              ? candidatePhone.trim()
+              : (storedPhone ?? ''));
+
+      final callable = FirebaseFunctions.instanceFor(region: 'asia-south1')
+          .httpsCallable('resolveSocialSession');
+
+      final resp = await callable.call({
+        if (phone.isNotEmpty) 'phoneNumber': phone,
+        if (deviceId != null && deviceId.isNotEmpty) 'deviceId': deviceId,
+        if (deviceTrustToken != null && deviceTrustToken.isNotEmpty)
+          'deviceTrustToken': deviceTrustToken,
+        'provider': provider,
+      });
+
+      final data = Map<String, dynamic>.from(resp.data as Map);
+      final action = data['action'] as String?;
+
+      if (action == 'RESTORE_SESSION') {
+        final customToken = data['customToken'] as String;
+        final targetUid = data['targetUid'] as String;
+        debugPrint('[AuthService] resolveSocialSession: restoring previous session for target UID $targetUid');
+
+        await auth.signInWithCustomToken(customToken);
+
+        if (originalCredential != null) {
+          try {
+            await auth.currentUser?.linkWithCredential(originalCredential);
+          } catch (linkErr) {
+            debugPrint('[AuthService] linkWithCredential notice: $linkErr');
+          }
+        }
+
+        await auth.currentUser?.getIdToken(true);
+        final restoredUser = await _userService.getUser(targetUid);
+
+        return SocialSessionResult(
+          action: SocialSessionAction.restoredSession,
+          user: restoredUser,
+          phoneNumber: data['phoneNumber'] as String?,
+          email: data['email'] as String?,
+        );
+      } else if (action == 'NEEDS_PHONE_VERIFICATION') {
+        return SocialSessionResult(
+          action: SocialSessionAction.needsPhoneVerification,
+          maskedPhone: data['maskedPhone'] as String?,
+          hasExistingAccount: true,
+          targetUid: data['targetUid'] as String?,
+        );
+      } else {
+        return SocialSessionResult(
+          action: SocialSessionAction.keepCurrent,
+          phoneNumber: data['phoneNumber'] as String?,
+          email: data['email'] as String?,
+        );
+      }
+    } catch (e) {
+      debugPrint('[AuthService] resolveSocialSession notice: $e');
+      return const SocialSessionResult(action: SocialSessionAction.keepCurrent);
+    }
+  }
+
   /// Authenticates using Google Sign-In and links/persists the profile in Firestore.
   /// Returns null if the user cancelled the dialog or flow.
   Future<AppUser?> signInWithGoogle({
     required String selectedRole,
     String? fullName,
+    String? candidatePhone,
   }) async {
     final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.passenger;
     final auth = _auth;
 
     if (auth == null) {
       debugPrint('[AuthService] Firebase uninitialized: Simulating Google sign-in');
+      final effectivePhone = candidatePhone ?? await _storage.getString(keyLastVerifiedPhone) ?? '';
+      if (effectivePhone.isNotEmpty) {
+        final existing = await _userService.getUserByPhone(effectivePhone);
+        if (existing != null) {
+          final merged = existing.copyWith(
+            email: existing.email ?? 'rider.google@swiftride.pk',
+            linkedProviders: {...existing.linkedProviders, 'google', 'phone'}.toList(),
+          );
+          await _userService.saveUser(merged);
+          return merged;
+        }
+      }
+
       final mockUser = AppUser(
         id: 'google_user_${DateTime.now().millisecondsSinceEpoch}',
         fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Google Passenger',
         email: 'rider.google@swiftride.pk',
-        phone: '',
+        phone: effectivePhone,
         role: role,
         rating: 5.0,
         totalRides: 0,
         createdAt: DateTime.now(),
         authProvider: 'google',
+        linkedProviders: ['google', if (effectivePhone.isNotEmpty) 'phone'],
       );
       await _userService.saveUser(mockUser);
       return mockUser;
@@ -379,6 +552,19 @@ class AuthService {
       final firebaseUser = userCredential.user;
       if (firebaseUser == null) return null;
 
+      // Smart Identity & Previous Session Resolution
+      final sessionResult = await resolveSocialSession(
+        provider: 'google',
+        candidatePhone: candidatePhone,
+        originalCredential: credential,
+      );
+      _lastSocialSessionResult = sessionResult;
+
+      if (sessionResult.action == SocialSessionAction.restoredSession && sessionResult.user != null) {
+        debugPrint('[AuthService] Successfully restored existing session for user: ${sessionResult.user?.id}');
+        return sessionResult.user;
+      }
+
       final resolvedName = (fullName != null && fullName.trim().isNotEmpty)
           ? fullName.trim()
           : (firebaseUser.displayName != null && firebaseUser.displayName!.isNotEmpty
@@ -389,9 +575,11 @@ class AuthService {
                       ? firebaseUser.email!.split('@').first
                       : 'Google User')));
 
+      final resolvedPhone = sessionResult.phoneNumber ?? firebaseUser.phoneNumber ?? candidatePhone ?? '';
+
       return await syncUserProfile(
         uid: firebaseUser.uid,
-        phone: firebaseUser.phoneNumber ?? '',
+        phone: resolvedPhone,
         fullName: resolvedName,
         email: firebaseUser.email ?? googleUser.email,
         photoUrl: firebaseUser.photoURL ?? googleUser.photoUrl,
@@ -431,22 +619,37 @@ class AuthService {
   Future<AppUser?> signInWithApple({
     required String selectedRole,
     String? fullName,
+    String? candidatePhone,
   }) async {
     final role = selectedRole.toLowerCase() == 'driver' ? UserRole.driver : UserRole.passenger;
     final auth = _auth;
 
     if (auth == null) {
       debugPrint('[AuthService] Firebase uninitialized: Simulating Apple sign-in');
+      final effectivePhone = candidatePhone ?? await _storage.getString(keyLastVerifiedPhone) ?? '';
+      if (effectivePhone.isNotEmpty) {
+        final existing = await _userService.getUserByPhone(effectivePhone);
+        if (existing != null) {
+          final merged = existing.copyWith(
+            email: existing.email ?? 'rider.apple@swiftride.pk',
+            linkedProviders: {...existing.linkedProviders, 'apple', 'phone'}.toList(),
+          );
+          await _userService.saveUser(merged);
+          return merged;
+        }
+      }
+
       final mockUser = AppUser(
         id: 'apple_user_${DateTime.now().millisecondsSinceEpoch}',
         fullName: fullName?.trim().isNotEmpty == true ? fullName!.trim() : 'Apple Passenger',
         email: 'rider.apple@swiftride.pk',
-        phone: '',
+        phone: effectivePhone,
         role: role,
         rating: 5.0,
         totalRides: 0,
         createdAt: DateTime.now(),
         authProvider: 'apple',
+        linkedProviders: ['apple', if (effectivePhone.isNotEmpty) 'phone'],
       );
       await _userService.saveUser(mockUser);
       return mockUser;
@@ -461,6 +664,18 @@ class AuthService {
       final firebaseUser = userCredential.user;
       if (firebaseUser == null) return null;
 
+      // Smart Identity & Previous Session Resolution
+      final sessionResult = await resolveSocialSession(
+        provider: 'apple',
+        candidatePhone: candidatePhone,
+      );
+      _lastSocialSessionResult = sessionResult;
+
+      if (sessionResult.action == SocialSessionAction.restoredSession && sessionResult.user != null) {
+        debugPrint('[AuthService] Successfully restored existing session for user: ${sessionResult.user?.id}');
+        return sessionResult.user;
+      }
+
       final resolvedName = (fullName != null && fullName.trim().isNotEmpty)
           ? fullName.trim()
           : (firebaseUser.displayName != null && firebaseUser.displayName!.isNotEmpty
@@ -469,9 +684,11 @@ class AuthService {
                   ? firebaseUser.email!.split('@').first
                   : 'Apple User'));
 
+      final resolvedPhone = sessionResult.phoneNumber ?? firebaseUser.phoneNumber ?? candidatePhone ?? '';
+
       return await syncUserProfile(
         uid: firebaseUser.uid,
-        phone: firebaseUser.phoneNumber ?? '',
+        phone: resolvedPhone,
         fullName: resolvedName,
         email: firebaseUser.email,
         photoUrl: firebaseUser.photoURL,
@@ -538,6 +755,10 @@ class AuthService {
           ? defaultRole
           : existingUser.role;
 
+      final currentLinked = existingUser.linkedProviders.toSet();
+      if (authProvider != null && authProvider.isNotEmpty) currentLinked.add(authProvider);
+      if (resolvedPhone.isNotEmpty) currentLinked.add('phone');
+
       final updatedExisting = existingUser.copyWith(
         id: uid.isNotEmpty ? uid : existingUser.id,
         fullName: resolvedName,
@@ -546,6 +767,7 @@ class AuthService {
         role: resolvedRole,
         photoUrl: photoUrl ?? existingUser.photoUrl,
         authProvider: authProvider ?? existingUser.authProvider,
+        linkedProviders: currentLinked.toList(),
       );
 
       await _userService.saveUser(updatedExisting);
@@ -577,6 +799,10 @@ class AuthService {
       createdAt: DateTime.now(),
       photoUrl: photoUrl,
       authProvider: authProvider,
+      linkedProviders: [
+        if (authProvider != null && authProvider.isNotEmpty) authProvider,
+        if (normalizedPhone.isNotEmpty) 'phone',
+      ],
     );
 
     await _userService.saveUser(newUser);
@@ -697,6 +923,13 @@ class AuthService {
           debugPrint('[AuthService] Unexpected error deleting Auth user: $e');
         }
       }
+
+      // 4. Wipe local trusted-device identity tokens on account deletion
+      try {
+        await _storage.remove(keyLastVerifiedPhone);
+        await _storage.remove(keyTrustedDeviceId);
+        await _storage.remove(keyDeviceTrustToken);
+      } catch (_) {}
     }
 
     // Always ensure session is signed out

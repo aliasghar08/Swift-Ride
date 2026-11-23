@@ -20,6 +20,9 @@ class AppUser {
   final String? photoUrl;
   final String? authProvider;
 
+  /// Active linked authentication providers (e.g. ['phone', 'google', 'apple']).
+  final List<String> linkedProviders;
+
   /// User's gender ('female' | 'male' | null).
   final String? gender;
 
@@ -39,6 +42,7 @@ class AppUser {
     required this.createdAt,
     this.photoUrl,
     this.authProvider,
+    this.linkedProviders = const [],
     this.gender,
     this.isGenderVerified = false,
   });
@@ -85,6 +89,7 @@ class AppUser {
     DateTime? createdAt,
     String? photoUrl,
     String? authProvider,
+    List<String>? linkedProviders,
     String? gender,
     bool? isGenderVerified,
   }) {
@@ -101,6 +106,7 @@ class AppUser {
       createdAt: createdAt ?? this.createdAt,
       photoUrl: photoUrl ?? this.photoUrl,
       authProvider: authProvider ?? this.authProvider,
+      linkedProviders: linkedProviders ?? this.linkedProviders,
       gender: gender ?? this.gender,
       isGenderVerified: isGenderVerified ?? this.isGenderVerified,
     );
@@ -120,12 +126,18 @@ class AppUser {
       'createdAt': createdAt.toIso8601String(),
       if (photoUrl != null) 'photoUrl': photoUrl,
       if (authProvider != null) 'authProvider': authProvider,
+      if (linkedProviders.isNotEmpty) 'linkedProviders': linkedProviders,
       if (gender != null) 'gender': gender,
       'isGenderVerified': isGenderVerified,
     };
   }
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String? docId}) {
+    final rawLinked = map['linkedProviders'];
+    final List<String> resolvedLinked = rawLinked is List
+        ? rawLinked.map((e) => e.toString()).toList()
+        : (map['authProvider'] != null ? [map['authProvider'].toString()] : []);
+
     return AppUser(
       id: docId ?? map['id'] ?? '',
       phone: map['phone'] ?? '',
@@ -142,6 +154,7 @@ class AppUser {
           : DateTime.now(),
       photoUrl: map['photoUrl'] as String?,
       authProvider: map['authProvider'] as String?,
+      linkedProviders: resolvedLinked,
       gender: map['gender'] as String?,
       isGenderVerified: map['isGenderVerified'] == true,
     );

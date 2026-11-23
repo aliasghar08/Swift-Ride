@@ -291,6 +291,10 @@ void main() {
       // Check demand hotspots and ML training outcomes collections
       expect(content, contains('match /demand_hotspots/{cellId}'));
       expect(content, contains('match /ml_training_outcomes/{rideId}'));
+
+      // Check smart social identity resolution and trusted device lockdown
+      expect(content, contains('linkedProviders'));
+      expect(content, contains('match /trustedDevices/{deviceId}'));
     });
 
     test('database.rules.json has valid JSON syntax and rules', () {

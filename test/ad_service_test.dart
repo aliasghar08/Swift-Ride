@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:swiftride/presentation/common/ad_banner_widget.dart';
+import 'package:swiftride/presentation/common/native_ad_card_widget.dart';
 import 'package:swiftride/services/ad_service.dart';
 
 void main() {
@@ -15,8 +16,12 @@ void main() {
       expect(service.interstitialAdUnitId, isNotEmpty);
       expect(service.interstitialAdUnitId, contains('ca-app-pub-3940256099942544/'));
 
+      expect(service.nativeAdUnitId, isNotEmpty);
+      expect(service.nativeAdUnitId, contains('ca-app-pub-3940256099942544/'));
+
       expect(AdService.liveAndroidBannerId, 'ca-app-pub-9402443776639153/2568735153');
       expect(AdService.liveAndroidInterstitialId, 'ca-app-pub-9402443776639153/3739839885');
+      expect(AdService.liveAndroidNativeId, 'ca-app-pub-9402443776639153/2980008128');
     });
 
     test('AdService ensureInitialized completes without throwing', () async {
@@ -45,6 +50,20 @@ void main() {
 
       // In test harness, banner degrades gracefully to SizedBox.shrink() or uninitialized state
       expect(find.byType(AdBannerWidget), findsOneWidget);
+    });
+
+    testWidgets('NativeAdCardWidget renders safely in test environment without crashing', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: NativeAdCardWidget(),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(NativeAdCardWidget), findsOneWidget);
     });
   });
 }

@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../common/reserved_bottom_ad_bar.dart';
+import '../common/native_ad_card_widget.dart';
 
 /// Screen displaying the user's historical trips with complete location, route,
 /// fare, and timestamp metadata queried via Firestore composite indexes.
@@ -192,7 +193,19 @@ class _RideHistoryScreenState extends State<RideHistoryScreen> {
                             ),
                           );
                         }
-                        return _buildRideCard(layout, rides[index], isDark, c);
+                        final card = _buildRideCard(layout, rides[index], isDark, c);
+                        if (rides.length >= 2 && index == 1) {
+                          return Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              card,
+                              SizedBox(height: layout.scale(12)),
+                              const NativeAdCardWidget(),
+                            ],
+                          );
+                        }
+                        return card;
                       },
                     ),
                   );

@@ -21,11 +21,6 @@ class ReservedBottomAdBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 1. Hide immediately if the soft keyboard is open (e.g. typing destination)
-    if (MediaQuery.viewInsetsOf(context).bottom > 0) {
-      return const SizedBox.shrink();
-    }
-
     AuthProvider? auth;
     RideProvider? rideProv;
 
@@ -37,55 +32,63 @@ class ReservedBottomAdBar extends StatelessWidget {
       rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     } catch (_) {}
 
-    // 2. Hide for admin dashboard
-    if (auth?.activeRole == UserRole.admin) {
-      return const SizedBox.shrink();
-    }
+    // 1. Soft keyboard open
+    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
-    // 3. Emergency SOS: Safety critical, hide ad bar for all users during active SOS
+    // 2. Admin dashboard
+    final isAdmin = auth?.activeRole == UserRole.admin;
+
+    // 3. Emergency SOS: safety critical, hide ad bar for all users during active SOS
     final isSosActive = rideProv?.activeSos != null;
-    if (isSosActive) {
-      return const SizedBox.shrink();
-    }
 
-    // 4. Driver Mode Visibility Rules:
-    // HIDE only while actively driving a trip (in-progress ride).
-    // Available on all screens for driver when idle, waiting, or offline.
+    // 4. Driver Mode: HIDE only while actively driving a trip
+    bool isDriverActivelyDriving = false;
     if (auth?.activeRole == UserRole.driver) {
       final currentRide = rideProv?.currentRide;
-      final hasActiveRide = currentRide != null &&
+      if (currentRide != null &&
           currentRide.status != RideStatus.completed &&
-          currentRide.status != RideStatus.cancelled;
-
-      if (hasActiveRide) {
-        return const SizedBox.shrink();
+          currentRide.status != RideStatus.cancelled) {
+        isDriverActivelyDriving = true;
       }
     }
 
-    // 5. Passenger (Rider) Mode (even during driving!), Driver Idle/Offline, or Unauthenticated/Login:
-    // Render reserved 60 dp solid bar.
+    // 5. PhoneAuthScreen is open / unauthenticated state
+    final isPhoneAuthOpen = (auth != null && auth.signOutGeneration > 0 && !auth.isAuthenticated);
+
+    final shouldHide = isKeyboardOpen ||
+        isAdmin ||
+        isSosActive ||
+        isDriverActivelyDriving ||
+        isPhoneAuthOpen;
+
     final c = Theme.of(context).extension<AppColors>() ??
         (Theme.of(context).brightness == Brightness.dark ? AppColors.dark : AppColors.light);
 
-    return SafeArea(
-      top: false,
-      child: SizedBox(
-        height: barHeight,
-        child: Center(
-          child: Container(
-            key: const Key('reserved_bottom_ad_bar'),
+    return SizedBox(
+      height: shouldHide ? 0.0 : barHeight,
+      child: Offstage(
+        offstage: shouldHide,
+        child: SafeArea(
+          top: false,
+          child: SizedBox(
             height: barHeight,
-            width: double.infinity,
-            constraints: const BoxConstraints(maxWidth: 600),
-            decoration: BoxDecoration(
-              color: c.surface,
-              border: Border(
-                top: BorderSide(color: c.border, width: 1.0),
-              ),
-            ),
-            child: const Center(
-              child: AdBannerWidget(
-                padding: EdgeInsets.zero,
+            child: Center(
+              child: Container(
+                key: shouldHide ? null : const Key('reserved_bottom_ad_bar'),
+                height: barHeight,
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 600),
+                decoration: BoxDecoration(
+                  color: c.surface,
+                  border: Border(
+                    top: BorderSide(color: c.border, width: 1.0),
+                  ),
+                ),
+                child: const Center(
+                  child: AdBannerWidget(
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
               ),
             ),
           ),

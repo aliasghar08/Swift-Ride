@@ -15,16 +15,16 @@ class AdService {
 
   static const String liveAndroidBannerId = 'ca-app-pub-9402443776639153/2568735153';
   static const String liveAndroidInterstitialId = 'ca-app-pub-9402443776639153/3739839885';
+  static const String liveAndroidNativeId = 'ca-app-pub-9402443776639153/2980008128';
 
   static const String testAndroidBannerId = 'ca-app-pub-3940256099942544/6300978111';
   static const String testAndroidInterstitialId = 'ca-app-pub-3940256099942544/1033173712';
+  static const String testAndroidNativeId = 'ca-app-pub-3940256099942544/2247696110';
+  static const String testIosNativeId = 'ca-app-pub-3940256099942544/3986624511';
 
   bool _initialized = false;
   bool get isInitialized => _initialized;
   Future<void>? _initFuture;
-
-  InterstitialAd? _postRideInterstitial;
-  bool _isLoadingInterstitial = false;
 
   /// Exposes SDK readiness directly so widgets can await without polling or sleeping.
   Future<void> ensureInitialized() => initialize();
@@ -69,10 +69,21 @@ class AdService {
         : 'ca-app-pub-3940256099942544/2934735716';
   }
 
+  String get nativeAdUnitId {
+    if (kDebugMode) {
+      return Platform.isAndroid
+          ? testAndroidNativeId
+          : testIosNativeId;
+    }
+    return Platform.isAndroid
+        ? liveAndroidNativeId
+        : testIosNativeId;
+  }
+
   String get interstitialAdUnitId {
     if (kDebugMode) {
       return Platform.isAndroid
-          ? 'ca-app-pub-3940256099942544/1033173712'
+          ? testAndroidInterstitialId
           : 'ca-app-pub-3940256099942544/4411468910';
     }
     return Platform.isAndroid
@@ -80,77 +91,14 @@ class AdService {
         : 'ca-app-pub-3940256099942544/4411468910';
   }
 
-  /// Preloads a post-trip interstitial ad in the background.
+  /// Interstitials are disabled across Swift Ride (banner + native only).
   void loadPostRideInterstitial() {
-    if (!_initialized || kIsWeb || _isLoadingInterstitial || _postRideInterstitial != null) {
-      debugPrint('[AdService] Skip interstitial load: initialized=$_initialized, loading=$_isLoadingInterstitial, ready=${_postRideInterstitial != null}');
-      return;
-    }
-    try {
-      if (!Platform.isAndroid && !Platform.isIOS) return;
-      _isLoadingInterstitial = true;
-      debugPrint('[AdService] Loading interstitial ad (Unit ID: $interstitialAdUnitId)...');
-
-      InterstitialAd.load(
-        adUnitId: interstitialAdUnitId,
-        request: const AdRequest(),
-        adLoadCallback: InterstitialAdLoadCallback(
-          onAdLoaded: (ad) {
-            _isLoadingInterstitial = false;
-            _postRideInterstitial = ad;
-            debugPrint('[AdService] Interstitial ad loaded successfully into memory.');
-            _postRideInterstitial?.fullScreenContentCallback =
-                FullScreenContentCallback(
-              onAdDismissedFullScreenContent: (ad) {
-                debugPrint('[AdService] Interstitial ad dismissed by user. Disposing and reloading.');
-                ad.dispose();
-                _postRideInterstitial = null;
-                loadPostRideInterstitial();
-              },
-              onAdFailedToShowFullScreenContent: (ad, error) {
-                debugPrint('[AdService] Interstitial ad failed to show: ${error.message}. Reloading.');
-                ad.dispose();
-                _postRideInterstitial = null;
-                loadPostRideInterstitial();
-              },
-            );
-          },
-          onAdFailedToLoad: (error) {
-            _isLoadingInterstitial = false;
-            _postRideInterstitial = null;
-            debugPrint('[AdService] Interstitial failed to load: code=${error.code}, message=${error.message}');
-          },
-        ),
-      );
-    } catch (e) {
-      _isLoadingInterstitial = false;
-      debugPrint('[AdService] Interstitial load exception: $e');
-    }
+    debugPrint('[AdService] Interstitials disabled: banner + native only mode active.');
   }
 
-  /// Displays the post-ride completion interstitial if preloaded.
+  /// Displays the post-ride completion interstitial if preloaded (disabled: banner + native only).
   void showPostRideInterstitial({VoidCallback? onDismissed}) {
-    if (_postRideInterstitial != null) {
-      debugPrint('[AdService] Displaying preloaded post-ride interstitial ad.');
-      final ad = _postRideInterstitial!;
-      if (onDismissed != null) {
-        final prevCallback = ad.fullScreenContentCallback;
-        ad.fullScreenContentCallback = FullScreenContentCallback(
-          onAdDismissedFullScreenContent: (ad) {
-            prevCallback?.onAdDismissedFullScreenContent?.call(ad);
-            onDismissed();
-          },
-          onAdFailedToShowFullScreenContent: (ad, err) {
-            prevCallback?.onAdFailedToShowFullScreenContent?.call(ad, err);
-            onDismissed();
-          },
-        );
-      }
-      ad.show();
-      _postRideInterstitial = null;
-    } else {
-      debugPrint('[AdService] No interstitial preloaded; proceeding immediately without ad.');
-      onDismissed?.call();
-    }
+    debugPrint('[AdService] Interstitials disabled: proceeding immediately without ad.');
+    onDismissed?.call();
   }
 }

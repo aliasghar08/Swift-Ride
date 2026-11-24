@@ -318,6 +318,18 @@ class AndroidGeocodingService private constructor(private val appContext: Contex
         // Clean redundant sublocality repetitions
         macroArea.neighborhood = cleanSublocalityRepetitions(macroArea.neighborhood)
 
+        // Check microCandidates for block/phase if macroArea.neighborhood is missing it
+        val hasBlockOrPhase = Regex("""\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b""", RegexOption.IGNORE_CASE).containsMatchIn(macroArea.neighborhood)
+        if (!hasBlockOrPhase) {
+            for (cand in microCandidates) {
+                val match = Regex("""\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b""", RegexOption.IGNORE_CASE).find(cand.rawFormatted)
+                if (match != null) {
+                    macroArea.neighborhood = cleanSublocalityRepetitions("${macroArea.neighborhood} ${match.value}")
+                    break
+                }
+            }
+        }
+
         // If macro route is empty, enrich via Google Roads API (nearestRoads)
         if (macroArea.street.isEmpty()) {
             val snappedRoad = snapToNearestRoad(lat, lng, apiKey)
@@ -554,9 +566,16 @@ class AndroidGeocodingService private constructor(private val appContext: Contex
             var street = ""
             var postal = ""
             var rooftop = ""
+            var blockToken = ""
 
             for (i in 0 until results.length()) {
                 val r = results.getJSONObject(i)
+                val formatted = r.optString("formatted_address", "")
+                if (blockToken.isEmpty()) {
+                    val match = Regex("""\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b""", RegexOption.IGNORE_CASE).find(formatted)
+                    if (match != null) blockToken = match.value
+                }
+
                 val comps = r.optJSONArray("address_components") ?: continue
                 for (j in 0 until comps.length()) {
                     val comp = comps.getJSONObject(j)
@@ -566,7 +585,7 @@ class AndroidGeocodingService private constructor(private val appContext: Contex
                     if (city.isEmpty() && (types.contains("locality") || types.contains("administrative_area_level_2"))) {
                         city = name
                     }
-                    if (subloc1.isEmpty() && (types.contains("sublocality_level_1") || types.contains("neighborhood"))) {
+                    if (subloc1.isEmpty() && (types.contains("sublocality_level_1") || types.contains("neighborhood") || types.contains("sublocality"))) {
                         subloc1 = name
                     }
                     if (subloc2.isEmpty() && types.contains("sublocality_level_2")) {
@@ -595,11 +614,19 @@ class AndroidGeocodingService private constructor(private val appContext: Contex
                 } else {
                     combinedNeighborhood
                 }
+            } else if (blockToken.isNotEmpty()) {
+                combinedNeighborhood = if (combinedNeighborhood.isEmpty()) {
+                    blockToken
+                } else if (!combinedNeighborhood.contains(blockToken, ignoreCase = true)) {
+                    "$combinedNeighborhood $blockToken"
+                } else {
+                    combinedNeighborhood
+                }
             }
 
             AuthoritativeArea(
                 city = city,
-                neighborhood = combinedNeighborhood,
+                neighborhood = cleanSublocalityRepetitions(combinedNeighborhood),
                 street = street,
                 postalCode = postal,
                 rooftopPlot = rooftop

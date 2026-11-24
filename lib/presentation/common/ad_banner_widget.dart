@@ -24,7 +24,11 @@ class AdBannerWidget extends StatefulWidget {
   State<AdBannerWidget> createState() => _AdBannerWidgetState();
 }
 
-class _AdBannerWidgetState extends State<AdBannerWidget> {
+class _AdBannerWidgetState extends State<AdBannerWidget>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   BannerAd? _bannerAd;
   bool _isLoaded = false;
   bool _isLoading = false;
@@ -234,6 +238,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     if (!_isLoaded || _bannerAd == null) return const SizedBox.shrink();
 
     return Padding(

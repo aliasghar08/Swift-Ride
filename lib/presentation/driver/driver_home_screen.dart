@@ -28,6 +28,7 @@ import '../common/glass_container.dart';
 import '../common/prominent_disclosure_dialog.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 import '../common/staggered_animation.dart';
 import '../rider/route_preview_screen.dart';
 import '../../services/map_service.dart';
@@ -667,6 +668,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           key: _scaffoldKey,
           drawer: const DriverAnalyticsDrawer(),
           backgroundColor: c.canvas,
+          bottomNavigationBar: const ReservedBottomAdBar(),
           body: Stack(
             children: [
               // 1. Dark Mode Real Google Maps View with Live Navigation

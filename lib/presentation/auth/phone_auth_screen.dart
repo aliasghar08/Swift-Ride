@@ -15,6 +15,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../common/google_logo.dart';
 import '../common/legal_terms_modal.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 import '../view_models/responsive_layout_helper.dart';
 
 enum AuthStep { phone, autoVerifying, otp, profile }
@@ -737,6 +738,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         auth.currentUser.phone.isNotEmpty || widget.onAuthSuccess != null;
 
     return Scaffold(
+      bottomNavigationBar: const ReservedBottomAdBar(),
       appBar: AppBar(
         title: const Text('SwiftRide Authentication'),
         backgroundColor: Colors.transparent,

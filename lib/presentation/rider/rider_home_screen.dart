@@ -28,6 +28,7 @@ import '../common/confirm_action.dart';
 import '../common/glass_container.dart';
 import '../common/google_map_view.dart';
 import '../common/map_markers.dart';
+import '../common/reserved_bottom_ad_bar.dart';
 import '../common/staggered_animation.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../view_models/rider_view_model.dart';
@@ -709,6 +710,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         }
 
         return Scaffold(
+          bottomNavigationBar: const ReservedBottomAdBar(),
           body: Stack(
             children: [
               Listener(

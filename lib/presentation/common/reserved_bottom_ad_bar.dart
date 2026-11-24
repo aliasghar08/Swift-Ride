@@ -46,20 +46,17 @@ class ReservedBottomAdBar extends StatelessWidget {
     if (auth?.activeRole == UserRole.driver) {
       final currentRide = rideProv?.currentRide;
       if (currentRide != null &&
-          currentRide.status != RideStatus.completed &&
-          currentRide.status != RideStatus.cancelled) {
+          (currentRide.status == RideStatus.accepted ||
+              currentRide.status == RideStatus.driverArrived ||
+              currentRide.status == RideStatus.inProgress)) {
         isDriverActivelyDriving = true;
       }
     }
 
-    // 5. PhoneAuthScreen is open / unauthenticated state
-    final isPhoneAuthOpen = (auth != null && auth.signOutGeneration > 0 && !auth.isAuthenticated);
-
     final shouldHide = isKeyboardOpen ||
         isAdmin ||
         isSosActive ||
-        isDriverActivelyDriving ||
-        isPhoneAuthOpen;
+        isDriverActivelyDriving;
 
     final c = Theme.of(context).extension<AppColors>() ??
         (Theme.of(context).brightness == Brightness.dark ? AppColors.dark : AppColors.light);

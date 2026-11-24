@@ -289,6 +289,18 @@ public actor IosGeocodingService {
         // Clean redundant sublocality repetitions (e.g. "Satellite Town Block A Satellite Town")
         macroArea.neighborhood = cleanSublocalityRepetitions(macroArea.neighborhood)
 
+        // Check microCandidates for block/phase if macroArea.neighborhood is missing it
+        let hasBlockOrPhase = macroArea.neighborhood.range(of: #"\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        if !hasBlockOrPhase {
+            for cand in microCandidates {
+                if let match = cand.rawFormatted.range(of: #"\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b"#, options: [.regularExpression, .caseInsensitive]) {
+                    let token = String(cand.rawFormatted[match])
+                    macroArea.neighborhood = cleanSublocalityRepetitions("\(macroArea.neighborhood) \(token)")
+                    break
+                }
+            }
+        }
+
         // If macro route is empty, enrich via Google Roads API (nearestRoads)
         if macroArea.street.isEmpty {
             if let snapped = await self.snapToNearestRoad(lat: lat, lng: lng, apiKey: placesKey), !snapped.roadName.isEmpty {
@@ -530,12 +542,19 @@ public actor IosGeocodingService {
             }
 
             var city = ""
-            var neighborhood = ""
+            var subloc1 = ""
+            var subloc2 = ""
             var street = ""
             var postal = ""
             var rooftop = ""
+            var blockToken = ""
 
             for r in results {
+                let formatted = r["formatted_address"] as? String ?? ""
+                if blockToken.isEmpty, let match = formatted.range(of: #"\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b"#, options: [.regularExpression, .caseInsensitive]) {
+                    blockToken = String(formatted[match])
+                }
+
                 let comps = r["address_components"] as? [[String: Any]] ?? []
                 for comp in comps {
                     let types = comp["types"] as? [String] ?? []
@@ -543,24 +562,44 @@ public actor IosGeocodingService {
                     if city.isEmpty && (types.contains("locality") || types.contains("administrative_area_level_2")) {
                         city = name
                     }
-                    if neighborhood.isEmpty && (types.contains("sublocality_level_1") || types.contains("neighborhood") || types.contains("sublocality")) {
-                        neighborhood = name
+                    if subloc1.isEmpty && (types.contains("sublocality_level_1") || types.contains("neighborhood") || types.contains("sublocality")) {
+                        subloc1 = name
                     }
-                    if street.isEmpty && types.contains("route") {
+                    if subloc2.isEmpty && types.contains("sublocality_level_2") {
+                        subloc2 = name
+                    }
+                    if street.isEmpty && types.contains("route") && name.caseInsensitiveCompare("block") != .orderedSame {
                         street = name
                     }
                     if postal.isEmpty && types.contains("postal_code") {
                         postal = name
                     }
                     if rooftop.isEmpty && (types.contains("street_number") || types.contains("premise")) {
-                        rooftop = name
+                        if name.caseInsensitiveCompare("block") != .orderedSame && name != "35200" && name != "40100" {
+                            rooftop = name
+                        }
                     }
+                }
+            }
+
+            var combinedNeighborhood = subloc1
+            if !subloc2.isEmpty {
+                if combinedNeighborhood.isEmpty {
+                    combinedNeighborhood = subloc2
+                } else if !combinedNeighborhood.localizedCaseInsensitiveContains(subloc2) {
+                    combinedNeighborhood = "\(combinedNeighborhood) \(subloc2)"
+                }
+            } else if !blockToken.isEmpty {
+                if combinedNeighborhood.isEmpty {
+                    combinedNeighborhood = blockToken
+                } else if !combinedNeighborhood.localizedCaseInsensitiveContains(blockToken) {
+                    combinedNeighborhood = "\(combinedNeighborhood) \(blockToken)"
                 }
             }
 
             return AuthoritativeArea(
                 city: city,
-                neighborhood: neighborhood,
+                neighborhood: cleanSublocalityRepetitions(combinedNeighborhood),
                 street: street,
                 postalCode: postal,
                 rooftopPlot: rooftop

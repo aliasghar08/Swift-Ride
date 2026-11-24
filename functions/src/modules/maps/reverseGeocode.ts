@@ -136,6 +136,11 @@ export function buildPrecisePropertyAddress(results: GeocodeResult[]): {
     } else if (!neighborhood.toLowerCase().includes(sublocality2.toLowerCase())) {
       neighborhood = `${neighborhood} ${sublocality2}`;
     }
+  } else {
+    const blockMatch = rawFormatted.match(/\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b/i);
+    if (blockMatch && !neighborhood.toLowerCase().includes(blockMatch[0].toLowerCase())) {
+      neighborhood = `${neighborhood} ${blockMatch[0]}`;
+    }
   }
   if (neighborhood) {
     const cleanNeighborhood = neighborhood

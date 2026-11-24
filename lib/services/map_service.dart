@@ -672,6 +672,14 @@ class MapService {
 
     if (subloc2.isNotEmpty && !subloc1.toLowerCase().contains(subloc2.toLowerCase())) {
       addPart(toTitleCase(cleanSublocalityRepetitions(subloc2)));
+    } else if (subloc2.isEmpty) {
+      final blockMatch = RegExp(r'\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b', caseSensitive: false).firstMatch(rawFormatted);
+      if (blockMatch != null) {
+        final bToken = blockMatch.group(0)!;
+        if (!subloc1.toLowerCase().contains(bToken.toLowerCase())) {
+          addPart(toTitleCase(bToken));
+        }
+      }
     }
     if (subloc1.isNotEmpty) {
       addPart(toTitleCase(cleanSublocalityRepetitions(subloc1)));

@@ -211,8 +211,18 @@ Future<Map<String, dynamic>> queryGeocodingRestMacroWithDiagnosis(
     if (data['status'] == 'OK') {
       final results = data['results'] as List?;
       if (results != null && results.isNotEmpty) {
+        String subloc1 = '';
+        String subloc2 = '';
+        String blockToken = '';
+
         for (final r in results) {
           if (r is! Map) continue;
+          final formatted = (r['formatted_address'] as String?) ?? '';
+          final blockMatch = RegExp(r'\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b', caseSensitive: false).firstMatch(formatted);
+          if (blockMatch != null && blockToken.isEmpty) {
+            blockToken = blockMatch.group(0)!;
+          }
+
           final comps = (r['address_components'] as List?)?.whereType<Map>().toList() ?? [];
           for (final c in comps) {
             final types = (c['types'] as List?)?.map((t) => t.toString()).toList() ?? [];
@@ -225,8 +235,11 @@ Future<Map<String, dynamic>> queryGeocodingRestMacroWithDiagnosis(
             if ((types.contains('sublocality_level_1') ||
                     types.contains('neighborhood') ||
                     types.contains('sublocality')) &&
-                (result['sublocality'] as String).isEmpty) {
-              result['sublocality'] = name;
+                subloc1.isEmpty) {
+              subloc1 = name;
+            }
+            if (types.contains('sublocality_level_2') && subloc2.isEmpty) {
+              subloc2 = name;
             }
             if (types.contains('route') && (result['route'] as String).isEmpty && name.toLowerCase() != 'block') {
               result['route'] = name;
@@ -238,6 +251,22 @@ Future<Map<String, dynamic>> queryGeocodingRestMacroWithDiagnosis(
             }
           }
         }
+
+        var combinedSubloc = subloc1;
+        if (subloc2.isNotEmpty) {
+          if (combinedSubloc.isEmpty) {
+            combinedSubloc = subloc2;
+          } else if (!combinedSubloc.toLowerCase().contains(subloc2.toLowerCase())) {
+            combinedSubloc = '$combinedSubloc $subloc2';
+          }
+        } else if (blockToken.isNotEmpty) {
+          if (combinedSubloc.isEmpty) {
+            combinedSubloc = blockToken;
+          } else if (!combinedSubloc.toLowerCase().contains(blockToken.toLowerCase())) {
+            combinedSubloc = '$combinedSubloc $blockToken';
+          }
+        }
+        result['sublocality'] = cleanSublocality(combinedSubloc);
       }
     }
   } catch (e) {
@@ -483,6 +512,15 @@ void main(List<String> args) async {
       }
       if (macroNeighborhood.isEmpty && combinedNeighborhood.isNotEmpty) {
         macroNeighborhood = cleanSublocality(combinedNeighborhood);
+      } else {
+        // Check if macroNeighborhood is missing Block/Phase while Places has it
+        final microBlockMatch = RegExp(r'\b(?:Block\s+[A-Za-z0-9]+|[A-Za-z0-9]+-Block|Phase\s+[0-9]+)\b', caseSensitive: false).firstMatch('$pSubloc2 $placesAddr');
+        if (microBlockMatch != null) {
+          final bToken = microBlockMatch.group(0)!;
+          if (!macroNeighborhood.toLowerCase().contains(bToken.toLowerCase())) {
+            macroNeighborhood = cleanSublocality('$macroNeighborhood $bToken');
+          }
+        }
       }
 
       // GeoGuard Check on Micro City
@@ -529,7 +567,10 @@ void main(List<String> args) async {
     final slots = <String>[];
     if (primary.isNotEmpty) slots.add(toTitleCase(primary));
 
-    final titleRoute = toTitleCase(macroRoute);
+    var titleRoute = toTitleCase(macroRoute);
+    if (primary.isNotEmpty && (RegExp(r'^(?:plot|house|flat|unit)\s+\d+', caseSensitive: false).hasMatch(primary) || RegExp(r'^\d+').hasMatch(primary))) {
+      titleRoute = titleRoute.replaceFirst(RegExp(r'^\d+[A-Za-z]?(?:[/-]\d+[A-Za-z]?)?[\s,-]+'), '').trim();
+    }
     if (titleRoute.isNotEmpty && titleRoute.toLowerCase() != 'block' && !primary.toLowerCase().contains(titleRoute.toLowerCase())) {
       slots.add(titleRoute);
     }

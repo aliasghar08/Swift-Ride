@@ -513,15 +513,7 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
     }
 
     fun hasBackgroundLocationPermission(): Boolean {
-        if (!hasLocationPermission()) return false
-        val ctx = getActiveContext()
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                ctx, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+        return hasLocationPermission()
     }
 
     fun handleRequestPermissionsResult(
@@ -575,23 +567,7 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
             }
 
             "requestBackgroundLocationPermission" -> {
-                if (hasBackgroundLocationPermission()) {
-                    result.success(true)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    val act = currentActivity?.get()
-                    if (act != null) {
-                        pendingPermissionResult = result
-                        ActivityCompat.requestPermissions(
-                            act,
-                            arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
-                            BACKGROUND_PERMISSION_REQUEST_CODE
-                        )
-                    } else {
-                        result.success(false)
-                    }
-                } else {
-                    result.success(true)
-                }
+                result.success(hasLocationPermission())
             }
 
             "getCurrentLocation" -> {
@@ -704,7 +680,7 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
             getFusedClient().lastLocation.addOnSuccessListener { lastLoc: Location? ->
                 if (lastLoc != null && !completed) {
                     val age = System.currentTimeMillis() - lastLoc.time
-                    if (age < 15 * 60_000L && lastLoc.accuracy in 0f..1000f) {
+                    if (age < 120_000L && lastLoc.accuracy in 0f..1000f) {
                         sendSuccess(lastLoc)
                         try {
                             getFusedClient().getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)

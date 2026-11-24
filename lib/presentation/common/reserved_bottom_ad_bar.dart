@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/design_tokens.dart';
-import '../../domain/models/ride_status.dart';
-import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../services/ad_service.dart';
 import 'ad_banner_widget.dart';
 
 /// A reserved bottom ad slot that sits outside the map [PlatformView] surface.
 ///
 /// Ensures zero hardware layer overlap with Google Maps on Mali GPUs (Infinix, Xiaomi),
-/// prevents layout jumps by reserving a solid 60 dp bar, and strictly hides
-/// during active driving for drivers, emergency SOS, or when the
-/// keyboard is open.
+/// prevents layout jumps by reserving an explicit, unobstructed bar, and strictly hides
+/// during active driving for drivers, emergency SOS, or when the keyboard is open.
 class ReservedBottomAdBar extends StatelessWidget {
   const ReservedBottomAdBar({super.key});
 
@@ -32,59 +30,49 @@ class ReservedBottomAdBar extends StatelessWidget {
       rideProv = CustomChangeNotifierProvider.of<RideProvider>(context);
     } catch (_) {}
 
-    // 1. Soft keyboard open
-    final isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    final mediaQuery = MediaQuery.of(context);
+    final isKeyboardOpen = mediaQuery.viewInsets.bottom > 0;
+    final bottomInset = mediaQuery.padding.bottom;
 
-    // 2. Admin dashboard
-    final isAdmin = auth?.activeRole == UserRole.admin;
+    // Evaluate centralized visibility policy
+    final policyAllows = AdVisibilityPolicy.shouldShowAds(
+      role: auth?.activeRole,
+      tripStatus: rideProv?.currentRide?.status,
+      isNavigationActive: rideProv?.isNavigationActive ?? false,
+      isSosActive: rideProv?.activeSos != null,
+    );
 
-    // 3. Emergency SOS: safety critical, hide ad bar for all users during active SOS
-    final isSosActive = rideProv?.activeSos != null;
-
-    // 4. Driver Mode: HIDE only while actively driving a trip
-    bool isDriverActivelyDriving = false;
-    if (auth?.activeRole == UserRole.driver) {
-      final currentRide = rideProv?.currentRide;
-      if (currentRide != null &&
-          (currentRide.status == RideStatus.accepted ||
-              currentRide.status == RideStatus.driverArrived ||
-              currentRide.status == RideStatus.inProgress)) {
-        isDriverActivelyDriving = true;
-      }
-    }
-
-    final shouldHide = isKeyboardOpen ||
-        isAdmin ||
-        isSosActive ||
-        isDriverActivelyDriving;
+    final shouldHide = isKeyboardOpen || !policyAllows;
 
     final c = Theme.of(context).extension<AppColors>() ??
         (Theme.of(context).brightness == Brightness.dark ? AppColors.dark : AppColors.light);
 
+    // Reserved explicit height includes system safe area inset so banner is never clipped to < 50dp
+    final totalHeight = barHeight + bottomInset;
+
     return SizedBox(
-      height: shouldHide ? 0.0 : barHeight,
+      height: shouldHide ? 0.0 : totalHeight,
       child: Offstage(
         offstage: shouldHide,
-        child: SafeArea(
-          top: false,
-          child: SizedBox(
-            height: barHeight,
-            child: Center(
-              child: Container(
-                key: shouldHide ? null : const Key('reserved_bottom_ad_bar'),
-                height: barHeight,
-                width: double.infinity,
-                constraints: const BoxConstraints(maxWidth: 600),
-                decoration: BoxDecoration(
-                  color: c.surface,
-                  border: Border(
-                    top: BorderSide(color: c.border, width: 1.0),
-                  ),
-                ),
-                child: const Center(
-                  child: AdBannerWidget(
-                    padding: EdgeInsets.zero,
-                  ),
+        child: Container(
+          key: const Key('reserved_bottom_ad_bar'),
+          height: totalHeight,
+          width: double.infinity,
+          constraints: const BoxConstraints(maxWidth: 600),
+          decoration: BoxDecoration(
+            color: c.surface,
+            border: Border(
+              top: BorderSide(color: c.border, width: 1.0),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            bottom: true,
+            child: SizedBox(
+              height: barHeight,
+              child: const Center(
+                child: AdBannerWidget(
+                  padding: EdgeInsets.zero,
                 ),
               ),
             ),

@@ -41,6 +41,15 @@ class RideProvider extends ChangeNotifier {
   StreamSubscription<List<SafetyEvent>>? _sosSub;
   SafetyEvent? _activeSos;
 
+  bool _isNavigationActive = false;
+  bool get isNavigationActive => _isNavigationActive;
+  void setNavigationActive(bool active) {
+    if (_isNavigationActive != active) {
+      _isNavigationActive = active;
+      notifyListeners();
+    }
+  }
+
   bool _isSubmitting = false;
   bool _isAcceptingOffer = false;
   String? _lastError;

@@ -37,6 +37,8 @@ class _AdBannerWidgetState extends State<AdBannerWidget>
   Timer? _retryTimer;
   Timer? _refreshTimer;
 
+  static const List<int> retryDelays = [2, 5, 15];
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -65,6 +67,24 @@ class _AdBannerWidgetState extends State<AdBannerWidget>
         _isLoading = false;
         return;
       }
+
+      // Check for an instantly available pre-warmed banner ad
+      final prewarmed = AdService.instance.consumePrewarmedBannerAd();
+      if (prewarmed != null) {
+        debugPrint('[AdBannerWidget] Attaching pre-warmed banner ad (${prewarmed.responseInfo?.responseId})');
+        _bannerAd = prewarmed;
+        _isLoaded = true;
+        _isLoading = false;
+        _loadedWidth = width;
+        if (mounted) {
+          setState(() {});
+          _scheduleRefresh(width);
+        }
+        // Asynchronously replenish prewarm pool for subsequent transitions
+        AdService.instance.prewarmBannerAd(width: width);
+        return;
+      }
+
       await _createBannerAd(width);
     } catch (e) {
       _isLoading = false;
@@ -124,13 +144,13 @@ class _AdBannerWidgetState extends State<AdBannerWidget>
             debugPrint('[AdBannerWidget] Banner impression recorded (${ad.responseInfo?.responseId}).');
           },
           onAdFailedToLoad: (ad, error) {
-            debugPrint('[AdBannerWidget] Banner failed to load: code=${error.code}, message=${error.message}');
+            debugPrint('[AdBannerWidget] Banner failed to load: code=${error.code}, domain=${error.domain}, message=${error.message}');
             ad.dispose();
             _bannerAd = null;
             _isLoading = false;
             if (mounted) {
               setState(() => _isLoaded = false);
-              _handleLoadFailure(error.code, width);
+              _handleLoadFailure(error, width);
             }
           },
         ),
@@ -141,21 +161,17 @@ class _AdBannerWidgetState extends State<AdBannerWidget>
     }
   }
 
-  void _handleLoadFailure(int errorCode, int width) {
+  void _handleLoadFailure(LoadAdError error, int width) {
     if (NativeStorageService.isTestEnvironment) return;
     _retryTimer?.cancel();
-    if (_retryAttempt >= 3) {
+    if (_retryAttempt >= retryDelays.length) {
       debugPrint('[AdBannerWidget] Max retries reached ($_retryAttempt). Halting re-requests.');
       return;
     }
 
-    // Controlled backoff on NO_FILL (3): 30s, 60s, 120s
-    final delaySeconds = errorCode == 3
-        ? [30, 60, 120][_retryAttempt]
-        : (2 << _retryAttempt).clamp(10, 60);
-
+    final delaySeconds = retryDelays[_retryAttempt];
     _retryAttempt++;
-    debugPrint('[AdBannerWidget] Scheduling ad reload in ${delaySeconds}s (attempt $_retryAttempt/3, error code: $errorCode)');
+    debugPrint('[AdBannerWidget] Scheduling ad reload in ${delaySeconds}s (attempt $_retryAttempt/${retryDelays.length}, code=${error.code}, domain=${error.domain})');
     _retryTimer = Timer(Duration(seconds: delaySeconds), () {
       if (mounted && _bannerAd == null && !_isLoading) {
         _createBannerAd(width);
@@ -213,7 +229,7 @@ class _AdBannerWidgetState extends State<AdBannerWidget>
             debugPrint('[AdBannerWidget] Rotated banner impression recorded (${ad.responseInfo?.responseId}).');
           },
           onAdFailedToLoad: (ad, error) {
-            debugPrint('[AdBannerWidget] Rotated banner failed to load: ${error.message}');
+            debugPrint('[AdBannerWidget] Rotated banner failed to load: code=${error.code}, domain=${error.domain}, message=${error.message}');
             nextAd.dispose();
             if (mounted) {
               _scheduleRefresh(width);

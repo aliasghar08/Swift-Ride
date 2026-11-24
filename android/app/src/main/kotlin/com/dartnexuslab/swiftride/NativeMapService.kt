@@ -46,6 +46,9 @@ class NativeMapService(
             "requestLocationPermissions",
             "getCurrentLocation",
             "reverseGeocode",
+            "reverseGeocodeDetailed",
+            "panReverseGeocode",
+            "cancelPendingGeocode",
             "startLocationUpdates",
             "stopLocationUpdates" -> {
                 locationService.onMethodCall(call, result)

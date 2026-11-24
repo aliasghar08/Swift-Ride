@@ -662,7 +662,13 @@ class MapService {
     }
     if (premise.isNotEmpty) addPart(premise);
     if (poi.isNotEmpty && poi.toLowerCase() != locality.toLowerCase()) addPart(poi);
-    if (route.isNotEmpty && route.toLowerCase() != 'block') addPart(toTitleCase(route));
+    if (route.isNotEmpty && route.toLowerCase() != 'block') {
+      var cleanRoute = route;
+      if (streetNumber.isNotEmpty || premise.isNotEmpty) {
+        cleanRoute = cleanRoute.replaceFirst(RegExp(r'^\d+[A-Za-z]?(?:[/-]\d+[A-Za-z]?)?[\s,-]+'), '').trim();
+      }
+      if (cleanRoute.isNotEmpty) addPart(toTitleCase(cleanRoute));
+    }
 
     if (subloc2.isNotEmpty && !subloc1.toLowerCase().contains(subloc2.toLowerCase())) {
       addPart(toTitleCase(cleanSublocalityRepetitions(subloc2)));
@@ -812,7 +818,13 @@ class MapService {
       }
     }
 
-    if (route.isNotEmpty && route.toLowerCase() != 'block') addPart(toTitleCase(route));
+    if (route.isNotEmpty && route.toLowerCase() != 'block') {
+      var cleanRoute = route;
+      if (streetNumber.isNotEmpty || premise.isNotEmpty) {
+        cleanRoute = cleanRoute.replaceFirst(RegExp(r'^\d+[A-Za-z]?(?:[/-]\d+[A-Za-z]?)?[\s,-]+'), '').trim();
+      }
+      if (cleanRoute.isNotEmpty) addPart(toTitleCase(cleanRoute));
+    }
     if (neighborhood.isNotEmpty) addPart(toTitleCase(cleanSublocalityRepetitions(neighborhood)));
     if (locality.isNotEmpty) addPart(toTitleCase(locality), isLocality: true);
 
@@ -1146,9 +1158,9 @@ class MapService {
 
     String? broadFallback;
 
-    // 1. On iOS, NativeMapService runs the dedicated native IosGeocodingService pipeline
-    // (Tier 1 Google Places searchNearby + Direct Geocoding via GMSApiKey, Tier 2 Nominatim zoom=18, Tier 3 CLGeocoder, Tier 4 Plus Code)
-    if (Platform.isIOS) {
+    // 1. On iOS & Android, NativeMapService runs the dedicated native geocoding pipeline
+    // (Two-Layer Fusion: Google Places searchNearby + Geocoding REST + Roads API + GeoGuard)
+    if (Platform.isIOS || Platform.isAndroid) {
       try {
         final detailed = await NativeMapService.instance
             .reverseGeocodeDetailed(lat, lng)
@@ -1161,14 +1173,14 @@ class MapService {
           }
           broadFallback = trimmed;
         } else {
-          final nativeIosAddr = await NativeMapService.instance
+          final nativeAddr = await NativeMapService.instance
               .reverseGeocode(lat, lng)
               .timeout(const Duration(milliseconds: 3000));
-          if (nativeIosAddr != null &&
-              nativeIosAddr.trim().isNotEmpty &&
-              !nativeIosAddr.startsWith('Location (') &&
-              !nativeIosAddr.startsWith('Pinned Spot')) {
-            final trimmed = nativeIosAddr.trim();
+          if (nativeAddr != null &&
+              nativeAddr.trim().isNotEmpty &&
+              !nativeAddr.startsWith('Location (') &&
+              !nativeAddr.startsWith('Pinned Spot')) {
+            final trimmed = nativeAddr.trim();
             if (NativeMapService.isGranularAddress(trimmed)) {
               _cacheIfGranular(cacheKey, trimmed);
               return trimmed;
@@ -1177,7 +1189,7 @@ class MapService {
           }
         }
       } catch (e) {
-        debugPrint('[MapService] iOS native geocoding error: $e');
+        debugPrint('[MapService] Native geocoding error: $e');
       }
     }
 
@@ -1374,7 +1386,7 @@ class MapService {
 
   /// Performs structured reverse geocoding via native platforms.
   Future<NativeGeocodedAddress?> reverseGeocodeDetailed(double lat, double lng) async {
-    if (Platform.isIOS) {
+    if (Platform.isIOS || Platform.isAndroid) {
       try {
         final detailed = await NativeMapService.instance.reverseGeocodeDetailed(lat, lng);
         if (detailed != null && detailed.formattedAddress.isNotEmpty) {

@@ -288,5 +288,65 @@ void main() {
       final result = await service.validateAddress('Satellite Town, Jhang', regionCode: 'PK');
       expect(result, isNull);
     });
+
+    test('Android-to-iOS Geocoding Parity: ensures single rooftop plot without double plot prefixes or leaked street numbers', () {
+      final service = MapService();
+
+      // Target 1: Plot 763 A with nearby subpremise 220 (must not produce "Plot 220, Plot 763 A")
+      final target1Results = [
+        {
+          'types': ['street_address'],
+          'geometry': {'location_type': 'ROOFTOP'},
+          'formatted_address': '763 A, Green Belt, Satellite Town Block A, Jhang, Pakistan',
+          'address_components': [
+            {'long_name': '763 A', 'types': ['street_number']},
+            {'long_name': 'Green Belt', 'types': ['route']},
+            {'long_name': 'Satellite Town Block A', 'types': ['sublocality_level_1']},
+            {'long_name': 'Jhang', 'types': ['locality']},
+          ],
+        },
+      ];
+      final formatted1 = service.buildPrecisePropertyAddressForTest(target1Results);
+      expect(formatted1, equals('Plot 763 A, Green Belt, Satellite Town Block A, Jhang'));
+      expect(formatted1, isNot(contains('Plot 220')));
+      expect(formatted1, isNot(contains('Naya Shehar')));
+
+      // Target 2: Plot 772 A with route "416 Usmania Road" (must strip 416 from street slot)
+      final target2Results = [
+        {
+          'types': ['street_address'],
+          'geometry': {'location_type': 'ROOFTOP'},
+          'formatted_address': '772 A, 416 Usmania Road, Satellite Town Block A, Jhang, Pakistan',
+          'address_components': [
+            {'long_name': '772 A', 'types': ['street_number']},
+            {'long_name': '416 Usmania Road', 'types': ['route']},
+            {'long_name': 'Satellite Town Block A', 'types': ['sublocality_level_1']},
+            {'long_name': 'Jhang', 'types': ['locality']},
+          ],
+        },
+      ];
+      final formatted2 = service.buildPrecisePropertyAddressForTest(target2Results);
+      expect(formatted2, equals('Plot 772 A, Usmania Road, Satellite Town Block A, Jhang'));
+      expect(formatted2, isNot(contains('Plot 416')));
+      expect(formatted2, isNot(contains('416 Usmania')));
+
+      // Target 3: Plot 757 A (must never prepend secondary plot 416)
+      final target3Results = [
+        {
+          'types': ['street_address'],
+          'geometry': {'location_type': 'ROOFTOP'},
+          'formatted_address': '757 A, Green Belt, Satellite Town Block A, Jhang, Pakistan',
+          'address_components': [
+            {'long_name': '757 A', 'types': ['street_number']},
+            {'long_name': 'Green Belt', 'types': ['route']},
+            {'long_name': 'Satellite Town Block A', 'types': ['sublocality_level_1']},
+            {'long_name': 'Jhang', 'types': ['locality']},
+          ],
+        },
+      ];
+      final formatted3 = service.buildPrecisePropertyAddressForTest(target3Results);
+      expect(formatted3, equals('Plot 757 A, Green Belt, Satellite Town Block A, Jhang'));
+      expect(formatted3, isNot(contains('Plot 416')));
+    });
   });
 }

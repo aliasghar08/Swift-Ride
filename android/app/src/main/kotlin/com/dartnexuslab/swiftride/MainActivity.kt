@@ -84,6 +84,9 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
 
         val messenger = flutterEngine.dartExecutor.binaryMessenger
 
+        // 0. Initialize Dedicated Android Geocoding Service (Two-Layer Fusion parity with iOS)
+        AndroidGeocodingService.initialize(applicationContext)
+
         // 1. Register custom native map PlatformView
         flutterEngine.platformViewsController.registry.registerViewFactory(
             "com.swiftride.app/native_map_view",

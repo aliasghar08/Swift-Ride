@@ -57,7 +57,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
 
     private var fusedClientInternal: FusedLocationProviderClient? = null
-    private val geocodeExecutor = Executors.newCachedThreadPool()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private var locationCallback: LocationCallback? = null
@@ -109,6 +108,7 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
         private var pendingPermissionResult: MethodChannel.Result? = null
 
         fun registerWith(messenger: BinaryMessenger, activity: Activity): NativeLocationService {
+            AndroidGeocodingService.initialize(activity.applicationContext)
             currentActivity = WeakReference(activity)
             val pChan = MethodChannel(messenger, PRIMARY_CHANNEL)
             val aChan = MethodChannel(messenger, ALT_CHANNEL)
@@ -643,7 +643,38 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
                     result.error("INVALID_ARGS", "latitude and longitude required", null)
                     return
                 }
-                reverseGeocode(lat, lng, result)
+                AndroidGeocodingService.shared.reverseGeocode(lat, lng) { address ->
+                    result.success(address)
+                }
+            }
+
+            "reverseGeocodeDetailed" -> {
+                val lat = call.argument<Double>("latitude")
+                val lng = call.argument<Double>("longitude")
+                if (lat == null || lng == null) {
+                    result.error("INVALID_ARGS", "latitude and longitude required", null)
+                    return
+                }
+                AndroidGeocodingService.shared.reverseGeocodeDetailed(lat, lng) { map ->
+                    result.success(map)
+                }
+            }
+
+            "panReverseGeocode" -> {
+                val lat = call.argument<Double>("latitude")
+                val lng = call.argument<Double>("longitude")
+                if (lat == null || lng == null) {
+                    result.error("INVALID_ARGS", "latitude and longitude required", null)
+                    return
+                }
+                AndroidGeocodingService.shared.panReverseGeocode(lat, lng) { map ->
+                    result.success(map)
+                }
+            }
+
+            "cancelPendingGeocode" -> {
+                AndroidGeocodingService.shared.cancelPendingGeocode()
+                result.success(true)
             }
 
             else -> result.notImplemented()
@@ -811,89 +842,6 @@ class NativeLocationService() : Service(), MethodChannel.MethodCallHandler {
             }
         } catch (_: Exception) {}
         return best
-    }
-
-    private fun reverseGeocode(lat: Double, lng: Double, result: MethodChannel.Result) {
-        val fallbackStr = String.format(Locale.US, "Location (%.4f, %.4f)", lat, lng)
-        val completed = AtomicBoolean(false)
-
-        val finishOnMain: (String) -> Unit = { resolved ->
-            if (completed.compareAndSet(false, true)) {
-                mainHandler.post {
-                    try {
-                        result.success(resolved)
-                    } catch (_: Exception) {}
-                }
-            }
-        }
-
-        mainHandler.postDelayed({
-            finishOnMain(fallbackStr)
-        }, 3_000L)
-
-        geocodeExecutor.execute {
-            try {
-                val ctx = getActiveContext()
-                if (!Geocoder.isPresent()) {
-                    finishOnMain(fallbackStr)
-                    return@execute
-                }
-                val geocoder = Geocoder(ctx, Locale.getDefault())
-                @Suppress("DEPRECATION")
-                val addresses = geocoder.getFromLocation(lat, lng, 1)
-                if (!addresses.isNullOrEmpty()) {
-                    val addr = addresses[0]
-                    val parts = mutableListOf<String>()
-                    val streetNumber = addr.subThoroughfare?.trim() ?: ""
-                    val streetName = addr.thoroughfare?.trim() ?: ""
-                    val premises = addr.premises?.trim() ?: ""
-                    val feature = addr.featureName?.trim() ?: ""
-
-                    val plotOrHouse = when {
-                        streetNumber.isNotEmpty() && streetName.isNotEmpty() -> {
-                            val prefix = if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
-                            "$prefix, $streetName"
-                        }
-                        streetNumber.isNotEmpty() -> {
-                            if (streetNumber.matches(Regex("^\\d+[A-Za-z]?$"))) "Plot $streetNumber" else streetNumber
-                        }
-                        streetName.isNotEmpty() -> streetName
-                        else -> ""
-                    }
-
-                    if (premises.isNotEmpty() && premises != streetNumber && premises != streetName) {
-                        parts.add(premises)
-                    }
-                    if (feature.isNotEmpty() &&
-                        feature != streetNumber &&
-                        feature != streetName &&
-                        feature != addr.subLocality &&
-                        feature != addr.locality &&
-                        !feature.matches(Regex("^[A-Za-z0-9]{4,8}\\+[A-Za-z0-9]{2,5}$")) &&
-                        !parts.contains(feature)
-                    ) {
-                        parts.add(feature)
-                    }
-                    if (plotOrHouse.isNotEmpty() && !parts.contains(plotOrHouse)) {
-                        parts.add(plotOrHouse)
-                    }
-
-                    addr.subLocality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
-                    addr.locality?.let { if (it.isNotBlank() && !parts.contains(it)) parts.add(it) }
-
-                    val formatted = if (parts.isNotEmpty()) {
-                        parts.joinToString(", ")
-                    } else {
-                        addr.getAddressLine(0) ?: fallbackStr
-                    }
-                    finishOnMain(formatted)
-                } else {
-                    finishOnMain(fallbackStr)
-                }
-            } catch (_: Exception) {
-                finishOnMain(fallbackStr)
-            }
-        }
     }
 
     private fun serializeLocation(loc: Location): Map<String, Any> {

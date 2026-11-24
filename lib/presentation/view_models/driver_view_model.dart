@@ -571,7 +571,7 @@ class DriverViewModel extends ChangeNotifier {
     if (online) {
       final driver = driverProv.driverProfile;
       if (!driver.vehicle.isConfigured) {
-        return 'Please input your vehicle details (legal & visual info) before going online.';
+        return 'Please enter your vehicle details to go online.';
       }
       if (AppConstants.kRequireDriverVerification &&
           !driver.isVerified &&

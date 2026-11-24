@@ -27,11 +27,12 @@ class VehicleInfo {
 
   /// Whether the driver has entered real, non-placeholder vehicle legal details.
   bool get isConfigured =>
-      make.isNotEmpty &&
-      model.isNotEmpty &&
-      plate.isNotEmpty &&
-      plate != 'SWIFT-101' &&
-      plate != 'ABC-1234' &&
+      make.trim().isNotEmpty &&
+      model.trim().isNotEmpty &&
+      plate.trim().isNotEmpty &&
+      plate.trim() != 'SWIFT-101' &&
+      plate.trim() != 'ABC-1234' &&
+      color.trim().isNotEmpty &&
       year >= 1995;
 
   /// Whether visual photos (front with plate, interior cabin) have been submitted.

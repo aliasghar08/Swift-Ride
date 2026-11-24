@@ -312,9 +312,9 @@ class FirestoreDriverService {
 
       return switch (e.code) {
         'failed-precondition' => e.message ??
-            'You cannot go online until your vehicle details and documents are verified.',
-        'not-found' => 'Complete your driver onboarding before going online.',
-        'permission-denied' => e.message ?? 'Your account is not authorized as a verified driver.',
+            'Please enter your vehicle details before going online.',
+        'not-found' => 'Please enter your vehicle details before going online.',
+        'permission-denied' => e.message ?? 'Your account is not authorized as a driver.',
         'unauthenticated' => 'Please sign in to go online.',
         _ => 'We could not change your availability. Please try again.',
       };

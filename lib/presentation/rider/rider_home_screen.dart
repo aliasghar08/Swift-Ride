@@ -3866,6 +3866,39 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           color: Colors.orange,
                         ),
                       ),
+                      if (offer.driverVerified) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.verified_user_rounded,
+                                color: AppTheme.emeraldGreen,
+                                size: 10,
+                              ),
+                              const SizedBox(width: 2.5),
+                              Text(
+                                'Verified',
+                                style: TextStyle(
+                                  fontSize: layout.fontSize(9),
+                                  fontWeight: FontWeight.w700,
+                                  color: AppTheme.emeraldGreen,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   Text(

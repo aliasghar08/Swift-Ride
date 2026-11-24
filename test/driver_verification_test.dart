@@ -251,9 +251,9 @@ void main() {
 
       // Check header and titles
       expect(find.text('Driver Verification'), findsOneWidget);
-      expect(find.text('Pending Document Verification'), findsOneWidget);
-      expect(find.text('Vehicle Information (Legal & Visual)'), findsOneWidget);
-      expect(find.text('Required Documents'), findsOneWidget);
+      expect(find.text('Step 1: Configure Vehicle to Go Online'), findsOneWidget);
+      expect(find.text('Step 1: Vehicle Details — Required to Go Online'), findsOneWidget);
+      expect(find.text('Optional: Verify Documents to Boost Credibility'), findsOneWidget);
 
       // Check vehicle details fields & save button
       expect(find.text('Save Vehicle Details'), findsOneWidget);

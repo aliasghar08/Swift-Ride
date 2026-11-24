@@ -8,6 +8,7 @@ class RideOffer {
   final String vehicleSummary;
   final double driverRating;
   final String status; // PENDING, ACCEPTED, REJECTED, EXPIRED
+  final bool driverVerified;
   final DateTime createdAt;
 
   const RideOffer({
@@ -20,6 +21,7 @@ class RideOffer {
     required this.vehicleSummary,
     this.driverRating = 4.9,
     this.status = 'PENDING',
+    this.driverVerified = false,
     required this.createdAt,
   });
 
@@ -33,6 +35,7 @@ class RideOffer {
         'vehicleSummary': vehicleSummary,
         'driverRating': driverRating,
         'status': status,
+        'driverVerified': driverVerified,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -52,6 +55,7 @@ class RideOffer {
       vehicleSummary: summary,
       driverRating: (map['driverRating'] as num?)?.toDouble() ?? 4.9,
       status: map['status']?.toString() ?? 'PENDING',
+      driverVerified: map['driverVerified'] == true,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

@@ -62,6 +62,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _hasCheckedDriverName = false;
   bool _isWomenDriverPromoDismissed = false;
+  bool _isCredibilityCardDismissed = false;
   late final DriverViewModel _viewModel;
   final RideService _rideService = RideService();
 
@@ -307,11 +308,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           color: AppTheme.amberWarning,
         ),
         title: const Text(
-          'Vehicle Setup & Verification',
+          'Add Vehicle Details to Go Online',
           style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
         ),
         content: const Text(
-          'Before acting as a driver on Swift Ride, you must provide your vehicle specifications (make, model, plate, color, photos) and complete document verification.',
+          'Please provide your vehicle details (category, make/model, number plate, and color) to start receiving ride requests. Document verification is optional and can be completed anytime.',
           style: TextStyle(fontSize: 13.5, height: 1.4),
         ),
         actions: [
@@ -335,7 +336,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: const Text('Setup Vehicle & Verify'),
+            child: const Text('Add Vehicle Details'),
           ),
         ],
       ),
@@ -929,6 +930,12 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                 driverProv: driverProv,
                                 isDark: isDark,
                               ),
+                            if (_shouldShowCredibilityCard(driver, driverProv))
+                              _buildCredibilityCard(
+                                layout: layout,
+                                c: c,
+                                isDark: isDark,
+                              ),
                             GlassContainer(
                               borderRadius: 18,
                               blur: 20,
@@ -1041,10 +1048,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                             return;
                                           }
                                         } else {
-                                          if (!driver.vehicle.isConfigured ||
-                                              (AppConstants.kRequireDriverVerification &&
-                                                  !driver.isVerified &&
-                                                  !driverProv.hasPassedAiVerification)) {
+                                          if (!driver.vehicle.isConfigured) {
                                             _showVehicleSetupRequiredDialog(context);
                                             return;
                                           }
@@ -1086,9 +1090,9 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                             SnackBar(
                                               content: Text(error),
                                               backgroundColor: AppTheme.sunsetCoral,
-                                              action: !driver.isVerified
+                                              action: !driver.vehicle.isConfigured
                                                   ? SnackBarAction(
-                                                      label: 'Verify Now',
+                                                      label: 'Setup Vehicle',
                                                       textColor: Colors.white,
                                                       onPressed: () {
                                                         Navigator.of(context).push(
@@ -1268,9 +1272,38 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         ),
                                       ),
                                     ),
-                                    if (!driver.isVerified) ...[
-                                      const SizedBox(width: 6),
-                                      // Boost Trust Badge (Optional) Pill
+                                    const SizedBox(width: 6),
+                                    if (driver.isVerified || driverProv.hasPassedAiVerification)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: AppTheme.emeraldGreen.withValues(alpha: 0.4),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.verified_user_rounded,
+                                              color: AppTheme.emeraldGreen,
+                                              size: 13,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Verified Captain',
+                                              style: TextStyle(
+                                                color: AppTheme.emeraldGreen,
+                                                fontSize: layout.fontSize(10),
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      )
+                                    else
                                       InkWell(
                                         onTap: () {
                                           Navigator.of(context).push(
@@ -1297,13 +1330,13 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
-                                                Icons.verified_user_outlined,
+                                                Icons.shield_outlined,
                                                 color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                                 size: 13,
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                'Verify Badge (Optional)',
+                                                'Standard • Boost Credibility',
                                                 style: TextStyle(
                                                   color: isDark ? AppTheme.accentCyan : AppTheme.primaryBlue,
                                                   fontSize: layout.fontSize(10),
@@ -1314,7 +1347,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                           ),
                                         ),
                                       ),
-                                    ],
                                   ],
                                 ),
                               ),
@@ -3621,6 +3653,115 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
           ),
         ],
       ],
+    );
+  }
+
+  bool _shouldShowCredibilityCard(DriverProfile driver, DriverProvider driverProv) {
+    if (_isCredibilityCardDismissed) return false;
+    final isVerified = driver.isVerified || driverProv.hasPassedAiVerification;
+    return !isVerified;
+  }
+
+  Widget _buildCredibilityCard({
+    required ResponsiveLayoutHelper layout,
+    required AppColors c,
+    required bool isDark,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppTheme.accentTeal.withValues(alpha: 0.12)
+            : AppTheme.emeraldGreen.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.emeraldGreen.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.emeraldGreen.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.verified_user_rounded,
+              color: AppTheme.emeraldGreen,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const DriverVerificationScreen(),
+                  ),
+                );
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Boost Your Credibility',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(13.5),
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Optional',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(9.5),
+                            fontWeight: FontWeight.w700,
+                            color: AppTheme.emeraldGreen,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Verify your CNIC & license to earn a Verified Badge and win more rides (Optional)',
+                    style: TextStyle(
+                      fontSize: layout.fontSize(11.5),
+                      color: c.textSecondary,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: c.textMuted,
+            ),
+            tooltip: 'Dismiss',
+            onPressed: () {
+              setState(() {
+                _isCredibilityCardDismissed = true;
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 

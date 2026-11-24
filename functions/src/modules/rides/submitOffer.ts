@@ -52,7 +52,7 @@ export const submitOffer = onCall(
     }
 
     const plate = driverData.vehiclePlate;
-    if (REQUIRE_DRIVER_VERIFICATION && (!plate || plate === 'SWIFT-101' || plate === 'ABC-1234' || !driverData.vehicleMake)) {
+    if (!plate || plate === 'SWIFT-101' || plate === 'ABC-1234' || !driverData.vehicleMake) {
       throw new HttpsError('failed-precondition', 'Please configure your vehicle details before submitting offers.');
     }
 
@@ -83,6 +83,7 @@ export const submitOffer = onCall(
       counterFare: data.counterFare,
       etaMinutes: data.etaMinutes || 5,
       driverRating: driverData.rating || 5.0,
+      driverVerified: Boolean(driverData.isVerified),
       vehicleInfo: {
         make: driverData.vehicleMake || 'SwiftRide',
         model: driverData.vehicleModel || 'Vehicle',

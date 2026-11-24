@@ -53,7 +53,7 @@ export const toggleOnline = onCall(
       if (data.isOnline) {
         throw new HttpsError(
           'failed-precondition',
-          'Please enter your vehicle details and complete document verification before going online.'
+          'Please enter your vehicle details before going online.'
         );
       }
       return { success: false, isOnline: false };
@@ -76,10 +76,17 @@ export const toggleOnline = onCall(
       driverData?.vehicleMake
     );
 
-    if (REQUIRE_DRIVER_VERIFICATION && data.isOnline && (!isVerified || !hasValidVehicle)) {
+    if (data.isOnline && !hasValidVehicle) {
       throw new HttpsError(
         'failed-precondition',
-        'Please enter complete vehicle details (legal & visual) and complete document verification before going online.'
+        'Please enter your vehicle details before going online.'
+      );
+    }
+
+    if (REQUIRE_DRIVER_VERIFICATION && data.isOnline && !isVerified) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Please complete document verification before going online.'
       );
     }
 

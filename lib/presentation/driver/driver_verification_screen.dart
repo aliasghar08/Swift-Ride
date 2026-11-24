@@ -157,10 +157,12 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       setState(() {
         _isSavingVehicle = false;
         if (ok) {
-          _vehicleSaveSuccess = 'Vehicle legal & visual details saved! Verify documents below.';
+          _vehicleSaveSuccess =
+              'Vehicle details saved successfully! You can now go online immediately.';
           _vehicleSaveError = null;
         } else {
-          _vehicleSaveError = 'Failed to save vehicle details. Please try again.';
+          _vehicleSaveError =
+              'Failed to save vehicle details. Please try again.';
         }
       });
     }
@@ -534,7 +536,9 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                         Text(
                           isAllVerified
                               ? 'Verified Captain Account'
-                              : 'Pending Document Verification',
+                              : (driver.vehicle.isConfigured
+                                  ? 'Vehicle Configured • Ready to Go Online'
+                                  : 'Step 1: Configure Vehicle to Go Online'),
                           style: TextStyle(
                             fontSize: layout.fontSize(15),
                             fontWeight: FontWeight.w800,
@@ -544,8 +548,10 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                         const SizedBox(height: 2),
                         Text(
                           isAllVerified
-                              ? 'All required documents verified. You can toggle Online anytime.'
-                              : 'Upload clear photos of your CNIC and License for instant AI verification.',
+                              ? 'All required documents verified. You have the official Verified trust badge on passenger offer cards.'
+                              : (driver.vehicle.isConfigured
+                                  ? 'Vehicle details saved! You can go online anytime, or verify documents below to earn your Verified badge.'
+                                  : 'Enter your vehicle details below to immediately unlock the Online toggle.'),
                           style: TextStyle(
                             fontSize: layout.fontSize(12.5),
                             color: c.textSecondary,
@@ -561,11 +567,20 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
             const SizedBox(height: 20),
 
             Text(
-              'Vehicle Information (Legal & Visual)',
+              'Step 1: Vehicle Details — Required to Go Online',
               style: TextStyle(
                 fontSize: layout.fontSize(16),
                 fontWeight: FontWeight.w800,
                 color: c.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Save your vehicle details below to immediately unlock your Online toggle and start receiving rides.',
+              style: TextStyle(
+                fontSize: layout.fontSize(12.5),
+                color: c.textSecondary,
+                height: 1.35,
               ),
             ),
             const SizedBox(height: 10),
@@ -576,17 +591,103 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
               isDark: isDark,
               driverProv: driverProv,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
 
+            // Optional Credibility Booster Section
             Text(
-              'Required Documents',
+              'Optional: Verify Documents to Boost Credibility',
               style: TextStyle(
                 fontSize: layout.fontSize(16),
                 fontWeight: FontWeight.w800,
                 color: c.textPrimary,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
+            Text(
+              'Earn a "Verified" trust badge on passenger offer cards and stand out to win more rides. Completely optional — you can go online without uploading any documents.',
+              style: TextStyle(
+                fontSize: layout.fontSize(12.5),
+                color: c.textSecondary,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // Badge Preview Card
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? AppTheme.accentTeal.withValues(alpha: 0.1)
+                    : AppTheme.emeraldGreen.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppTheme.emeraldGreen.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.emeraldGreen.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.verified_user_rounded,
+                      color: AppTheme.emeraldGreen,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Verified Captain Badge',
+                              style: TextStyle(
+                                fontSize: layout.fontSize(13.5),
+                                fontWeight: FontWeight.w700,
+                                color: c.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.emeraldGreen,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'TRUST BOOST',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Passengers see a "Verified" badge next to your name and counter-offers, boosting acceptance rates.',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(11.5),
+                            color: c.textSecondary,
+                            height: 1.3,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
 
             // Document Cards
             _buildDocCard(
@@ -736,7 +837,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Vehicle Legal & Visual Details',
+                      'Vehicle Details',
                       style: TextStyle(
                         fontSize: layout.fontSize(15),
                         fontWeight: FontWeight.w700,
@@ -746,8 +847,8 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                     const SizedBox(height: 2),
                     Text(
                       isConfigured
-                          ? '${driverProv.driverProfile.vehicle.summary} · Configured'
-                          : 'Provide your vehicle make, model, registration plate & specs',
+                          ? '${driverProv.driverProfile.vehicle.summary} · Ready to Drive'
+                          : 'Enter make, model, plate, color & specs to go online',
                       style: TextStyle(
                         fontSize: layout.fontSize(12),
                         color: c.textSecondary,
@@ -764,7 +865,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  isConfigured ? 'Saved' : 'Required',
+                  isConfigured ? 'Ready' : 'Required',
                   style: TextStyle(
                     color: isConfigured ? AppTheme.emeraldGreen : AppTheme.amberWarning,
                     fontSize: 12,

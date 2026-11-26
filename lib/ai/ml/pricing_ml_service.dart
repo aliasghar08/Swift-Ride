@@ -291,6 +291,7 @@ class PricingMLService {
     int roadCondition = 1,
     bool? acEnabled,
     double? fuelAverageKmPerL,
+    double? platformFeeRate,
   }) async {
     if (!_isEconomicsInitialized && !_isEconomicsLoading) {
       await initializeEconomics();
@@ -445,7 +446,8 @@ class PricingMLService {
     final costFloor = (fuelCost + maintenanceCost) * 1.18;
     final effectiveFare = math.max(predictedFarePkr, costFloor);
     final roundedFare = ((effectiveFare / 5.0).round() * 5.0).toDouble();
-    final serviceFee = ((roundedFare * 0.02) * 10).round() / 10.0; // SwiftRide 2% Commission
+    final effectiveFeeRate = platformFeeRate ?? 0.02;
+    final serviceFee = ((roundedFare * effectiveFeeRate) * 10).round() / 10.0;
     final driverTotalExpenses = ((fuelCost + maintenanceCost + serviceFee) * 10).round() / 10.0;
     final driverNetProfit = math.max(0.0, ((roundedFare - driverTotalExpenses) * 10).round() / 10.0);
     final profitRate = validDur > 0 ? ((driverNetProfit / validDur) * 10).round() / 10.0 : 0.0;
@@ -479,6 +481,7 @@ class PricingMLService {
       isAiPredicted: true,
       carEngineTier: effectiveCarTier,
       acEnabled: effectiveAc,
+      platformFeeRate: effectiveFeeRate,
     );
   }
 

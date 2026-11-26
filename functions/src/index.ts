@@ -29,6 +29,7 @@ export {
   getEarnings,
   requestPayout,
   subscribePlan,
+  applyDriverPromoCode,
 } from './modules/drivers';
 
 // 4. Payments Module (Stripe PaymentIntents & Webhooks)

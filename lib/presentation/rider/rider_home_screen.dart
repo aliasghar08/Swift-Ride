@@ -3901,6 +3901,28 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           ),
                         ),
                       ],
+                      if (offer.isFoundingCaptain) ...[
+                        const SizedBox(width: 5),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFD700).withValues(alpha: 0.18),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFFFFD700).withValues(alpha: 0.5),
+                              width: 0.8,
+                            ),
+                          ),
+                          child: Text(
+                            '🎖️ Founding Captain',
+                            style: TextStyle(
+                              fontSize: layout.fontSize(9),
+                              fontWeight: FontWeight.w800,
+                              color: const Color(0xFFB8860B),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   Text(

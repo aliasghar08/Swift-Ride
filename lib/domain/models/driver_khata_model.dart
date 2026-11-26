@@ -8,6 +8,7 @@ class DriverDailyKhata {
   final double totalGrossCashCollected;
   final double totalFuelExpense;
   final double totalMaintenanceReserve;
+  final double platformFeeRate;
 
   const DriverDailyKhata({
     required this.date,
@@ -15,14 +16,17 @@ class DriverDailyKhata {
     this.totalGrossCashCollected = 0.0,
     this.totalFuelExpense = 0.0,
     this.totalMaintenanceReserve = 0.0,
+    this.platformFeeRate = 0.02,
   });
 
-  /// 2% platform commission deduction.
+  /// Platform commission deduction (0% if fee waiver active, else 2%).
   double get platformCommission =>
-      ((totalGrossCashCollected * 0.02) * 10).round() / 10.0;
+      ((totalGrossCashCollected * platformFeeRate) * 10).round() / 10.0;
 
-  /// Net take-home cash profit retained by the driver after live fuel & wear reserves and 2% fee.
-  /// 98% cash profit retained.
+  /// True if 0% fee waiver is active on this ledger.
+  bool get isWaiverActive => platformFeeRate <= 0.0;
+
+  /// Net take-home cash profit retained by the driver after live fuel & wear reserves and fee.
   double get netCashProfit =>
       totalGrossCashCollected - (totalFuelExpense + totalMaintenanceReserve + platformCommission);
 
@@ -32,6 +36,7 @@ class DriverDailyKhata {
     double? totalGrossCashCollected,
     double? totalFuelExpense,
     double? totalMaintenanceReserve,
+    double? platformFeeRate,
   }) {
     return DriverDailyKhata(
       date: date ?? this.date,
@@ -41,6 +46,7 @@ class DriverDailyKhata {
       totalFuelExpense: totalFuelExpense ?? this.totalFuelExpense,
       totalMaintenanceReserve:
           totalMaintenanceReserve ?? this.totalMaintenanceReserve,
+      platformFeeRate: platformFeeRate ?? this.platformFeeRate,
     );
   }
 
@@ -49,6 +55,7 @@ class DriverDailyKhata {
     required double cashCollected,
     required double fuelExpense,
     required double maintenanceReserve,
+    double? feeRate,
   }) {
     return DriverDailyKhata(
       date: date,
@@ -56,6 +63,7 @@ class DriverDailyKhata {
       totalGrossCashCollected: totalGrossCashCollected + cashCollected,
       totalFuelExpense: totalFuelExpense + fuelExpense,
       totalMaintenanceReserve: totalMaintenanceReserve + maintenanceReserve,
+      platformFeeRate: feeRate ?? platformFeeRate,
     );
   }
 
@@ -67,6 +75,7 @@ class DriverDailyKhata {
       'totalFuelExpense': totalFuelExpense,
       'totalMaintenanceReserve': totalMaintenanceReserve,
       'netCashProfit': netCashProfit,
+      'platformFeeRate': platformFeeRate,
     };
   }
 
@@ -81,6 +90,7 @@ class DriverDailyKhata {
       totalFuelExpense: (map['totalFuelExpense'] as num?)?.toDouble() ?? 0.0,
       totalMaintenanceReserve:
           (map['totalMaintenanceReserve'] as num?)?.toDouble() ?? 0.0,
+      platformFeeRate: (map['platformFeeRate'] as num?)?.toDouble() ?? 0.02,
     );
   }
 

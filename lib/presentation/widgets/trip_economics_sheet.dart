@@ -102,6 +102,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
         fuelPrice: fuelPrice,
         carEngineTier: effectiveTier,
         acEnabled: effectiveAc,
+        platformFeeRate: _econ.platformFeeRate,
       );
     } else {
       return TripEconomics.calculate(
@@ -116,6 +117,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
         isAiPredicted: _econ.isAiPredicted,
         carEngineTier: effectiveTier,
         acEnabled: effectiveAc,
+        platformFeeRate: _econ.platformFeeRate,
       );
     }
   }

@@ -69,6 +69,13 @@ class FirestoreDriverService {
           if (driver.gender != null) 'gender': driver.gender,
           'isGenderVerified': driver.isGenderVerified,
           'femalePassengersOnly': driver.femalePassengersOnly,
+          'captainInviteCode': driver.captainInviteCode ??
+              'CAPT${driver.userId.length >= 3 ? driver.userId.substring(driver.userId.length - 3).toUpperCase() : (driver.userId.hashCode.abs() % 900 + 100)}',
+          'verifiedReferralsCount': driver.verifiedReferralsCount,
+          'badges': driver.badges,
+          'weeklyCompletedRides': driver.weeklyCompletedRides,
+          if (driver.feeWaiverUntil != null)
+            'feeWaiverUntil': Timestamp.fromDate(driver.feeWaiverUntil!),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -659,6 +666,11 @@ class FirestoreDriverService {
           'gender': ?gender,
           'isGenderVerified': ?isGenderVerified,
           'femalePassengersOnly': false,
+          'captainInviteCode':
+              'CAPT${userId.length >= 3 ? userId.substring(userId.length - 3).toUpperCase() : (userId.hashCode.abs() % 900 + 100)}',
+          'verifiedReferralsCount': 0,
+          'badges': <String>[],
+          'weeklyCompletedRides': 0,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
@@ -667,6 +679,75 @@ class FirestoreDriverService {
     } catch (e) {
       debugPrint('[FirestoreDriverService] ensureDriverProfileExists error: $e');
     }
+  }
+
+  /// Applies a launch campaign promo code (e.g. `JHANG0`, `CAPTAIN0`) or another driver's
+  /// captain invite code (`CAPT-482`), unlocking an initial 30 days of 0% platform fee.
+  Future<Map<String, dynamic>> applyDriverPromoCode(String code) async {
+    final cleanCode = code.trim().toUpperCase();
+    if (cleanCode.isEmpty) {
+      return {'success': false, 'message': 'Please enter a valid code.'};
+    }
+
+    if (Firebase.apps.isNotEmpty) {
+      try {
+        final res = await FirebaseFunctions.instance
+            .httpsCallable('applyDriverPromoCode')
+            .call(<String, dynamic>{'code': cleanCode});
+        final data = res.data as Map<dynamic, dynamic>? ?? {};
+        return {
+          'success': data['success'] == true,
+          'message': data['message']?.toString() ?? '0% Platform Fee Unlocked for 30 Days!',
+          'feeWaiverUntil': data['feeWaiverUntil'],
+        };
+      } on FirebaseFunctionsException catch (e) {
+        debugPrint('[FirestoreDriverService] applyDriverPromoCode error: ${e.code} - ${e.message}');
+        return {
+          'success': false,
+          'message': e.message ?? 'Invalid promo code. Please check and try again.',
+        };
+      } catch (e) {
+        debugPrint('[FirestoreDriverService] applyDriverPromoCode unexpected: $e');
+      }
+    }
+
+    // In-memory / offline mock validation for tests and disconnected environments
+    final validLaunchCodes = {'JHANG0', 'CAPTAIN0', 'SWIFT0', 'LAUNCH0'};
+    final isLaunchCode = validLaunchCodes.contains(cleanCode);
+    final isCaptainCode = cleanCode.startsWith('CAPT') && cleanCode.length >= 6;
+
+    if (!isLaunchCode && !isCaptainCode) {
+      return {
+        'success': false,
+        'message': 'Invalid promo or captain invite code. Try "JHANG0".',
+      };
+    }
+
+    final now = DateTime.now();
+    final waiverDate = now.add(const Duration(days: 30));
+    final String? currentUid =
+        Firebase.apps.isNotEmpty ? FirebaseAuth.instance.currentUser?.uid : null;
+
+    if (currentUid != null && _memoryDrivers.containsKey(currentUid)) {
+      final cur = _memoryDrivers[currentUid]!;
+      if (cur.referredByCode != null && cur.referredByCode!.isNotEmpty) {
+        return {
+          'success': false,
+          'message': 'You have already redeemed a launch promo or invite code.',
+        };
+      }
+      _memoryDrivers[currentUid] = cur.copyWith(
+        referredByCode: cleanCode,
+        feeWaiverUntil: waiverDate,
+      );
+    }
+
+    return {
+      'success': true,
+      'message': '0% Platform Fee Unlocked for 30 Days!',
+      'feeWaiverDays': 30,
+      'feeWaiverUntil': waiverDate.toIso8601String(),
+    };
   }
 }
 

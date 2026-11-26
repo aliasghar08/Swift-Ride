@@ -45,6 +45,13 @@ service cloud.firestore {
     //   - gender: string | null (optional, 'female' | 'male')
     //   - isGenderVerified: bool (optional, immutable by client)
     //   - femalePassengersOnly: bool (optional)
+    //   - captainInviteCode: string | null (optional, max 20 chars, immutable once set)
+    //   - referredByDriverUid: string | null (optional, max 128 chars)
+    //   - referredByCode: string | null (optional, max 20 chars)
+    //   - verifiedReferralsCount: number (>= 0, managed by backend)
+    //   - badges: list of strings (max 20 items, managed by backend)
+    //   - feeWaiverUntil: timestamp | null (optional, managed by backend)
+    //   - weeklyCompletedRides: number (>= 0, managed by backend)
     //   - createdAt: timestamp (immutable)
     //
     // Subcollection: drivers/{driverId}/documents/{docId}
@@ -247,7 +254,33 @@ service cloud.firestore {
           data.isGenderVerified is bool) &&
         // femalePassengersOnly: optional bool
         (!('femalePassengersOnly' in data) ||
-          data.femalePassengersOnly is bool);
+          data.femalePassengersOnly is bool) &&
+        // Referral and Incentive fields:
+        // captainInviteCode: optional string (max 20 chars)
+        (!('captainInviteCode' in data) ||
+          data.captainInviteCode == null ||
+          (data.captainInviteCode is string && data.captainInviteCode.size() <= 20)) &&
+        // referredByDriverUid: optional string or null (max 128 chars)
+        (!('referredByDriverUid' in data) ||
+          data.referredByDriverUid == null ||
+          (data.referredByDriverUid is string && data.referredByDriverUid.size() <= 128)) &&
+        // referredByCode: optional string or null (max 20 chars)
+        (!('referredByCode' in data) ||
+          data.referredByCode == null ||
+          (data.referredByCode is string && data.referredByCode.size() <= 20)) &&
+        // verifiedReferralsCount: optional number (>= 0)
+        (!('verifiedReferralsCount' in data) ||
+          (data.verifiedReferralsCount is number && data.verifiedReferralsCount >= 0)) &&
+        // badges: optional list of strings (max 20 items)
+        (!('badges' in data) ||
+          (data.badges is list && data.badges.size() <= 20)) &&
+        // feeWaiverUntil: optional timestamp or null
+        (!('feeWaiverUntil' in data) ||
+          data.feeWaiverUntil == null ||
+          data.feeWaiverUntil is timestamp) &&
+        // weeklyCompletedRides: optional number (>= 0)
+        (!('weeklyCompletedRides' in data) ||
+          (data.weeklyCompletedRides is number && data.weeklyCompletedRides >= 0));
     }
 
     // Driver Document Validators
@@ -336,7 +369,12 @@ service cloud.firestore {
         // Driver cannot self-verify gender on create
         (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
         // Driver cannot enable femalePassengersOnly on create
-        (!('femalePassengersOnly' in request.resource.data) || request.resource.data.femalePassengersOnly != true || isAdmin());
+        (!('femalePassengersOnly' in request.resource.data) || request.resource.data.femalePassengersOnly != true || isAdmin()) &&
+        // Regular driver cannot self-assign referral counts, badges, fee waivers, or weekly completed rides
+        (!('verifiedReferralsCount' in request.resource.data) || request.resource.data.verifiedReferralsCount == 0 || isAdmin()) &&
+        (!('badges' in request.resource.data) || request.resource.data.badges.size() == 0 || isAdmin()) &&
+        (!('feeWaiverUntil' in request.resource.data) || request.resource.data.feeWaiverUntil == null || isAdmin()) &&
+        (!('weeklyCompletedRides' in request.resource.data) || request.resource.data.weeklyCompletedRides == 0 || isAdmin());
       allow update: if isRealUser() &&
         (isAdmin() ||
          (isOwner(driverId) &&
@@ -347,7 +385,10 @@ service cloud.firestore {
           (!('femalePassengersOnly' in request.resource.data) ||
            request.resource.data.femalePassengersOnly != true ||
            ('gender' in resource.data && resource.data.gender == 'female' && resource.data.isVerified == true)) &&
-          areImmutableFieldsUnchanged(['createdAt', 'userId', 'isGenderVerified', 'isVerified', 'rating', 'totalRides'])));
+          // If captainInviteCode is set, it cannot be changed
+          (!('captainInviteCode' in resource.data) || areImmutableFieldsUnchanged(['captainInviteCode'])) &&
+          // Drivers cannot directly modify server-controlled referral and incentive fields
+          areImmutableFieldsUnchanged(['createdAt', 'userId', 'isGenderVerified', 'isVerified', 'rating', 'totalRides', 'verifiedReferralsCount', 'badges', 'feeWaiverUntil', 'weeklyCompletedRides'])));
       allow delete: if isRealUser() && isAdmin();
 
       // Driver subcollection for uploaded documents

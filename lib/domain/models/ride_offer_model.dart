@@ -9,6 +9,7 @@ class RideOffer {
   final double driverRating;
   final String status; // PENDING, ACCEPTED, REJECTED, EXPIRED
   final bool driverVerified;
+  final List<String> driverBadges;
   final DateTime createdAt;
 
   const RideOffer({
@@ -22,8 +23,11 @@ class RideOffer {
     this.driverRating = 4.9,
     this.status = 'PENDING',
     this.driverVerified = false,
+    this.driverBadges = const [],
     required this.createdAt,
   });
+
+  bool get isFoundingCaptain => driverBadges.contains('FOUNDING_CAPTAIN');
 
   Map<String, dynamic> toMap() => {
         'id': id,
@@ -36,6 +40,7 @@ class RideOffer {
         'driverRating': driverRating,
         'status': status,
         'driverVerified': driverVerified,
+        'driverBadges': driverBadges,
         'createdAt': createdAt.toIso8601String(),
       };
 
@@ -44,6 +49,11 @@ class RideOffer {
     final summary = vInfo != null
         ? '${vInfo['color'] ?? ''} ${vInfo['make'] ?? ''} ${vInfo['model'] ?? ''} (${vInfo['plate'] ?? ''})'
         : map['vehicleSummary'] ?? 'Toyota Camry (Silver)';
+
+    final rawBadges = (map['driverBadges'] ?? map['badges']) as List<dynamic>?;
+    final parsedBadges = rawBadges != null
+        ? rawBadges.map((e) => e.toString()).toList()
+        : const <String>[];
 
     return RideOffer(
       id: docId ?? map['id']?.toString() ?? '',
@@ -56,6 +66,7 @@ class RideOffer {
       driverRating: (map['driverRating'] as num?)?.toDouble() ?? 4.9,
       status: map['status']?.toString() ?? 'PENDING',
       driverVerified: map['driverVerified'] == true,
+      driverBadges: parsedBadges,
       createdAt: map['createdAt'] != null
           ? DateTime.tryParse(map['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),

@@ -3,3 +3,4 @@ export { updateDriverLocation } from './updateDriverLocation';
 export { getEarnings } from './getEarnings';
 export { requestPayout, confirmPayout } from './requestPayout';
 export { subscribePlan } from './subscribePlan';
+export { applyDriverPromoCode, processDriverTripCompletionRewards } from './referrals';

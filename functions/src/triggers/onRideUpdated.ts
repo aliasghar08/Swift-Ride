@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { db, rtdb } from '../config/firebase';
 import { APP_CONSTANTS } from '../config/constants';
 import { sendNotificationToUser } from '../modules/notifications';
+import { processDriverTripCompletionRewards } from '../modules/drivers/referrals';
 
 export const onRideUpdated = onDocumentUpdated(
   {
@@ -59,6 +60,15 @@ export const onRideUpdated = onDocumentUpdated(
           body: `Ride ${rideId} was cancelled by rider.`,
           data: { rideId, status: 'CANCELLED' },
         });
+      }
+
+      // Process driver trip completion targets & referral rewards
+      if (before.status !== 'COMPLETED' && after.status === 'COMPLETED' && after.driverId) {
+        try {
+          await processDriverTripCompletionRewards(after.driverId);
+        } catch (rewardErr) {
+          console.warn(`[onRideUpdated] Referral & target processing warning for driver ${after.driverId}:`, rewardErr);
+        }
       }
 
       // Log Anonymized ML Training Outcome Telemetry (Zero PII)

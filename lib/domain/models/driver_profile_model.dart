@@ -21,6 +21,13 @@ class DriverProfile {
   final String? gender;
   final bool isGenderVerified;
   final bool femalePassengersOnly;
+  final String? captainInviteCode;
+  final String? referredByDriverUid;
+  final String? referredByCode;
+  final int verifiedReferralsCount;
+  final List<String> badges;
+  final DateTime? feeWaiverUntil;
+  final int weeklyCompletedRides;
 
   const DriverProfile({
     required this.userId,
@@ -44,7 +51,30 @@ class DriverProfile {
     this.gender,
     this.isGenderVerified = false,
     this.femalePassengersOnly = false,
+    this.captainInviteCode,
+    this.referredByDriverUid,
+    this.referredByCode,
+    this.verifiedReferralsCount = 0,
+    this.badges = const [],
+    this.feeWaiverUntil,
+    this.weeklyCompletedRides = 0,
   });
+
+  /// True if driver has an active 0% fee waiver granted via promo or referrals.
+  bool get isFeeWaiverActive =>
+      feeWaiverUntil != null && feeWaiverUntil!.isAfter(DateTime.now());
+
+  /// Effective platform fee rate: 0.0% if waiver is active, else standard 2.0% (0.02).
+  double get effectivePlatformFeeRate => isFeeWaiverActive ? 0.0 : 0.02;
+
+  /// True if captain unlocked the 5-Driver Referral Milestone badge.
+  bool get isFoundingCaptain => badges.contains('FOUNDING_CAPTAIN');
+
+  /// Days remaining in active fee waiver.
+  int get waiverDaysRemaining {
+    if (!isFeeWaiverActive) return 0;
+    return feeWaiverUntil!.difference(DateTime.now()).inDays.clamp(0, 365);
+  }
 
   /// A profile that claims nothing: real identity, zeroed figures.
   ///
@@ -70,6 +100,13 @@ class DriverProfile {
         gender: null,
         isGenderVerified: false,
         femalePassengersOnly: false,
+        captainInviteCode: null,
+        referredByDriverUid: null,
+        referredByCode: null,
+        verifiedReferralsCount: 0,
+        badges: const [],
+        feeWaiverUntil: null,
+        weeklyCompletedRides: 0,
       );
 
   DriverProfile copyWith({
@@ -91,6 +128,13 @@ class DriverProfile {
     String? gender,
     bool? isGenderVerified,
     bool? femalePassengersOnly,
+    String? captainInviteCode,
+    String? referredByDriverUid,
+    String? referredByCode,
+    int? verifiedReferralsCount,
+    List<String>? badges,
+    DateTime? feeWaiverUntil,
+    int? weeklyCompletedRides,
   }) {
     return DriverProfile(
       userId: userId ?? this.userId,
@@ -111,6 +155,13 @@ class DriverProfile {
       gender: gender ?? this.gender,
       isGenderVerified: isGenderVerified ?? this.isGenderVerified,
       femalePassengersOnly: femalePassengersOnly ?? this.femalePassengersOnly,
+      captainInviteCode: captainInviteCode ?? this.captainInviteCode,
+      referredByDriverUid: referredByDriverUid ?? this.referredByDriverUid,
+      referredByCode: referredByCode ?? this.referredByCode,
+      verifiedReferralsCount: verifiedReferralsCount ?? this.verifiedReferralsCount,
+      badges: badges ?? this.badges,
+      feeWaiverUntil: feeWaiverUntil ?? this.feeWaiverUntil,
+      weeklyCompletedRides: weeklyCompletedRides ?? this.weeklyCompletedRides,
     );
   }
 
@@ -136,11 +187,37 @@ class DriverProfile {
       if (gender != null) 'gender': gender,
       'isGenderVerified': isGenderVerified,
       'femalePassengersOnly': femalePassengersOnly,
+      if (captainInviteCode != null) 'captainInviteCode': captainInviteCode,
+      if (referredByDriverUid != null) 'referredByDriverUid': referredByDriverUid,
+      if (referredByCode != null) 'referredByCode': referredByCode,
+      'verifiedReferralsCount': verifiedReferralsCount,
+      'badges': badges,
+      if (feeWaiverUntil != null) 'feeWaiverUntil': feeWaiverUntil!.toIso8601String(),
+      'weeklyCompletedRides': weeklyCompletedRides,
     };
   }
 
   factory DriverProfile.fromMap(Map<String, dynamic> map, {String? docId}) {
     final loc = map['currentLocation'] as Map<String, dynamic>?;
+    DateTime? parsedWaiver;
+    if (map['feeWaiverUntil'] != null) {
+      final raw = map['feeWaiverUntil'];
+      if (raw is DateTime) {
+        parsedWaiver = raw;
+      } else if (raw is String) {
+        parsedWaiver = DateTime.tryParse(raw);
+      } else if (raw.runtimeType.toString().contains('Timestamp')) {
+        try {
+          parsedWaiver = (raw as dynamic).toDate();
+        } catch (_) {}
+      }
+    }
+
+    final rawBadges = map['badges'] as List<dynamic>?;
+    final parsedBadges = rawBadges != null
+        ? rawBadges.map((e) => e.toString()).toList()
+        : const <String>[];
+
     return DriverProfile(
       userId: docId ?? map['userId'] ?? '',
       licenseNumber: map['licenseNumber'] ?? '',
@@ -170,6 +247,13 @@ class DriverProfile {
       gender: map['gender'] as String?,
       isGenderVerified: map['isGenderVerified'] == true,
       femalePassengersOnly: map['femalePassengersOnly'] == true,
+      captainInviteCode: map['captainInviteCode'] as String?,
+      referredByDriverUid: map['referredByDriverUid'] as String?,
+      referredByCode: map['referredByCode'] as String?,
+      verifiedReferralsCount: (map['verifiedReferralsCount'] as num?)?.toInt() ?? 0,
+      badges: parsedBadges,
+      feeWaiverUntil: parsedWaiver,
+      weeklyCompletedRides: (map['weeklyCompletedRides'] as num?)?.toInt() ?? 0,
     );
   }
 }

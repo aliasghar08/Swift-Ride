@@ -28,6 +28,7 @@ class TripEconomics {
   final bool isAiPredicted;
   final CarEngineTier? carEngineTier;
   final bool? acEnabled;
+  final double platformFeeRate;
 
   const TripEconomics({
     required this.distanceKm,
@@ -53,7 +54,11 @@ class TripEconomics {
     this.isAiPredicted = false,
     this.carEngineTier,
     this.acEnabled,
+    this.platformFeeRate = 0.02,
   });
+
+  /// True if 0% platform fee waiver is active (keeps 100% of fares).
+  bool get isWaiverActive => platformFeeRate <= 0.0;
 
   double get fuelCostPkr => fuelCost;
   double get maintenanceCostPkr => maintenanceCost;
@@ -79,6 +84,7 @@ class TripEconomics {
     double? fuelAverageKmPerL,
     CarEngineTier? carEngineTier,
     bool? acEnabled,
+    double platformFeeRate = 0.02,
   }) {
     final effectiveDuration = durationMin > 0
         ? durationMin
@@ -133,7 +139,8 @@ class TripEconomics {
     final liters = distanceKm > 0 && mileage > 0 ? (distanceKm / mileage) : 0.0;
     final fuel = (liters * effectiveFuelPrice * 10).round() / 10.0;
     final maint = (distanceKm * maintRate * 10).round() / 10.0;
-    final serviceFee = (fare * 0.02 * 10).round() / 10.0; // SwiftRide 2% Commission
+    final effectiveFeeRate = platformFeeRate.clamp(0.0, 1.0);
+    final serviceFee = (fare * effectiveFeeRate * 10).round() / 10.0; // 0% or standard 2%
     final expenses = ((fuel + maint + serviceFee) * 10).round() / 10.0;
     final profit = (fare - expenses).clamp(0.0, 999999.0);
     final profitRate = effectiveDuration > 0
@@ -164,6 +171,7 @@ class TripEconomics {
       isAiPredicted: isAiPredicted,
       carEngineTier: effectiveCarTier,
       acEnabled: effectiveAc,
+      platformFeeRate: effectiveFeeRate,
     );
   }
 

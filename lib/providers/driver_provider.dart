@@ -73,6 +73,28 @@ class DriverProvider extends ChangeNotifier {
   }
 
   DriverProfile get driverProfile => _driverProfile;
+
+  /// True if driver has an active 0% platform fee waiver.
+  bool get isFeeWaiverActive => _driverProfile.isFeeWaiverActive;
+
+  /// Active platform fee rate (0.0% if waiver is active, else standard 0.02).
+  double get effectivePlatformFeeRate => _driverProfile.effectivePlatformFeeRate;
+
+  /// True if captain unlocked the 5-Driver Referral Milestone badge.
+  bool get isFoundingCaptain => _driverProfile.isFoundingCaptain;
+
+  /// Redeems a launch promo code (e.g. `JHANG0`) or peer Captain Invite Code (`CAPT-482`).
+  Future<Map<String, dynamic>> applyPromoCode(String code) async {
+    final result = await _firestoreService.applyDriverPromoCode(code);
+    if (result['success'] == true) {
+      if (_driverProfile.userId.isNotEmpty) {
+        await loadForUser(_driverProfile.userId);
+      } else {
+        notifyListeners();
+      }
+    }
+    return result;
+  }
   DriverProfile get driver => _driverProfile;
   bool get isOnline => _driverProfile.isOnline;
   double get totalEarnings => _driverProfile.totalEarnings;

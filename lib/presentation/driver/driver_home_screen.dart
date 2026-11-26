@@ -36,6 +36,7 @@ import '../view_models/driver_view_model.dart';
 import '../view_models/responsive_layout_helper.dart';
 import '../../services/driver_khata_service.dart';
 import 'widgets/driver_khata_sheet.dart';
+import 'widgets/captain_rewards_sheet.dart';
 import '../common/exact_change_dialog.dart';
 import '../../services/route_corridor_service.dart';
 import 'widgets/driver_analytics_drawer.dart';
@@ -1236,6 +1237,65 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 6),
+                                    // Captain Rewards & 0% Fee Pill
+                                    InkWell(
+                                      onTap: () => CaptainRewardsSheet.show(context, driverProv),
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                        decoration: BoxDecoration(
+                                          color: driverProv.isFeeWaiverActive
+                                              ? AppTheme.emeraldGreen.withValues(alpha: 0.18)
+                                              : (driverProv.isFoundingCaptain
+                                                  ? const Color(0xFFFFD700).withValues(alpha: 0.18)
+                                                  : c.surfaceRaised),
+                                          borderRadius: BorderRadius.circular(16),
+                                          border: Border.all(
+                                            color: driverProv.isFeeWaiverActive
+                                                ? AppTheme.emeraldGreen.withValues(alpha: 0.45)
+                                                : (driverProv.isFoundingCaptain
+                                                    ? const Color(0xFFFFD700).withValues(alpha: 0.5)
+                                                    : c.border.withValues(alpha: 0.4)),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              driverProv.isFoundingCaptain
+                                                  ? Icons.military_tech_rounded
+                                                  : (driverProv.isFeeWaiverActive
+                                                      ? Icons.verified_rounded
+                                                      : Icons.card_giftcard_rounded),
+                                              color: driverProv.isFoundingCaptain
+                                                  ? const Color(0xFFFFD700)
+                                                  : (driverProv.isFeeWaiverActive
+                                                      ? AppTheme.emeraldGreen
+                                                      : AppTheme.accentCyan),
+                                              size: 13,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              driverProv.isFeeWaiverActive
+                                                  ? '0% Fee Active • ${driverProv.driverProfile.waiverDaysRemaining}d'
+                                                  : (driverProv.isFoundingCaptain
+                                                      ? 'Founding Captain'
+                                                      : '2% Fee • ${driverProv.driverProfile.verifiedReferralsCount}/5'),
+                                              style: TextStyle(
+                                                color: driverProv.isFoundingCaptain
+                                                    ? const Color(0xFFFFD700)
+                                                    : (driverProv.isFeeWaiverActive
+                                                        ? AppTheme.emeraldGreen
+                                                        : c.textPrimary),
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: layout.fontSize(10),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
                                     // AI Advisor Quick Pill
                                     InkWell(
                                       onTap: () async {
@@ -2101,6 +2161,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               carModel: driverCarModel,
                               carEngineTier: carEngineTier,
                               acEnabled: isCar,
+                              platformFeeRate: driver.effectivePlatformFeeRate,
                             );
                             final costFloor = econ.costFloor;
                             final fare20 = request.offeredFare - 20.0;
@@ -2746,6 +2807,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
               carModel: driverCarModel,
               carEngineTier: carEngineTier,
               acEnabled: isCar,
+              platformFeeRate: driverProv.effectivePlatformFeeRate,
             );
             return InkWell(
               borderRadius: BorderRadius.circular(10),
@@ -3115,6 +3177,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                 carModel: driverCarModel,
                 carEngineTier: carEngineTier,
                 acEnabled: isCar,
+                platformFeeRate: driverProv.effectivePlatformFeeRate,
               );
               final costFloor = econ.costFloor;
               final fare20 = ride.offeredFare - 20.0;
@@ -3514,6 +3577,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                   carModel: driverCarModel,
                   carEngineTier: carEngineTier,
                   acEnabled: vType == VehicleType.car,
+                  platformFeeRate: driverProv.effectivePlatformFeeRate,
                 );
 
                 final changeResult = await ExactChangeDialog.show(
@@ -3607,6 +3671,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                               carModel: driverCarModel,
                               carEngineTier: carEngineTier,
                               acEnabled: vType == VehicleType.car,
+                              platformFeeRate: driverProv.effectivePlatformFeeRate,
                             );
 
                             final changeResult = await ExactChangeDialog.show(

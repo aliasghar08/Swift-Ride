@@ -364,6 +364,7 @@ class DriverViewModel extends ChangeNotifier {
     bool? acEnabled,
     double? fuelPrice,
     int roadCondition = 1,
+    double? platformFeeRate,
   }) async {
     final vType = VehicleTypeX.fromString(ride.vehicleType);
     final tier = carEngineTier ??
@@ -383,6 +384,7 @@ class DriverViewModel extends ChangeNotifier {
       carEngineTier: tier,
       roadCondition: roadCondition,
       acEnabled: effectiveAc,
+      platformFeeRate: platformFeeRate,
     );
   }
 
@@ -507,6 +509,7 @@ class DriverViewModel extends ChangeNotifier {
         fare: req.offeredFare,
         bookedSeats: req.bookedSeats,
         isAiPredicted: true,
+        platformFeeRate: driver.effectivePlatformFeeRate,
       );
       final costFloor = econ.costFloor;
 

@@ -37,6 +37,10 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
   late final TextEditingController _yearController;
   late final TextEditingController _colorController;
   late final TextEditingController _licenseController;
+  late final TextEditingController _promoController;
+  bool _isApplyingPromo = false;
+  String? _promoMessage;
+  bool _isPromoSuccess = false;
 
   String _vehicleType = 'car';
   bool _hasAc = true;
@@ -54,6 +58,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
     _yearController = TextEditingController();
     _colorController = TextEditingController();
     _licenseController = TextEditingController();
+    _promoController = TextEditingController();
   }
 
   @override
@@ -64,6 +69,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
     _yearController.dispose();
     _colorController.dispose();
     _licenseController.dispose();
+    _promoController.dispose();
     super.dispose();
   }
 
@@ -564,6 +570,14 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 16),
+
+            _buildPromoCodeCard(
+              layout: layout,
+              c: c,
+              isDark: isDark,
+              driverProv: driverProv,
+            ),
             const SizedBox(height: 20),
 
             Text(
@@ -787,6 +801,192 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
         ),
       ),
       bottomNavigationBar: const ReservedBottomAdBar(),
+    );
+  }
+
+  Widget _buildPromoCodeCard({
+    required ResponsiveLayoutHelper layout,
+    required AppColors c,
+    required bool isDark,
+    required DriverProvider driverProv,
+  }) {
+    final driver = driverProv.driverProfile;
+    final isWaiverActive = driver.isFeeWaiverActive;
+    final hasReferredBy = driver.referredByCode != null && driver.referredByCode!.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isWaiverActive
+              ? AppTheme.emeraldGreen.withValues(alpha: 0.4)
+              : (isDark ? Colors.white12 : Colors.black12),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isWaiverActive
+                      ? AppTheme.emeraldGreen.withValues(alpha: 0.15)
+                      : AppTheme.accentTeal.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isWaiverActive ? Icons.verified_rounded : Icons.card_giftcard_rounded,
+                  color: isWaiverActive ? AppTheme.emeraldGreen : AppTheme.accentTeal,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Have a Captain Invite or Launch Code?',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(14),
+                        fontWeight: FontWeight.w700,
+                        color: c.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isWaiverActive
+                          ? '0% Fee Active (${driver.waiverDaysRemaining} days remaining)'
+                          : 'Get 30 days of 0% platform fee (keep 100% of your fares)',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(11.5),
+                        color: isWaiverActive ? AppTheme.emeraldGreen : c.textSecondary,
+                        fontWeight: isWaiverActive ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (isWaiverActive || hasReferredBy) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.emeraldGreen.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: AppTheme.emeraldGreen, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      hasReferredBy
+                          ? 'Applied code: ${driver.referredByCode} — 0% Fee Tier Active'
+                          : '0% Platform Fee Active — You keep 100% of earnings!',
+                      style: TextStyle(
+                        fontSize: layout.fontSize(12),
+                        color: AppTheme.emeraldGreen,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _promoController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      hintText: 'e.g. JHANG0, CAPTAIN0 or peer code',
+                      hintStyle: TextStyle(
+                        fontSize: layout.fontSize(12.5),
+                        color: c.textSecondary.withValues(alpha: 0.6),
+                      ),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: isDark ? Colors.white24 : Colors.black26,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppTheme.accentTeal, width: 1.5),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isApplyingPromo
+                      ? null
+                      : () async {
+                          final code = _promoController.text.trim();
+                          if (code.isEmpty) return;
+                          setState(() {
+                            _isApplyingPromo = true;
+                            _promoMessage = null;
+                          });
+                          final res = await driverProv.applyPromoCode(code);
+                          if (!mounted) return;
+                          setState(() {
+                            _isApplyingPromo = false;
+                            _promoMessage = res['message'] as String?;
+                            _isPromoSuccess = res['success'] == true;
+                          });
+                          if (_isPromoSuccess) {
+                            _promoController.clear();
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentTeal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                  ),
+                  child: _isApplyingPromo
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(
+                          'Apply',
+                          style: TextStyle(
+                            fontSize: layout.fontSize(13),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                ),
+              ],
+            ),
+            if (_promoMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _promoMessage!,
+                style: TextStyle(
+                  fontSize: layout.fontSize(12),
+                  fontWeight: FontWeight.w600,
+                  color: _isPromoSuccess ? AppTheme.emeraldGreen : AppTheme.sunsetCoral,
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 

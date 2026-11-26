@@ -97,6 +97,7 @@ export const submitOffer = onCall(
       etaMinutes: data.etaMinutes || 5,
       driverRating: driverData.rating || 5.0,
       driverVerified: Boolean(driverData.isVerified),
+      driverBadges: Array.isArray(driverData.badges) ? driverData.badges : [],
       vehicleInfo: {
         make: driverData.vehicleMake || 'SwiftRide',
         model: driverData.vehicleModel || 'Vehicle',

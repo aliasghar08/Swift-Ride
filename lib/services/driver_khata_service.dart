@@ -58,12 +58,14 @@ class DriverKhataService extends ChangeNotifier {
     required double cashCollected,
     required double fuelExpense,
     required double maintenanceReserve,
+    double? platformFeeRate,
   }) async {
     await getTodayKhata();
     _todayKhata = _todayKhata.addTrip(
       cashCollected: cashCollected,
       fuelExpense: fuelExpense,
       maintenanceReserve: maintenanceReserve,
+      feeRate: platformFeeRate,
     );
 
     final key = _dateKey(_todayKhata.date);
@@ -76,12 +78,15 @@ class DriverKhataService extends ChangeNotifier {
   Future<DriverDailyKhata> recordTripFromEconomics(
     TripEconomics economics, {
     double? actualCashCollected,
+    double? platformFeeRate,
   }) {
     final cash = actualCashCollected ?? economics.totalFare;
+    final feeRate = platformFeeRate ?? economics.platformFeeRate;
     return recordCompletedTrip(
       cashCollected: cash,
       fuelExpense: economics.fuelCostPkr,
       maintenanceReserve: economics.maintenanceCostPkr,
+      platformFeeRate: feeRate,
     );
   }
 

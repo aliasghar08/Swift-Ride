@@ -400,6 +400,31 @@ class RouteDetails {
   });
 }
 
+/// Encapsulates a search query tailored with proximity, city-lock, and area-lock scoping.
+class ScopedSearchQuery {
+  final String rawQuery;
+  final String scopedQuery;
+  final double radiusMeters;
+  final bool isCityLocked;
+  final bool isAreaLocked;
+  final String? targetCity;
+  final String? targetArea;
+
+  const ScopedSearchQuery({
+    required this.rawQuery,
+    required this.scopedQuery,
+    required this.radiusMeters,
+    this.isCityLocked = false,
+    this.isAreaLocked = false,
+    this.targetCity,
+    this.targetArea,
+  });
+
+  @override
+  String toString() =>
+      'ScopedSearchQuery(raw: "$rawQuery", scoped: "$scopedQuery", radius: ${radiusMeters}m, cityLocked: $isCityLocked, areaLocked: $isAreaLocked)';
+}
+
 class MapService {
   static final MapService _instance = MapService._internal();
   factory MapService() => _instance;
@@ -1649,12 +1674,178 @@ class MapService {
     return reverseGeocode(lat, lng);
   }
 
+  // List of known Pakistani cities to detect external city intent
+  static const Set<String> _knownPakistaniCities = {
+    'lahore',
+    'faisalabad',
+    'toba tek singh',
+    'chiniot',
+    'sargodha',
+    'multan',
+    'islamabad',
+    'rawalpindi',
+    'karachi',
+    'peshawar',
+    'quetta',
+    'gujranwala',
+    'sialkot',
+    'bahawalpur',
+    'sukkur',
+    'hyderabad',
+    'bhakkar',
+    'mianwali',
+    'khushab',
+    'rajanpur',
+    'okara',
+    'sahiwal',
+    'sheikhupura',
+    'kasur',
+    'jhelum',
+    'attock',
+    'chakwal',
+    'mardan',
+    'abbottabad',
+    'murree',
+    'gilgit',
+    'skardu',
+    'shorkot',
+    'ahmadpur sial',
+    'athara hazari',
+    'jhang',
+  };
+
+  /// Builds a Google Maps-style proximity & intent scoped search query.
+  /// 
+  /// 1. Checks if the query explicitly mentions an external Pakistani city.
+  ///    If yes: expands bias radius to 50,000m and does not lock to `currentCity`.
+  /// 2. Detects house / plot / street number queries:
+  ///    If no explicit area is mentioned in the query:
+  ///      Appends `, <currentArea>, <currentCity>` and tightens radius to 2,500m.
+  ///    If an area keyword is present in the query:
+  ///      Appends `, <currentCity>` and uses 15,000m radius.
+  /// 3. Otherwise (generic search within current city):
+  ///    Appends `, <currentCity>` for text search / biases with 15,000m radius.
+  static ScopedSearchQuery buildScopedSearchQuery(
+    String query, {
+    String? currentCity,
+    String? currentArea,
+  }) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) {
+      return ScopedSearchQuery(
+        rawQuery: query,
+        scopedQuery: query,
+        radiusMeters: 15000.0,
+      );
+    }
+
+    final lower = trimmed.toLowerCase();
+    final effectiveCity = (currentCity != null && currentCity.trim().isNotEmpty)
+        ? currentCity.trim()
+        : 'Jhang';
+    final effectiveArea = (currentArea != null && currentArea.trim().isNotEmpty)
+        ? currentArea.trim()
+        : '';
+
+    // Check if user explicitly mentioned a known city other than current city
+    String? detectedExternalCity;
+    for (final city in _knownPakistaniCities) {
+      final cityPattern = RegExp(r'\b' + RegExp.escape(city) + r'\b', caseSensitive: false);
+      if (cityPattern.hasMatch(lower)) {
+        if (city.toLowerCase() != effectiveCity.toLowerCase()) {
+          detectedExternalCity = city;
+          break;
+        }
+      }
+    }
+
+    if (detectedExternalCity != null) {
+      // User is explicitly searching outside current city (e.g. "Hospital Faisalabad")
+      return ScopedSearchQuery(
+        rawQuery: trimmed,
+        scopedQuery: trimmed,
+        radiusMeters: 50000.0,
+        isCityLocked: false,
+        isAreaLocked: false,
+        targetCity: detectedExternalCity,
+      );
+    }
+
+    // Check if query is a house / plot / unit / street pattern
+    // Examples: "Plot 757 A", "House 12", "Street 4", "H# 15", "123 Main St", "14-B"
+    final hasHousePlotPrefix = RegExp(
+      r'\b(house|plot|flat|shop|office|street|st|gali|h|p|#)\s*[-#:]?\s*\d+[a-z0-9/-]*\b',
+      caseSensitive: false,
+    ).hasMatch(lower);
+    final hasLeadingNumber = RegExp(
+      r'^\d+[a-z/-]*\b',
+      caseSensitive: false,
+    ).hasMatch(lower);
+    final isHouseOrPlotQuery = hasHousePlotPrefix || hasLeadingNumber;
+
+    // Check if query mentions an area/neighborhood/sector keyword
+    final hasAreaKeyword = RegExp(
+      r'\b(town|block|sector|phase|colony|mohalla|mohallah|lines|sadar|saddar|bazar|bazaar|chowk|road|scheme|society|garden|abad|pura|nagar|cantt|city|market)\b',
+      caseSensitive: false,
+    ).hasMatch(lower);
+
+    if (isHouseOrPlotQuery) {
+      if (!hasAreaKeyword && effectiveArea.isNotEmpty) {
+        // Tight neighborhood lock: House/Plot query without area -> append current neighborhood and city
+        final scoped = '$trimmed, $effectiveArea, $effectiveCity';
+        return ScopedSearchQuery(
+          rawQuery: trimmed,
+          scopedQuery: scoped,
+          radiusMeters: 2500.0,
+          isCityLocked: true,
+          isAreaLocked: true,
+          targetCity: effectiveCity,
+          targetArea: effectiveArea,
+        );
+      } else {
+        // Area is either already in query or not available -> append city
+        final scoped = lower.contains(effectiveCity.toLowerCase())
+            ? trimmed
+            : '$trimmed, $effectiveCity';
+        return ScopedSearchQuery(
+          rawQuery: trimmed,
+          scopedQuery: scoped,
+          radiusMeters: 15000.0,
+          isCityLocked: true,
+          isAreaLocked: false,
+          targetCity: effectiveCity,
+        );
+      }
+    }
+
+    // General query (e.g. "Civil Hospital", "Main Bazaar")
+    final scoped = lower.contains(effectiveCity.toLowerCase())
+        ? trimmed
+        : '$trimmed, $effectiveCity';
+    return ScopedSearchQuery(
+      rawQuery: trimmed,
+      scopedQuery: scoped,
+      radiusMeters: 15000.0,
+      isCityLocked: true,
+      isAreaLocked: false,
+      targetCity: effectiveCity,
+    );
+  }
+
   Future<List<PlaceSuggestion>> searchPlaces(
     String query, {
     LatLng? near,
+    String? currentCity,
+    String? currentArea,
   }) async {
     final trimmed = query.trim();
     if (trimmed.isEmpty) return const [];
+
+    final scoped = buildScopedSearchQuery(
+      trimmed,
+      currentCity: currentCity,
+      currentArea: currentArea,
+    );
 
     // Check if query is a pinned location, Plus Code (e.g. 78G5+48 Jhang, Pakistan),
     // DMS, or coordinate pair.
@@ -1688,17 +1879,29 @@ class MapService {
         coordinates: coords,
       );
 
-      final remote = await _fetchAutocomplete(trimmed, near);
+      final remote = await _fetchAutocomplete(
+        scoped,
+        near,
+        currentCity: currentCity,
+        currentArea: currentArea,
+      );
       return [pinnedItem, ...remote];
     }
 
-    return await _fetchAutocomplete(trimmed, near);
+    return await _fetchAutocomplete(
+      scoped,
+      near,
+      currentCity: currentCity,
+      currentArea: currentArea,
+    );
   }
 
   Future<List<PlaceSuggestion>> _fetchAutocomplete(
-    String query,
-    LatLng? near,
-  ) async {
+    ScopedSearchQuery scoped,
+    LatLng? near, {
+    String? currentCity,
+    String? currentArea,
+  }) async {
     // 1. Google Places API (New) Autocomplete
     HttpClient? client;
     try {
@@ -1715,14 +1918,17 @@ class MapService {
         req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
       }
 
+      // Pass user's raw query into Autocomplete input so suggestions feel natural,
+      // or scoped query if it includes neighborhood anchor.
       final reqData = <String, dynamic>{
-        'input': query,
+        'input': scoped.isAreaLocked ? scoped.scopedQuery : scoped.rawQuery,
+        'includedRegionCodes': ['pk'],
       };
       if (near != null) {
         reqData['locationBias'] = {
           'circle': {
             'center': {'latitude': near.latitude, 'longitude': near.longitude},
-            'radius': 50000.0,
+            'radius': scoped.radiusMeters,
           },
         };
       }
@@ -1789,12 +1995,12 @@ class MapService {
       } else if (Platform.isAndroid) {
         req.headers.set('X-Android-Package', 'com.dartnexuslab.swiftride');
       }
-      final reqData = <String, dynamic>{'textQuery': query};
+      final reqData = <String, dynamic>{'textQuery': scoped.scopedQuery};
       if (near != null) {
         reqData['locationBias'] = {
           'circle': {
             'center': {'latitude': near.latitude, 'longitude': near.longitude},
-            'radius': 50000.0,
+            'radius': scoped.radiusMeters,
           },
         };
       }
@@ -1851,7 +2057,9 @@ class MapService {
         final res = await FirebaseFunctions.instance
             .httpsCallable('getAutocomplete')
             .call(<String, dynamic>{
-              'query': query,
+              'query': scoped.rawQuery,
+              'currentCity': currentCity,
+              'currentArea': currentArea,
               if (near != null)
                 'location': {
                   'latitude': near.latitude,

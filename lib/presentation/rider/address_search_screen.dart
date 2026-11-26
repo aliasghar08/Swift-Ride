@@ -159,6 +159,22 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
     return null;
   }
 
+  String _currentCity() {
+    try {
+      final loc = CustomChangeNotifierProvider.read<LocationProvider>(context);
+      return loc.currentCity;
+    } catch (_) {}
+    return 'Jhang';
+  }
+
+  String _currentArea() {
+    try {
+      final loc = CustomChangeNotifierProvider.read<LocationProvider>(context);
+      return loc.currentArea;
+    } catch (_) {}
+    return '';
+  }
+
   Future<void> _fetchSuggestions(String query) async {
     final q = query.trim();
 
@@ -169,7 +185,12 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
 
     final results = q.isEmpty
         ? <PlaceSuggestion>[]
-        : await _mapService.searchPlaces(q, near: _riderLatLng());
+        : await _mapService.searchPlaces(
+            q,
+            near: _riderLatLng(),
+            currentCity: _currentCity(),
+            currentArea: _currentArea(),
+          );
 
     if (!mounted) return;
 
@@ -876,6 +897,60 @@ class _AddressSearchScreenState extends State<AddressSearchScreen> {
                       ),
 
                       SizedBox(height: verticalGap),
+
+                      // Proximity & Context Scoping Indicator Pill
+                      Builder(
+                        builder: (context) {
+                          final city = _currentCity();
+                          final area = _currentArea();
+                          final scopedText = area.isNotEmpty
+                              ? 'Near $area, $city'
+                              : 'Searching in $city';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: (isDark
+                                            ? AppTheme.accentCyan
+                                            : AppTheme.primaryBlue)
+                                        .withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.my_location_rounded,
+                                        size: 11,
+                                        color: isDark
+                                            ? AppTheme.accentCyan
+                                            : AppTheme.primaryBlue,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        scopedText,
+                                        style: TextStyle(
+                                          color: isDark
+                                              ? AppTheme.accentCyan
+                                              : AppTheme.primaryBlue,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
 
                       // Professional "Choose on Map" Action Bar
                       _buildChooseOnMapActionBar(

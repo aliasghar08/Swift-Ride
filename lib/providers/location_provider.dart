@@ -99,6 +99,45 @@ class LocationProvider extends ChangeNotifier {
   String get address => _address;
   NativeGeocodedAddress? get detailedAddress => _detailedAddress;
 
+  /// Visible for testing to seed geocoded details.
+  @visibleForTesting
+  void setDetailedAddressForTesting(NativeGeocodedAddress detailed) {
+    _detailedAddress = detailed;
+    _address = detailed.formattedAddress;
+    notifyListeners();
+  }
+
+  /// Resolved city of current location (defaults to 'Jhang' if unavailable).
+  String get currentCity {
+    final detailedCity = _detailedAddress?.city.trim();
+    if (detailedCity != null && detailedCity.isNotEmpty) {
+      return detailedCity;
+    }
+    if (_address.isNotEmpty) {
+      final parts = _address.split(',');
+      if (parts.length >= 2) {
+        final candidate = parts[parts.length - 2].trim();
+        if (candidate.isNotEmpty && !candidate.toLowerCase().contains('pakistan')) {
+          return candidate;
+        }
+      }
+    }
+    return 'Jhang';
+  }
+
+  /// Resolved area or neighborhood of current location.
+  String get currentArea {
+    final neighborhood = _detailedAddress?.neighborhood.trim();
+    if (neighborhood != null && neighborhood.isNotEmpty) {
+      return neighborhood;
+    }
+    final street = _detailedAddress?.street.trim();
+    if (street != null && street.isNotEmpty) {
+      return street;
+    }
+    return '';
+  }
+
   /// Current location encoded as a precision-7 geohash.
   String get geohash => GeohashUtil.encode(_latitude, _longitude, 7);
 

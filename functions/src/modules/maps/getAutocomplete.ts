@@ -12,6 +12,8 @@ const AutocompleteSchema = z.object({
   query: z.string().min(1).max(100),
   location: LatLngSchema.optional(),
   sessionToken: z.string().min(8).max(64).optional(),
+  currentCity: z.string().max(50).optional(),
+  currentArea: z.string().max(80).optional(),
 });
 
 // Major Pakistani cities with center coordinates
@@ -63,28 +65,69 @@ export const getAutocomplete = onCall(
       return { predictions: [], available: false };
     }
 
-    // 1. Detect city name in query (lowercase comparison)
+    // 1. Context Scoping & Query Intent Detection
+    const effectiveCity = data.currentCity?.trim() || 'Jhang';
+    const effectiveArea = data.currentArea?.trim() || '';
     const lowerQuery = data.query.toLowerCase();
+
+    // Check if user explicitly mentioned a known Pakistani city
+    let detectedExternalCity: string | null = null;
     let targetCenter: { lat: number; lng: number } | null = null;
-    let targetRadiusMeters = 50000;
+    let targetRadiusMeters = 15000;
 
     for (const [cityName, coords] of Object.entries(PAKISTAN_CITIES)) {
       const regex = new RegExp(`\\b${cityName}\\b`, 'i');
       if (regex.test(lowerQuery)) {
-        targetCenter = coords;
-        targetRadiusMeters = 50000;
-        break;
+        if (cityName.toLowerCase() !== effectiveCity.toLowerCase()) {
+          detectedExternalCity = cityName;
+          targetCenter = coords;
+          targetRadiusMeters = 50000;
+          break;
+        } else {
+          targetCenter = coords;
+          targetRadiusMeters = 15000;
+        }
       }
     }
 
-    // 2. If no city name found in query, use rider location with hard restriction
+    // Check for house/plot/unit pattern and area/sector keywords
+    const isHouseOrPlotQuery =
+      /\b(house|plot|flat|shop|office|street|st|gali|h|p|#)\s*[-#:]?\s*\d+[a-z0-9/-]*\b/i.test(lowerQuery) ||
+      /^\d+[a-z/-]*\b/i.test(lowerQuery);
+
+    const hasAreaKeyword =
+      /\b(town|block|sector|phase|colony|mohalla|mohallah|lines|sadar|saddar|bazar|bazaar|chowk|road|scheme|society|garden|abad|pura|nagar|cantt|city|market)\b/i.test(lowerQuery);
+
+    let queryInput = data.query;
+    if (!detectedExternalCity) {
+      if (isHouseOrPlotQuery) {
+        if (!hasAreaKeyword && effectiveArea) {
+          // Tight neighborhood lock: House/Plot query without area -> append current neighborhood and city
+          queryInput = `${data.query}, ${effectiveArea}, ${effectiveCity}`;
+          targetRadiusMeters = 2500;
+        } else {
+          queryInput = lowerQuery.includes(effectiveCity.toLowerCase())
+            ? data.query
+            : `${data.query}, ${effectiveCity}`;
+          targetRadiusMeters = 15000;
+        }
+      } else {
+        // General query locked to city
+        queryInput = lowerQuery.includes(effectiveCity.toLowerCase())
+          ? data.query
+          : `${data.query}, ${effectiveCity}`;
+        targetRadiusMeters = 15000;
+      }
+    }
+
+    // 2. If no target center determined from cities, use rider location
     if (!targetCenter && data.location) {
       targetCenter = {
         lat: data.location.latitude,
         lng: data.location.longitude,
       };
-      // Google Places API (New) maximum allowed circle radius is 50,000 meters
-      targetRadiusMeters = 50000;
+    } else if (!targetCenter && PAKISTAN_CITIES[effectiveCity.toLowerCase()]) {
+      targetCenter = PAKISTAN_CITIES[effectiveCity.toLowerCase()];
     }
 
     // 2b. Detect Plus Code in query (e.g. "78G5+48 Jhang, Pakistan", "8J3J78G5+48")
@@ -120,7 +163,7 @@ export const getAutocomplete = onCall(
     // 3. Try Places API (New) Autocomplete with Pakistan region filter & hard location restriction
     try {
       const newPlacesBody: Record<string, any> = {
-        input: data.query,
+        input: queryInput,
         includedRegionCodes: ['pk'],
       };
 

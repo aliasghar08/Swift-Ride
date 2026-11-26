@@ -52,7 +52,13 @@ export const acceptPoolOffer = onCall(
 
       const incomingSeats = incomingData.bookedSeats ?? 1;
       const vType = ((parentData.vehicleType as string) || 'car').toLowerCase();
-      const maxSeats = (vType === 'bike' || vType === 'moto') ? 1 : ((vType === 'rickshaw' || vType === 'auto') ? 3 : 4);
+      const maxSeats = (vType === 'bike' || vType === 'moto')
+        ? 1
+        : (vType === 'rickshaw' || vType === 'auto' || vType.includes('rik'))
+        ? 3
+        : (vType === 'sevenseater' || vType === 'van' || vType === 'mpv' || vType.includes('seven'))
+        ? 6
+        : 4;
       const currentRemaining = parentData.remainingSeats !== undefined
         ? parentData.remainingSeats
         : Math.max(0, maxSeats - (parentData.bookedSeats ?? 1));

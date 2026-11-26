@@ -28,7 +28,13 @@ export const requestRide = onCall(
 
     // Enforce vehicle seat capacity bounds
     const vType = (data.vehicleType || 'car').toLowerCase();
-    const maxCapacity = (vType === 'bike' || vType === 'moto') ? 1 : ((vType === 'rickshaw' || vType === 'auto') ? 3 : 4);
+    const maxCapacity = (vType === 'bike' || vType === 'moto')
+      ? 1
+      : (vType === 'rickshaw' || vType === 'auto' || vType.includes('rik'))
+      ? 3
+      : (vType === 'sevenseater' || vType === 'van' || vType === 'mpv' || vType.includes('seven'))
+      ? 6
+      : 4;
     const bookedSeats = data.bookedSeats ?? 1;
     if (bookedSeats > maxCapacity) {
       throw new HttpsError(

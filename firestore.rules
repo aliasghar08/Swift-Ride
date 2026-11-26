@@ -123,6 +123,10 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isRealUser() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
@@ -298,13 +302,13 @@ service cloud.firestore {
 
     // User Collection Rules
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isDriver());
-      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) &&
+      allow read: if isRealUser() && (isOwner(userId) || isAdmin() || isDriver());
+      allow create: if isRealUser() && isOwner(userId) && isValidUser(request.resource.data) &&
         // Regular client cannot self-grant isGenderVerified = true on create
         (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
         // Prevent regular user from setting role to admin on create
         (request.resource.data.role in ['passenger', 'rider', 'driver'] || isAdmin());
-      allow update: if isAuthenticated() &&
+      allow update: if isRealUser() &&
         (isAdmin() ||
          (isOwner(userId) &&
           isValidUser(request.resource.data) &&
@@ -322,15 +326,15 @@ service cloud.firestore {
 
     // Driver Profiles
     match /drivers/{driverId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isOwner(driverId) && isValidDriver(request.resource.data) &&
+      allow read: if isRealUser();
+      allow create: if isRealUser() && isOwner(driverId) && isValidDriver(request.resource.data) &&
         // Driver cannot self-verify
         request.resource.data.isVerified == false &&
         // Driver cannot self-verify gender on create
         (!('isGenderVerified' in request.resource.data) || request.resource.data.isGenderVerified != true || isAdmin()) &&
         // Driver cannot enable femalePassengersOnly on create
         (!('femalePassengersOnly' in request.resource.data) || request.resource.data.femalePassengersOnly != true || isAdmin());
-      allow update: if isAuthenticated() &&
+      allow update: if isRealUser() &&
         (isAdmin() ||
          (isOwner(driverId) &&
           isValidDriver(request.resource.data) &&
@@ -345,26 +349,26 @@ service cloud.firestore {
 
       // Driver subcollection for uploaded documents
       match /documents/{docId} {
-        allow read: if isAuthenticated() && (isOwner(driverId) || isAdmin());
-        allow create, update: if isAuthenticated() &&
+        allow read: if isRealUser() && (isOwner(driverId) || isAdmin());
+        allow create, update: if isRealUser() &&
           (isOwner(driverId) || isAdmin()) &&
           isValidDriverDocument(request.resource.data);
-        allow delete: if isAuthenticated() && (isOwner(driverId) || isAdmin());
+        allow delete: if isRealUser() && (isOwner(driverId) || isAdmin());
       }
     }
 
     // Rides Collection
     match /rides/{rideId} {
-      allow read: if isAuthenticated() &&
+      allow read: if isRealUser() &&
         (resource.data.riderId == request.auth.uid ||
          resource.data.driverId == request.auth.uid ||
          resource.data.status == 'REQUESTED' ||
          isAdmin());
-      allow create: if isAuthenticated() &&
+      allow create: if isRealUser() &&
         request.resource.data.riderId == request.auth.uid &&
         request.resource.data.status == 'REQUESTED' &&
         isValidRide(request.resource.data);
-      allow update: if isAuthenticated() &&
+      allow update: if isRealUser() &&
         (
           // Allow typing indicator update by rider or assigned driver
           ((resource.data.riderId == request.auth.uid || resource.data.driverId == request.auth.uid) &&
@@ -383,14 +387,14 @@ service cloud.firestore {
       // Active Ride In-App Chat Subcollection
       match /messages/{messageId} {
         // Read allowed if user is either rider or driver of the ride
-        allow read: if isAuthenticated() && (
+        allow read: if isRealUser() && (
           get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
           get(/databases/$(database)/documents/rides/$(rideId)).data.driverId == request.auth.uid
         );
 
         // Create allowed if senderId is the current user, user is participant of the ride,
         // and message payload supports text and/or rich media (photos/videos/audio)
-        allow create: if isAuthenticated()
+        allow create: if isRealUser()
           && request.resource.data.senderId == request.auth.uid
           && (
             get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
@@ -403,7 +407,7 @@ service cloud.firestore {
           && (!('mediaType' in request.resource.data) || request.resource.data.mediaType in ['image', 'video', 'audio']);
 
         // Update allowed only by the recipient to mark the message as read (affecting only 'readAt')
-        allow update: if isAuthenticated()
+        allow update: if isRealUser()
           && resource.data.senderId != request.auth.uid
           && (
             get(/databases/$(database)/documents/rides/$(rideId)).data.riderId == request.auth.uid ||
@@ -415,12 +419,12 @@ service cloud.firestore {
 
     // Ride Offers (Driver Bidding)
     match /ride_offers/{offerId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow read: if isRealUser();
+      allow create: if isRealUser() &&
         request.resource.data.driverId == request.auth.uid &&
         isValidOffer(request.resource.data) &&
         exists(/databases/$(database)/documents/drivers/$(request.auth.uid));
-      allow update: if isAuthenticated() &&
+      allow update: if isRealUser() &&
         isValidOffer(request.resource.data) &&
         (resource.data.driverId == request.auth.uid ||
          get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.riderId == request.auth.uid ||
@@ -497,7 +501,7 @@ service cloud.firestore {
 
     // Demand Hotspots (Aggregated geospatial demand cells)
     match /demand_hotspots/{cellId} {
-      allow read: if isAuthenticated();
+      allow read: if isRealUser();
       // Written exclusively by backend Cloud Functions scheduled analytics
       allow write: if false;
     }

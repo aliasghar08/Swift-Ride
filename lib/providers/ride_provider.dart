@@ -160,9 +160,7 @@ class RideProvider extends ChangeNotifier {
     // 1. Proactively ensure active Firebase Auth session and fresh token
     try {
       final auth = FirebaseAuth.instance;
-      if (auth.currentUser == null) {
-        await auth.signInAnonymously();
-      } else {
+      if (auth.currentUser != null) {
         await auth.currentUser?.getIdToken(true);
       }
     } catch (authErr) {

@@ -1445,7 +1445,28 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                     ],
                   ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 5,
+            children: [
+              Icon(
+                Icons.verified_user_rounded,
+                size: 12,
+                color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+              ),
+              Text(
+                'Protected by reCAPTCHA & Firebase App Check',
+                style: TextStyle(
+                  fontSize: layout.fontSize(10),
+                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
 
           // OR divider
           Row(

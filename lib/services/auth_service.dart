@@ -90,23 +90,11 @@ class AuthService {
     return user.phoneNumber != null && user.phoneNumber!.isNotEmpty;
   }
 
-  /// Signs in anonymously so unauthenticated guests can mint valid tokens
-  /// for Cloud Functions callables (maps, routes, fare estimates).
+  /// Anonymous sign-in is disabled to ensure only real authenticated users
+  /// (Phone OTP, Google, Apple) can access Firestore and backend services.
   Future<UserCredential?> signInAnonymously() async {
-    final auth = _auth;
-    if (auth == null) return null;
-    try {
-      if (auth.currentUser != null) {
-        return null;
-      }
-      debugPrint('[AuthService] Initiating anonymous sign-in...');
-      final cred = await auth.signInAnonymously();
-      debugPrint('[AuthService] Anonymous sign-in success: ${cred.user?.uid}');
-      return cred;
-    } catch (e) {
-      debugPrint('[AuthService] Anonymous sign-in failed: $e');
-      return null;
-    }
+    debugPrint('[AuthService] Anonymous sign-in is disabled.');
+    return null;
   }
 
   /// Designated App Store Review & QA demo phone numbers that always accept OTP `123456`.
@@ -155,7 +143,7 @@ class AuthService {
       return;
     }
 
-    if (isReviewerDemoNumber(phoneNumber)) {
+    if (!kReleaseMode && isReviewerDemoNumber(phoneNumber)) {
       debugPrint('[AuthService] Reviewer demo number detected ($phoneNumber): issuing instant OTP challenge.');
       await Future.delayed(const Duration(milliseconds: 250));
       onCodeSent('reviewer_demo_${DateTime.now().millisecondsSinceEpoch}', 123456);
@@ -163,6 +151,13 @@ class AuthService {
     }
 
     try {
+      // In release builds, ensure app verification / reCAPTCHA safety checks are strictly enforced
+      try {
+        await auth.setSettings(
+          appVerificationDisabledForTesting: !kReleaseMode && NativeStorageService.isTestEnvironment,
+        );
+      } catch (_) {}
+
       await auth.verifyPhoneNumber(
         phoneNumber: phoneNumber,
         timeout: timeout,
@@ -238,7 +233,7 @@ class AuthService {
         );
         return;
       }
-      if (isReviewerDemoNumber(phoneNumber) || !kReleaseMode) {
+      if (!kReleaseMode && isReviewerDemoNumber(phoneNumber)) {
         debugPrint('[AuthService] Fallback activated for demo/test number: $phoneNumber');
         onCodeSent('sim_otp_${DateTime.now().millisecondsSinceEpoch}', 123456);
         return;
@@ -248,7 +243,7 @@ class AuthService {
   }
 
   /// Verifies user input [smsCode] against [verificationId] and signs in.
-  /// If an anonymous session exists, seamlessly links it with the verified phone credentials.
+  /// If an existing session exists, seamlessly links it with the verified phone credentials.
   Future<UserCredential?> verifyOtpAndSignIn({
     required String verificationId,
     required String smsCode,
@@ -267,8 +262,9 @@ class AuthService {
       return null;
     }
 
-    // Handle designated App Store Reviewer demo verification IDs or non-release test IDs
-    final isReviewerDemo = verificationId.startsWith('reviewer_demo_');
+    // Handle designated App Store Reviewer demo verification IDs or non-release test IDs.
+    // In release builds, anonymous 123456 OTP fallback is strictly disabled.
+    final isReviewerDemo = !kReleaseMode && verificationId.startsWith('reviewer_demo_');
     final isSimTest = !kReleaseMode &&
         (verificationId == 'SIMULATOR_TEST_VERIFICATION_ID' ||
             verificationId.startsWith('sim_') ||
@@ -281,15 +277,6 @@ class AuthService {
           code: 'invalid-verification-code',
           message: 'Invalid verification code. For demo accounts, enter 123456.',
         );
-      }
-
-      // Ensure an active Firebase user exists to satisfy Firestore security rules
-      if (auth.currentUser == null) {
-        try {
-          return await auth.signInAnonymously();
-        } catch (e) {
-          debugPrint('[AuthService] Anonymous sign-in notice: $e');
-        }
       }
       return null;
     }

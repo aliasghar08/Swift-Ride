@@ -35,12 +35,6 @@ class FirestoreSafetyService {
 
     // 1. Attempt Cloud Function with baseline auth guarantee
     try {
-      if (FirebaseAuth.instance.currentUser == null) {
-        try {
-          await FirebaseAuth.instance.signInAnonymously();
-        } catch (_) {}
-      }
-
       final res = await FirebaseFunctions.instance
           .httpsCallable('shareTrip')
           .call(<String, dynamic>{'rideId': rideId});

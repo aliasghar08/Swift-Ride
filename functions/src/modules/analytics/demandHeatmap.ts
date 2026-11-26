@@ -6,6 +6,18 @@ import { APP_CONSTANTS } from '../../config/constants';
 import * as geofire from 'geofire-common';
 
 export async function computeAndUpsertDemandHotspots(): Promise<{ updatedCells: number; prunedCells: number }> {
+  // 0. Early exit if no online drivers in /drivers so the 5-minute scheduled job does not scan /rides when idle
+  const onlineDriverCheck = await db
+    .collection(APP_CONSTANTS.COLLECTIONS.DRIVERS)
+    .where('isOnline', '==', true)
+    .limit(1)
+    .get();
+
+  if (onlineDriverCheck.empty) {
+    console.log('[DemandHeatmap] No drivers currently online. Exiting early without scanning /rides.');
+    return { updatedCells: 0, prunedCells: 0 };
+  }
+
   const now = Date.now();
   const windowMs = 45 * 60 * 1000; // 45-minute moving window
   const sinceDate = new Date(now - windowMs);

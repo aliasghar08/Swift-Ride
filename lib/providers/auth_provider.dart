@@ -38,18 +38,6 @@ class AuthProvider extends ChangeNotifier {
         _activeRole = initialRole {
     _loadPersistedRole();
     _initAuthListener();
-    _initAnonymousSession();
-  }
-
-  Future<void> _initAnonymousSession() async {
-    if (!_authService.isAuthenticated) {
-      final cred = await _authService.signInAnonymously();
-      if (cred?.user != null && _currentUser.id.isEmpty) {
-        _currentUser = _currentUser.copyWith(id: cred!.user!.uid);
-        _persistCurrentUser();
-        notifyListeners();
-      }
-    }
   }
 
   Future<void> _persistCurrentUser() async {
@@ -536,9 +524,6 @@ class AuthProvider extends ChangeNotifier {
       try {
         unawaited(_storage.setString('active_user_role', 'passenger'));
       } catch (_) {}
-      try {
-        unawaited(_initAnonymousSession());
-      } catch (_) {}
     } catch (e) {
       _authError = e.toString();
     } finally {
@@ -577,7 +562,6 @@ class AuthProvider extends ChangeNotifier {
       unawaited(PushNotificationService.instance.removeCurrentTokenOnLogout());
       unawaited(_storage.setString('active_user_role', 'passenger'));
       unawaited(_storage.remove('driver_daily_khata'));
-      unawaited(_initAnonymousSession());
       return true;
     } catch (e) {
       final errMsg = e is FirebaseAuthException ? (e.message ?? e.code) : e.toString();

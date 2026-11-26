@@ -267,10 +267,7 @@ class FirestoreDriverService {
     String? currentUid;
     try {
       final auth = FirebaseAuth.instance;
-      if (auth.currentUser == null) {
-        final cred = await auth.signInAnonymously();
-        currentUid = cred.user?.uid;
-      } else {
+      if (auth.currentUser != null) {
         currentUid = auth.currentUser!.uid;
       }
     } catch (e) {

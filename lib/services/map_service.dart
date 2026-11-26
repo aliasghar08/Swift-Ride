@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'native_map_service.dart';
 import 'package:swiftride/services/location_service.dart';
@@ -1105,9 +1104,6 @@ class MapService {
       // Fallback: Cloud Function with plusCode/address
       if (Firebase.apps.isNotEmpty) {
         try {
-          if (FirebaseAuth.instance.currentUser == null) {
-            try { await FirebaseAuth.instance.signInAnonymously(); } catch (_) {}
-          }
           final res = await FirebaseFunctions.instance
               .httpsCallable('reverseGeocode')
               .call(<String, dynamic>{
@@ -1249,13 +1245,6 @@ class MapService {
     // 3. Authenticated Firebase Cloud Functions (with server-side buildPrecisePropertyAddress)
     if (Firebase.apps.isNotEmpty) {
       try {
-        if (FirebaseAuth.instance.currentUser == null) {
-          try {
-            await FirebaseAuth.instance
-                .signInAnonymously()
-                .timeout(const Duration(seconds: 2));
-          } catch (_) {}
-        }
         final res = await FirebaseFunctions.instance
             .httpsCallable('reverseGeocode')
             .call(<String, dynamic>{
@@ -1859,16 +1848,6 @@ class MapService {
     // 3. Fallback: Firebase Functions
     try {
       if (Firebase.apps.isNotEmpty) {
-        if (FirebaseAuth.instance.currentUser == null) {
-          try {
-            await FirebaseAuth.instance
-                .signInAnonymously()
-                .timeout(const Duration(seconds: 2));
-          } catch (authErr) {
-            debugPrint('[MapService] signInAnonymously failed: $authErr');
-          }
-        }
-
         final res = await FirebaseFunctions.instance
             .httpsCallable('getAutocomplete')
             .call(<String, dynamic>{
@@ -2292,14 +2271,6 @@ class MapService {
     LatLng destination,
   ) async {
     if (Firebase.apps.isEmpty) return null;
-
-    if (FirebaseAuth.instance.currentUser == null) {
-      try {
-        await FirebaseAuth.instance.signInAnonymously();
-      } catch (authErr) {
-        debugPrint('[MapService] signInAnonymously failed: $authErr');
-      }
-    }
 
     try {
       final res = await FirebaseFunctions.instance

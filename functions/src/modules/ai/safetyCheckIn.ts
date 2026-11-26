@@ -144,6 +144,28 @@ export const safetyCheckIn = onCall(
       throw new HttpsError('invalid-argument', 'rideId and flagType are required parameters.');
     }
 
+    // Rate-limit automated safety check-ins to at most 1 every 15 seconds per ride flag
+    const recentEvents = await db
+      .collection(APP_CONSTANTS.COLLECTIONS.SAFETY_EVENTS)
+      .where('rideId', '==', rideId)
+      .where('type', '==', flagType)
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+
+    if (!recentEvents.empty) {
+      const recent = recentEvents.docs[0].data();
+      const createdAtMs = recent.createdAt?.toDate ? recent.createdAt.toDate().getTime() : 0;
+      if (Date.now() - createdAtMs < 15 * 1000) {
+        return {
+          success: true,
+          rideId,
+          flagType,
+          message: 'Rate-limited: A check-in was recently processed for this event.',
+        };
+      }
+    }
+
     return processSafetyCheckIn({
       rideId,
       flagType,

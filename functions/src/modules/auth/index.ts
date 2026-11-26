@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import * as crypto from 'crypto';
-import { db, auth } from '../../config/firebase';
+import { db, auth, rtdb, storage } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
 import { assertAuthenticated, assertRole } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
@@ -168,14 +168,36 @@ export const deleteUserAccount = onCall(
     const caller = await assertAuthenticated(request);
     const targetUid = caller.uid;
 
-    // 1. Delete Firestore user, driver, and AI preferences documents
+    const userRef = db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(targetUid);
+    const driverRef = db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(targetUid);
+    const aiPrefRef = db.collection('ai_preferences').doc(targetUid);
+
+    // 1. Purge Firestore profile, driver records, and all subcollections (trustedDevices, documents)
     await Promise.allSettled([
-      db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(targetUid).delete(),
-      db.collection(APP_CONSTANTS.COLLECTIONS.DRIVERS).doc(targetUid).delete(),
-      db.collection('ai_preferences').doc(targetUid).delete(),
+      db.recursiveDelete(userRef),
+      db.recursiveDelete(driverRef),
+      aiPrefRef.delete(),
     ]);
 
-    // 2. Delete Firebase Auth user record
+    // 2. Purge Realtime Database nodes
+    try {
+      await rtdb.ref(`${APP_CONSTANTS.RTDB_NODES.DRIVER_LOCATIONS}/${targetUid}`).remove();
+    } catch (rtdbErr) {
+      console.warn(`[deleteUserAccount] RTDB purge warning for ${targetUid}:`, rtdbErr);
+    }
+
+    // 3. Purge Cloud Storage user avatars and driver KYC documents
+    try {
+      const bucket = storage.bucket();
+      await Promise.allSettled([
+        bucket.deleteFiles({ prefix: `users/${targetUid}/` }),
+        bucket.deleteFiles({ prefix: `drivers/${targetUid}/` }),
+      ]);
+    } catch (storageErr) {
+      console.warn(`[deleteUserAccount] Storage purge warning for ${targetUid}:`, storageErr);
+    }
+
+    // 4. Delete Firebase Auth user record
     try {
       await auth.deleteUser(targetUid);
     } catch (e) {

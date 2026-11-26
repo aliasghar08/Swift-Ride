@@ -270,6 +270,9 @@ service cloud.firestore {
         data.riderId is string &&
         data.status in ['REQUESTED', 'ACCEPTED', 'DRIVER_ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] &&
         data.offeredFare is number && data.offeredFare > 0 &&
+        (!('acceptedFare' in data) || data.acceptedFare == null || (data.acceptedFare is number && data.acceptedFare > 0)) &&
+        (!('bookedSeats' in data) || ((data.bookedSeats is int || data.bookedSeats is number) && data.bookedSeats >= 1 && data.bookedSeats <= 10)) &&
+        (!('vehicleType' in data) || (data.vehicleType is string && data.vehicleType.size() <= 50)) &&
         // typing: optional map or bool
         (!('typing' in data) ||
           data.typing is map ||
@@ -312,11 +315,11 @@ service cloud.firestore {
         (isAdmin() ||
          (isOwner(userId) &&
           isValidUser(request.resource.data) &&
-          areImmutableFieldsUnchanged(['createdAt', 'role', 'isGenderVerified']) &&
+          areImmutableFieldsUnchanged(['createdAt', 'role', 'isGenderVerified', 'rating', 'totalRides']) &&
           // If gender is verified, client cannot change gender (it is locked)
           (!('isGenderVerified' in resource.data) || resource.data.isGenderVerified != true ||
            areImmutableFieldsUnchanged(['gender']))));
-      allow delete: if isAdmin();
+      allow delete: if isRealUser() && isAdmin();
 
       // Trusted Devices Subcollection (strictly server-side via Cloud Functions)
       match /trustedDevices/{deviceId} {
@@ -344,15 +347,18 @@ service cloud.firestore {
           (!('femalePassengersOnly' in request.resource.data) ||
            request.resource.data.femalePassengersOnly != true ||
            ('gender' in resource.data && resource.data.gender == 'female' && resource.data.isVerified == true)) &&
-          areImmutableFieldsUnchanged(['createdAt', 'userId', 'isGenderVerified'])));
-      allow delete: if isAdmin();
+          areImmutableFieldsUnchanged(['createdAt', 'userId', 'isGenderVerified', 'isVerified', 'rating', 'totalRides'])));
+      allow delete: if isRealUser() && isAdmin();
 
       // Driver subcollection for uploaded documents
       match /documents/{docId} {
         allow read: if isRealUser() && (isOwner(driverId) || isAdmin());
         allow create, update: if isRealUser() &&
-          (isOwner(driverId) || isAdmin()) &&
-          isValidDriverDocument(request.resource.data);
+          isValidDriverDocument(request.resource.data) &&
+          (isAdmin() ||
+           (isOwner(driverId) &&
+            (!('isVerified' in request.resource.data) || request.resource.data.isVerified != true) &&
+            (!('status' in request.resource.data) || request.resource.data.status in ['PENDING', 'VERIFYING', 'NEEDS_REVIEW'])));
         allow delete: if isRealUser() && (isOwner(driverId) || isAdmin());
       }
     }
@@ -374,15 +380,20 @@ service cloud.firestore {
           ((resource.data.riderId == request.auth.uid || resource.data.driverId == request.auth.uid) &&
            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['typing']) &&
            (!('typing' in request.resource.data) || request.resource.data.typing is map || request.resource.data.typing is bool)) ||
+          // Allow payment method update by rider
+          (resource.data.riderId == request.auth.uid &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentMethod', 'updatedAt'])) ||
           // General ride update
           (isValidRide(request.resource.data) &&
            isValidStatusTransition(resource.data.status, request.resource.data.status) &&
            (isAdmin() ||
-            resource.data.riderId == request.auth.uid ||
-            (resource.data.driverId == request.auth.uid && resource.data.status != 'REQUESTED')) &&
-           areImmutableFieldsUnchanged(['riderId', 'createdAt']))
+            (((resource.data.riderId == request.auth.uid) ||
+              (resource.data.driverId == request.auth.uid && resource.data.status != 'REQUESTED')) &&
+             areImmutableFieldsUnchanged(['riderId', 'createdAt', 'driverId', 'offeredFare', 'commissionAmount', 'pin', 'bookedSeats', 'vehicleType']) &&
+             (!('acceptedFare' in resource.data) || resource.data.acceptedFare == null ||
+              areImmutableFieldsUnchanged(['acceptedFare'])))))
         );
-      allow delete: if isAdmin();
+      allow delete: if isRealUser() && isAdmin();
 
       // Active Ride In-App Chat Subcollection
       match /messages/{messageId} {
@@ -429,7 +440,7 @@ service cloud.firestore {
         (resource.data.driverId == request.auth.uid ||
          get(/databases/$(database)/documents/rides/$(resource.data.rideId)).data.riderId == request.auth.uid ||
          isAdmin());
-      allow delete: if isAdmin();
+      allow delete: if isRealUser() && isAdmin();
     }
 
     // Payments Collection
@@ -480,14 +491,14 @@ service cloud.firestore {
       allow update: if isAuthenticated() &&
         (resource.data.userId == request.auth.uid || isAdmin()) &&
         areImmutableFieldsUnchanged(['userId', 'type', 'createdAt']);
-      allow delete: if isAdmin();
+      allow delete: if isRealUser() && isAdmin();
     }
 
     // AI Preferences (User toggles for voice, safety checks, earnings advisor)
     match /ai_preferences/{userId} {
       allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow create, update: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow delete: if isAdmin();
+      allow delete: if isRealUser() && isAdmin();
     }
 
     // Location History (Waypoints, Breadcrumbs, Trip Geometries)

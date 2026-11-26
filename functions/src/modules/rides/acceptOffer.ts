@@ -57,6 +57,7 @@ export const acceptOffer = onCall(
       transaction.update(rideRef, {
         driverId: offerData.driverId,
         acceptedFare: offerData.counterFare,
+        commissionAmount: Math.round(offerData.counterFare * APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE * 10) / 10,
         status: 'ACCEPTED',
         acceptedAt: FieldValue.serverTimestamp(),
       });

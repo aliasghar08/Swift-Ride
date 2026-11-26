@@ -72,12 +72,31 @@ export const getSharedTrip = onCall(
     }
 
     const shareData = shareDoc.data()!;
+
+    // Check expiration by time
+    if (shareData.expiresAt) {
+      const expiresAtMs = shareData.expiresAt.toDate
+        ? shareData.expiresAt.toDate().getTime()
+        : new Date(shareData.expiresAt).getTime();
+      if (Date.now() > expiresAtMs) {
+        throw new HttpsError('permission-denied', 'Shared trip link has expired.');
+      }
+    }
+
     const rideDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.RIDES).doc(shareData.rideId).get();
     if (!rideDoc.exists) {
       throw new HttpsError('not-found', 'Ride no longer exists.');
     }
 
     const rideData = rideDoc.data()!;
+
+    // Tokens expire immediately on completion/cancellation
+    if (rideData.status === 'COMPLETED' || rideData.status === 'CANCELLED') {
+      throw new HttpsError(
+        'permission-denied',
+        `This trip has ended (${rideData.status.toLowerCase()}). Live tracking is no longer active.`
+      );
+    }
 
     // Fetch driver details if assigned
     let driverInfo = null;

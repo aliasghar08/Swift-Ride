@@ -261,7 +261,7 @@ class RiderViewModel extends ChangeNotifier {
   /// Calculates real-time trip economics including fuel, mileage, maintenance, and driver profit.
   TripEconomics get currentTripEconomics {
     final parsed = double.tryParse(fareController.text);
-    final fare = (parsed == null || parsed < 50.0)
+    final fare = (parsed == null || parsed < 50.0 || parsed.isNaN || parsed.isInfinite)
         ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
         : (parsed > 99999.0 ? 99999.0 : parsed);
     final route = selectedRoute;
@@ -765,7 +765,7 @@ class RiderViewModel extends ChangeNotifier {
     String? riderGender,
   }) async {
     final parsed = double.tryParse(fareController.text);
-    final fare = (parsed == null || parsed < 50.0)
+    final fare = (parsed == null || parsed < 50.0 || parsed.isNaN || parsed.isInfinite)
         ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
         : (parsed > 99999.0 ? 99999.0 : parsed);
     _deviceService.triggerHaptic('medium');

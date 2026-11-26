@@ -9,8 +9,8 @@ import { z } from 'zod';
 
 const SubmitOfferSchema = z.object({
   rideId: z.string().min(1),
-  counterFare: z.number().positive(),
-  etaMinutes: z.number().nonnegative().optional(),
+  counterFare: z.number().finite().min(50),
+  etaMinutes: z.number().finite().nonnegative().optional(),
 });
 
 export const submitOffer = onCall(
@@ -18,6 +18,19 @@ export const submitOffer = onCall(
   async (request) => {
     const driver = await assertRole(request, ['driver', 'admin']);
     const data = validateInput(SubmitOfferSchema, request.data);
+
+    // Prevent duplicate pending offers from the same driver on the same ride
+    const existingOfferQuery = await db
+      .collection(APP_CONSTANTS.COLLECTIONS.RIDE_OFFERS)
+      .where('rideId', '==', data.rideId)
+      .where('driverId', '==', driver.uid)
+      .where('status', '==', 'PENDING')
+      .limit(1)
+      .get();
+
+    if (!existingOfferQuery.empty) {
+      throw new HttpsError('already-exists', 'You already have an active pending offer for this ride.');
+    }
 
     // Verify ride exists and is still in REQUESTED status
     const rideRef = db.collection(APP_CONSTANTS.COLLECTIONS.RIDES).doc(data.rideId);

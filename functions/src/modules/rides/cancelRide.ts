@@ -54,6 +54,13 @@ export const cancelRide = onCall(
       timestamp: Date.now(),
     });
 
+    // Expire public shared trip token immediately on cancellation
+    if (rideData.shareToken) {
+      await db.collection(APP_CONSTANTS.COLLECTIONS.SHARED_TRIPS).doc(rideData.shareToken).update({
+        expiresAt: FieldValue.serverTimestamp(),
+      }).catch(() => {});
+    }
+
     return {
       success: true,
       rideId: data.rideId,

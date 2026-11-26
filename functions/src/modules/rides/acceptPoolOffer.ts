@@ -5,6 +5,7 @@ import { APP_CONSTANTS } from '../../config/constants';
 import { assertAuthenticated } from '../../middleware/auth';
 import { validateInput } from '../../middleware/validation';
 import { sendNotificationToUser } from '../notifications';
+import * as geofire from 'geofire-common';
 import { z } from 'zod';
 
 const AcceptPoolOfferSchema = z.object({
@@ -50,12 +51,60 @@ export const acceptPoolOffer = onCall(
       }
 
       const incomingSeats = incomingData.bookedSeats ?? 1;
+      const vType = ((parentData.vehicleType as string) || 'car').toLowerCase();
+      const maxSeats = (vType === 'bike' || vType === 'moto') ? 1 : ((vType === 'rickshaw' || vType === 'auto') ? 3 : 4);
       const currentRemaining = parentData.remainingSeats !== undefined
         ? parentData.remainingSeats
-        : Math.max(0, 4 - (parentData.bookedSeats ?? 1));
+        : Math.max(0, maxSeats - (parentData.bookedSeats ?? 1));
 
       if (currentRemaining < incomingSeats) {
         throw new HttpsError('failed-precondition', `Insufficient vehicle seats (${currentRemaining} available, ${incomingSeats} requested).`);
+      }
+
+      // Corridor detour validation (max 1.5 km detour bound)
+      if (
+        parentData.dropoff?.geopoint &&
+        incomingData.pickup?.geopoint &&
+        incomingData.dropoff?.geopoint
+      ) {
+        const dLat = parentData.driverLocation?.lat;
+        const dLng = parentData.driverLocation?.lng;
+        const driverCoord: [number, number] =
+          dLat !== undefined && dLng !== undefined
+            ? [dLat, dLng]
+            : parentData.pickup?.geopoint
+            ? [parentData.pickup.geopoint.latitude, parentData.pickup.geopoint.longitude]
+            : [incomingData.pickup.geopoint.latitude, incomingData.pickup.geopoint.longitude];
+
+        const existingDropoffCoord: [number, number] = [
+          parentData.dropoff.geopoint.latitude,
+          parentData.dropoff.geopoint.longitude,
+        ];
+        const newPickupCoord: [number, number] = [
+          incomingData.pickup.geopoint.latitude,
+          incomingData.pickup.geopoint.longitude,
+        ];
+        const newDropoffCoord: [number, number] = [
+          incomingData.dropoff.geopoint.latitude,
+          incomingData.dropoff.geopoint.longitude,
+        ];
+
+        const distDriverToNewPickup = geofire.distanceBetween(driverCoord, newPickupCoord);
+        const distNewPickupToNewDrop = geofire.distanceBetween(newPickupCoord, newDropoffCoord);
+        const distNewDropToExistingDrop = geofire.distanceBetween(newDropoffCoord, existingDropoffCoord);
+        const distDirect = geofire.distanceBetween(driverCoord, existingDropoffCoord);
+
+        const addedDetourKm = Math.max(
+          0,
+          distDriverToNewPickup + distNewPickupToNewDrop + distNewDropToExistingDrop - distDirect
+        );
+
+        if (addedDetourKm > APP_CONSTANTS.POOL_MAX_DETOUR_KM) {
+          throw new HttpsError(
+            'failed-precondition',
+            `Detour of ${addedDetourKm.toFixed(2)} km exceeds maximum corridor detour of ${APP_CONSTANTS.POOL_MAX_DETOUR_KM} km.`
+          );
+        }
       }
 
       // Build ordered waypoints
@@ -112,6 +161,7 @@ export const acceptPoolOffer = onCall(
         driverId: caller.uid,
         parentPoolRideId: parentRideId,
         acceptedFare: incomingData.offeredFare,
+        commissionAmount: Math.round(incomingData.offeredFare * APP_CONSTANTS.COMMISSION_RATE_YEAR_ONE * 10) / 10,
         status: 'ACCEPTED',
         acceptedAt: FieldValue.serverTimestamp(),
       });

@@ -1,4 +1,4 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, messaging } from '../../config/firebase';
 import { APP_CONSTANTS } from '../../config/constants';
@@ -69,6 +69,23 @@ export const triggerSos = onCall(
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(TriggerSosSchema, request.data);
+
+    // Rate limit: Prevent spamming SOS triggers (30s cooldown per ride)
+    const recentSos = await db
+      .collection(APP_CONSTANTS.COLLECTIONS.SAFETY_EVENTS)
+      .where('rideId', '==', data.rideId)
+      .where('type', '==', 'SOS')
+      .orderBy('createdAt', 'desc')
+      .limit(1)
+      .get();
+
+    if (!recentSos.empty) {
+      const recent = recentSos.docs[0].data();
+      const createdAtMs = recent.createdAt?.toDate ? recent.createdAt.toDate().getTime() : 0;
+      if (Date.now() - createdAtMs < 30 * 1000) {
+        throw new HttpsError('resource-exhausted', 'An SOS alert was recently triggered for this ride. Please wait 30 seconds.');
+      }
+    }
 
     const eventRef = db.collection(APP_CONSTANTS.COLLECTIONS.SAFETY_EVENTS).doc();
     await eventRef.set({

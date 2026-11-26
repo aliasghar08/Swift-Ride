@@ -72,6 +72,13 @@ export const updateRideStatus = onCall(
         riderRef.update({ totalRides: FieldValue.increment(1) }),
         driverRef.update({ totalRides: FieldValue.increment(1) }),
       ]);
+
+      // Expire public shared trip token immediately on completion
+      if (rideData.shareToken) {
+        await db.collection(APP_CONSTANTS.COLLECTIONS.SHARED_TRIPS).doc(rideData.shareToken).update({
+          expiresAt: FieldValue.serverTimestamp(),
+        }).catch(() => {});
+      }
     }
 
     await rideRef.update(updates);

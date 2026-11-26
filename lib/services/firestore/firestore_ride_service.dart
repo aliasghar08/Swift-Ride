@@ -642,25 +642,55 @@ class FirestoreRideService {
   /// Verifies rider's 4-digit PIN and starts trip.
   Future<bool> verifyPinAndStartTrip(String rideId, String inputPin) async {
     final cur = _memoryRides[rideId];
-    if (cur != null && cur.pin == inputPin.trim()) {
-      _memoryRides[rideId] = cur.copyWith(status: RideStatus.inProgress);
-    }
+    final trimmedPin = inputPin.trim();
 
     final fs = _firestore;
     if (fs == null) {
-      return cur?.pin == inputPin.trim();
+      final matches = cur?.pin == trimmedPin;
+      if (matches && cur != null) {
+        _memoryRides[rideId] = cur.copyWith(status: RideStatus.inProgress);
+      }
+      return matches;
     }
 
     try {
+      if (Firebase.apps.isNotEmpty) {
+        try {
+          final res = await FirebaseFunctions.instance
+              .httpsCallable('updateRideStatus')
+              .call(<String, dynamic>{
+            'rideId': rideId,
+            'status': 'IN_PROGRESS',
+            'pin': trimmedPin,
+          });
+          if (res.data != null && res.data['success'] == true) {
+            if (cur != null) {
+              _memoryRides[rideId] = cur.copyWith(status: RideStatus.inProgress);
+            }
+            return true;
+          }
+        } on FirebaseFunctionsException catch (fnErr) {
+          debugPrint('[FirestoreRideService] updateRideStatus Cloud Function exception: ${fnErr.code} - ${fnErr.message}');
+          if (fnErr.code == 'permission-denied' || fnErr.code == 'failed-precondition') {
+            return false;
+          }
+        } catch (e) {
+          debugPrint('[FirestoreRideService] updateRideStatus error: $e');
+        }
+      }
+
       final doc = await fs.collection(AppConstants.ridesCollection).doc(rideId).get();
       if (!doc.exists || doc.data() == null) return false;
 
       final serverPin = doc.data()!['pin'] as String?;
-      if (serverPin == inputPin.trim()) {
+      if (serverPin == trimmedPin) {
         await fs.collection(AppConstants.ridesCollection).doc(rideId).update({
           'status': 'IN_PROGRESS',
           'startedAt': FieldValue.serverTimestamp(),
         });
+        if (cur != null) {
+          _memoryRides[rideId] = cur.copyWith(status: RideStatus.inProgress);
+        }
         return true;
       }
       return false;

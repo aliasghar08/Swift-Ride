@@ -153,6 +153,15 @@ class RideProvider extends ChangeNotifier {
       return null;
     }
 
+    final safeFare = (offeredFare.isNaN || offeredFare.isInfinite || offeredFare < 50.0)
+        ? 50.0
+        : offeredFare;
+    final vType = vehicleType.toLowerCase();
+    final maxCapacity = (vType == 'bike' || vType == 'moto')
+        ? 1
+        : ((vType == 'rickshaw' || vType == 'auto') ? 3 : 4);
+    final clampedSeats = bookedSeats.clamp(1, maxCapacity);
+
     _isSubmitting = true;
     _lastError = null;
     notifyListeners();
@@ -173,11 +182,11 @@ class RideProvider extends ChangeNotifier {
           .call(<String, dynamic>{
         'pickup': pickup.toMap(),
         'dropoff': dropoff.toMap(),
-        'offeredFare': offeredFare,
+        'offeredFare': safeFare,
         'distanceKm': distanceKm,
         'durationMin': durationMin,
         'vehicleType': vehicleType,
-        'bookedSeats': bookedSeats,
+        'bookedSeats': clampedSeats,
         'seatPreference': ?seatPreference,
         'isAutoNegotiateEnabled': isAutoNegotiateEnabled,
         'maxAutoAcceptFare': maxAutoAcceptFare,
@@ -202,11 +211,11 @@ class RideProvider extends ChangeNotifier {
       final directRideId = await _createRideDirect(
         pickup: pickup,
         dropoff: dropoff,
-        offeredFare: offeredFare,
+        offeredFare: safeFare,
         distanceKm: distanceKm,
         durationMin: durationMin,
         vehicleType: vehicleType,
-        bookedSeats: bookedSeats,
+        bookedSeats: clampedSeats,
         seatPreference: seatPreference,
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,
@@ -227,11 +236,11 @@ class RideProvider extends ChangeNotifier {
       final directRideId = await _createRideDirect(
         pickup: pickup,
         dropoff: dropoff,
-        offeredFare: offeredFare,
+        offeredFare: safeFare,
         distanceKm: distanceKm,
         durationMin: durationMin,
         vehicleType: vehicleType,
-        bookedSeats: bookedSeats,
+        bookedSeats: clampedSeats,
         seatPreference: seatPreference,
         isAutoNegotiateEnabled: isAutoNegotiateEnabled,
         maxAutoAcceptFare: maxAutoAcceptFare,

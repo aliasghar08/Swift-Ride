@@ -9,13 +9,13 @@ import { z } from 'zod';
 const RequestRideSchema = z.object({
   pickup: GeoLocationSchema,
   dropoff: GeoLocationSchema,
-  offeredFare: z.number().positive(),
-  distanceKm: z.number().nonnegative(),
-  durationMin: z.number().nonnegative(),
+  offeredFare: z.number().finite().min(50),
+  distanceKm: z.number().finite().nonnegative(),
+  durationMin: z.number().finite().nonnegative(),
   vehicleType: z.string().optional().default('car'),
   bookedSeats: z.number().int().min(1).max(6).optional().default(1),
   isAutoNegotiateEnabled: z.boolean().optional().default(false),
-  maxAutoAcceptFare: z.number().nullable().optional(),
+  maxAutoAcceptFare: z.number().finite().min(50).nullable().optional(),
   femaleDriverOnly: z.boolean().optional().default(false),
   riderGender: z.string().optional(),
 });
@@ -25,6 +25,17 @@ export const requestRide = onCall(
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(RequestRideSchema, request.data);
+
+    // Enforce vehicle seat capacity bounds
+    const vType = (data.vehicleType || 'car').toLowerCase();
+    const maxCapacity = (vType === 'bike' || vType === 'moto') ? 1 : ((vType === 'rickshaw' || vType === 'auto') ? 3 : 4);
+    const bookedSeats = data.bookedSeats ?? 1;
+    if (bookedSeats > maxCapacity) {
+      throw new HttpsError(
+        'invalid-argument',
+        `Booked seats (${bookedSeats}) exceeds maximum capacity of ${maxCapacity} for ${vType}.`
+      );
+    }
 
     // Fetch user profile to verify gender if femaleDriverOnly is requested
     const userDoc = await db.collection(APP_CONSTANTS.COLLECTIONS.USERS).doc(caller.uid).get();

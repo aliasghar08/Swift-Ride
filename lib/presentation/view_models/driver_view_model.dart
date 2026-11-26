@@ -685,12 +685,13 @@ class DriverViewModel extends ChangeNotifier {
     required String rideId,
     required double fare,
   }) {
+    final validFare = (fare.isNaN || fare.isInfinite || fare < 50.0) ? 50.0 : fare;
     _deviceService.triggerHaptic('selection');
     rideProv.submitDriverCounterOffer(
       rideId: rideId,
       driver: driver,
       driverName: driverName,
-      counterFare: fare,
+      counterFare: validFare,
     );
   }
 

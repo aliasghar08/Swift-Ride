@@ -595,7 +595,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                             child: Column(
                               children: [
                                 const Text(
-                                  'Driver Earns',
+                                  'Est. Fare',
                                   style: TextStyle(
                                     color: Colors.white60,
                                     fontSize: 10,
@@ -603,7 +603,7 @@ class _RoutePreviewScreenState extends State<RoutePreviewScreen> {
                                   ),
                                 ),
                                 Text(
-                                  'PKR ${selected.economics.driverProfit.round()}',
+                                  'PKR ${selected.economics.riderFare.round()}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 14,

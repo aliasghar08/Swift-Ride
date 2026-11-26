@@ -242,8 +242,9 @@ void main() {
       expect(find.text('5 hr 14 min'), findsOneWidget);
       expect(find.text('390.5 km'), findsOneWidget);
       expect(find.textContaining('via Lahore - Islamabad Mtwy'), findsOneWidget);
-      expect(find.text('Driver Earns'), findsOneWidget);
-      expect(find.text('PKR 9659'), findsOneWidget);
+      expect(find.text('Est. Fare'), findsOneWidget);
+      expect(find.text('PKR 19292'), findsOneWidget);
+      expect(find.text('Driver Earns'), findsNothing);
 
       // Check Step count badge
       expect(find.text('4 turns'), findsOneWidget);

@@ -1268,10 +1268,6 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     return AppTheme.accentCyan;
   }
 
-  static String _formatDriverNumber(double val) {
-    return val % 1 == 0 ? val.toInt().toString() : val.toStringAsFixed(1);
-  }
-
   Widget _buildRouteSelector(ResponsiveLayoutHelper layout) {
     if (_viewModel.routes.length <= 1) return const SizedBox.shrink();
 
@@ -2043,10 +2039,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           SizedBox(height: layout.scale(10)),
                           _buildRouteSelector(layout),
                           if (!_viewModel.fareTouchedByUser &&
-                              _viewModel.selectedEconomics != null) ...[
+                              _viewModel.selectedRoute != null) ...[
                             const SizedBox(height: 6),
                             Text(
-                              'Driver earns PKR ${_formatDriverNumber(_viewModel.selectedEconomics!.driverProfit)} (${_formatDriverNumber(_viewModel.selectedEconomics!.profitPerMin)} PKR/min)',
+                              'Estimated ~${_viewModel.selectedRoute!.durationMin.round()} mins · ${_viewModel.selectedRoute!.distanceKm.toStringAsFixed(1)} km',
                               style: const TextStyle(
                                 color: AppTheme.slateMuted,
                                 fontSize: 11,
@@ -2697,7 +2693,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              '⛽ Fuel: Rs ${econ.fuelCost.toInt()} • 🔧 Maint: Rs ${econ.maintenanceCost.toInt()} • 💰 Driver: Rs ${econ.driverNetProfit.toInt()}',
+                              '⛽ Fuel: Rs ${econ.fuelCost.toInt()} • 🔧 Maint: Rs ${econ.maintenanceCost.toInt()} • 📏 ${econ.distanceKm.toStringAsFixed(1)} km',
                               style: TextStyle(
                                 fontSize: layout.fontSize(11),
                                 color: AppTheme.emeraldGreen,
@@ -3569,7 +3565,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '⛽ Fuel: Rs ${_viewModel.currentTripEconomics.fuelCost.toInt()} • 🔧 Maint: Rs ${_viewModel.currentTripEconomics.maintenanceCost.toInt()} • 💰 Driver: Rs ${_viewModel.currentTripEconomics.driverNetProfit.toInt()}',
+                    '⛽ Fuel: Rs ${_viewModel.currentTripEconomics.fuelCost.toInt()} • 🔧 Maint: Rs ${_viewModel.currentTripEconomics.maintenanceCost.toInt()} • 📏 ${_viewModel.currentTripEconomics.distanceKm.toStringAsFixed(1)} km',
                     style: TextStyle(
                       fontSize: layout.fontSize(11),
                       fontWeight: FontWeight.w700,

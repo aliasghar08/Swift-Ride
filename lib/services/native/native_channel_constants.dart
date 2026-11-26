@@ -10,6 +10,8 @@ class NativeChannelConstants {
   static const String connectivityChannel = 'com.swiftride.app/connectivity';
   static const String audioChannel = 'com.swiftride.app/audio';
   static const String mapChannel = 'com.swiftride.app/map';
+  static const String referralChannel = 'com.dartnexuslab.swiftride/referral';
+  static const String referralChannelApp = 'com.swiftride.app/referral';
 
   // Location methods
   static const String methodGetCurrentLocation = 'getCurrentLocation';

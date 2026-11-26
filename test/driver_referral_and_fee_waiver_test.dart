@@ -5,6 +5,7 @@ import 'package:swiftride/domain/models/ride_offer_model.dart';
 import 'package:swiftride/domain/models/trip_economics_model.dart';
 import 'package:swiftride/domain/models/vehicle_type.dart';
 import 'package:swiftride/services/firestore/firestore_driver_service.dart';
+import 'package:swiftride/services/referral_link_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -60,6 +61,7 @@ void main() {
 
       final map = profile.toMap();
       expect(map['captainInviteCode'], equals('CAPT786'));
+      expect(map['captainReferralLink'], equals('https://swift-ride-5ab75.web.app/join?code=CAPT786'));
       expect(map['referredByDriverUid'], equals('referrer_999'));
       expect(map['referredByCode'], equals('JHANG0'));
       expect(map['verifiedReferralsCount'], equals(4));
@@ -188,6 +190,53 @@ void main() {
 
       expect(result['success'], isFalse);
       expect(result['message'], contains('Please enter a valid code'));
+    });
+  });
+
+  group('ReferralLinkService Deep-Link & Play Install Referrer Parsing', () {
+    test('parses code from custom scheme swiftride://join?code=CAPT482', () {
+      final code = ReferralLinkService.parseCodeFromString('swiftride://join?code=CAPT482');
+      expect(code, equals('CAPT482'));
+    });
+
+    test('parses code from Firebase Hosting web URL https://swift-ride-5ab75.web.app/join?code=CAPT786', () {
+      final code = ReferralLinkService.parseCodeFromString('https://swift-ride-5ab75.web.app/join?code=CAPT786');
+      expect(code, equals('CAPT786'));
+    });
+
+    test('parses code from Play Store install referrer captain_code=CAPT482', () {
+      final code = ReferralLinkService.parseCodeFromString('captain_code=CAPT482');
+      expect(code, equals('CAPT482'));
+    });
+
+    test('parses code from complex multi-param Play Store install referrer', () {
+      final raw = 'utm_source=google&utm_medium=cpc&captain_code=SWIFT0&anid=admob';
+      final code = ReferralLinkService.parseCodeFromString(raw);
+      expect(code, equals('SWIFT0'));
+    });
+
+    test('parses URL-encoded referrer string captain_code%3DCAPT999', () {
+      final raw = 'captain_code%3DCAPT999';
+      final code = ReferralLinkService.parseCodeFromString(raw);
+      expect(code, equals('CAPT999'));
+    });
+
+    test('parses nested referrer parameter referrer=captain_code%3DCAPT123', () {
+      final raw = 'referrer=captain_code%3DCAPT123';
+      final code = ReferralLinkService.parseCodeFromString(raw);
+      expect(code, equals('CAPT123'));
+    });
+
+    test('saves, retrieves, and clears pending referral code in persistent storage', () async {
+      final service = ReferralLinkService();
+      await service.clearPendingReferralCode();
+      expect(await service.getPendingReferralCode(), isNull);
+
+      await service.savePendingReferralCode('capt482');
+      expect(await service.getPendingReferralCode(), equals('CAPT482'));
+
+      await service.clearPendingReferralCode();
+      expect(await service.getPendingReferralCode(), isNull);
     });
   });
 }

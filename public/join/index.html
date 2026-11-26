@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Join Swift Ride Captain - 0% Platform Fee Waiver</title>
+  <link rel="icon" type="image/png" href="../favicon.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B1120;
+      --card-bg: rgba(30, 41, 59, 0.75);
+      --card-border: rgba(51, 65, 85, 0.7);
+      --accent-cyan: #00E5FF;
+      --accent-emerald: #10B981;
+      --accent-gold: #F59E0B;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(circle at 15% 20%, rgba(0, 229, 255, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 40%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 36px 28px;
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-emerald), var(--accent-gold));
+    }
+
+    .logo-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      border-radius: 9999px;
+      margin-bottom: 20px;
+    }
+
+    .logo-badge span {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent-emerald);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+      background: linear-gradient(135deg, #FFFFFF 60%, var(--accent-cyan) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 24px;
+    }
+
+    .perks-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(51, 65, 85, 0.6);
+      border-radius: 16px;
+      padding: 16px 18px;
+      margin-bottom: 24px;
+      text-align: left;
+    }
+
+    .perk-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .perk-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .perk-icon {
+      font-size: 18px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 229, 255, 0.1);
+      border-radius: 8px;
+      color: var(--accent-cyan);
+    }
+
+    .perk-text {
+      font-size: 13px;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .code-box {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px dashed rgba(0, 229, 255, 0.4);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+
+    .code-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .code-val {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--accent-cyan);
+      letter-spacing: 2px;
+      font-family: monospace;
+      margin-bottom: 12px;
+    }
+
+    .btn-copy {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.35);
+      color: var(--accent-cyan);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .btn-copy:hover {
+      background: rgba(0, 229, 255, 0.22);
+      border-color: var(--accent-cyan);
+      transform: translateY(-1px);
+    }
+
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #00E5FF 0%, #00B4D8 100%);
+      color: #0B1120;
+      font-weight: 800;
+      font-size: 15px;
+      padding: 15px 20px;
+      border-radius: 14px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px rgba(0, 229, 255, 0.3);
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 229, 255, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: var(--accent-emerald);
+      font-weight: 700;
+      font-size: 14px;
+      padding: 13px 20px;
+      border-radius: 14px;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: var(--accent-emerald);
+      transform: translateY(-1px);
+    }
+
+    .footer-note {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 20px;
+      line-height: 1.4;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #10B981;
+      color: #0B1120;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 100;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="logo-badge">
+      <span>🎖️ Captain Launch Promo</span>
+    </div>
+
+    <h1>Swift Ride Captain</h1>
+    <p class="subtitle">You have been invited to join Swift Ride! Activate your driver profile now to unlock your 0% platform fee tier.</p>
+
+    <div class="perks-card">
+      <div class="perk-item">
+        <div class="perk-icon">🎉</div>
+        <div class="perk-text">0% Platform Fee for 30 Days (Keep 100% of Fares)</div>
+      </div>
+      <div class="perk-item">
+        <div class="perk-icon">⚡</div>
+        <div class="perk-text">Instant Cash Daily Khata & Zero Payout Friction</div>
+      </div>
+      <div class="perk-item">
+        <div class="perk-icon">🎖️</div>
+        <div class="perk-text">Stand Leader & Founding Captain Badges</div>
+      </div>
+    </div>
+
+    <div class="code-box">
+      <div class="code-label">Captain Invite Code</div>
+      <div class="code-val" id="inviteCodeDisplay">JHANG0</div>
+      <button class="btn-copy" id="copyBtn" onclick="copyCode()">📋 Copy Invite Code</button>
+    </div>
+
+    <div class="actions">
+      <a href="swiftride://join?code=JHANG0" id="openAppBtn" class="btn-primary">
+        🚀 Open in Swift Ride
+      </a>
+      <a href="https://play.google.com/store/apps/details?id=com.dartnexuslab.swiftride" id="playStoreBtn" class="btn-secondary" target="_blank" rel="noopener">
+        📱 Download on Google Play
+      </a>
+    </div>
+
+    <p class="footer-note">Already have Swift Ride installed? Tapping "Open in Swift Ride" will automatically apply your 0% fee waiver.</p>
+  </div>
+
+  <div class="toast" id="toast">Invite code copied to clipboard!</div>
+
+  <script>
+    // Extract referral code from URL query string
+    const urlParams = new URLSearchParams(window.location.search);
+    const rawCode = urlParams.get('code') || urlParams.get('captain_code') || urlParams.get('referrer') || 'JHANG0';
+    const code = rawCode.trim().toUpperCase();
+
+    // Populate UI
+    document.getElementById('inviteCodeDisplay').textContent = code;
+
+    const deepLinkUrl = 'swiftride://join?code=' + encodeURIComponent(code);
+    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.dartnexuslab.swiftride&referrer=' + encodeURIComponent('captain_code=' + code);
+
+    document.getElementById('openAppBtn').href = deepLinkUrl;
+    document.getElementById('playStoreBtn').href = playStoreUrl;
+
+    function copyCode() {
+      navigator.clipboard.writeText(code).then(() => {
+        showToast('Invite code ' + code + ' copied!');
+      }).catch(() => {
+        // Fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Invite code ' + code + ' copied!');
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    // Auto-attempt deep link on mobile devices
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isMobile) {
+      setTimeout(() => {
+        window.location.href = deepLinkUrl;
+      }, 500);
+    }
+  </script>
+</body>
+</html>

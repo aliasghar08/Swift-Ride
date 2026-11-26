@@ -64,9 +64,12 @@ class _CaptainRewardsSheetState extends State<CaptainRewardsSheet> {
     }
   }
 
-  Future<void> _shareOnWhatsApp(String code) async {
+  Future<void> _shareOnWhatsApp(String code, String link) async {
     final text =
-        "Assalam-o-Alaikum Captain! Swift Ride join karein mere Captain Code *$code* ke sath aur paayein 30 din ke liye 0% platform fee (100% kiraya aapka)! Stand ke doston ko le kar aao. Download: https://swiftride.pk";
+        "Assalam-o-Alaikum Captain! Swift Ride join karein mere link se aur paayein 30 din ke liye 0% platform fee (100% kamai aapki)!\n\n"
+        "👉 Join Link: $link\n"
+        "Ya invite code: *$code*\n"
+        "Download on Google Play: https://play.google.com/store/apps/details?id=com.dartnexuslab.swiftride&referrer=captain_code%3D$code";
     final url = "https://wa.me/?text=${Uri.encodeComponent(text)}";
     await NativeLauncherService().launchUrl(url);
   }
@@ -80,6 +83,7 @@ class _CaptainRewardsSheetState extends State<CaptainRewardsSheet> {
 
     final inviteCode = profile.captainInviteCode ??
         'CAPT${profile.userId.length >= 3 ? profile.userId.substring(profile.userId.length - 3).toUpperCase() : "786"}';
+    final referralLink = profile.captainReferralLink;
     final isWaiver = profile.isFeeWaiverActive;
     final waiverDays = profile.waiverDaysRemaining;
     final weeklyRides = profile.weeklyCompletedRides;
@@ -421,35 +425,36 @@ class _CaptainRewardsSheetState extends State<CaptainRewardsSheet> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: c.border.withValues(alpha: 0.4)),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Your Captain Code",
-                              style: TextStyle(
-                                fontSize: layout.fontSize(10.5),
-                                color: c.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              inviteCode,
-                              style: TextStyle(
-                                fontSize: layout.fontSize(16),
-                                fontWeight: FontWeight.w900,
-                                color: AppTheme.emeraldGreen,
-                                letterSpacing: 1.2,
-                              ),
-                            ),
-                          ],
-                        ),
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            IconButton(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Your Captain Code",
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(10.5),
+                                    color: c.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  inviteCode,
+                                  style: TextStyle(
+                                    fontSize: layout.fontSize(16),
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.emeraldGreen,
+                                    letterSpacing: 1.2,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            TextButton.icon(
                               onPressed: () {
                                 Clipboard.setData(ClipboardData(text: inviteCode));
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -460,21 +465,56 @@ class _CaptainRewardsSheetState extends State<CaptainRewardsSheet> {
                                   ),
                                 );
                               },
-                              icon: const Icon(Icons.copy_rounded, size: 20),
-                              tooltip: 'Copy Code',
+                              icon: const Icon(Icons.copy_rounded, size: 14),
+                              label: const Text("Copy Code"),
+                              style: TextButton.styleFrom(
+                                foregroundColor: c.textSecondary,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              ),
                             ),
-                            const SizedBox(width: 4),
-                            ElevatedButton.icon(
-                              onPressed: () => _shareOnWhatsApp(inviteCode),
-                              icon: const Icon(Icons.share_rounded, size: 16),
-                              label: const Text("WhatsApp"),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF25D366),
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: referralLink));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text("Referral Link copied!\n$referralLink"),
+                                      behavior: SnackBarBehavior.floating,
+                                      duration: const Duration(seconds: 3),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.link_rounded, size: 16),
+                                label: const Text("Copy Link"),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppTheme.accentTeal,
+                                  side: BorderSide(color: AppTheme.accentTeal.withValues(alpha: 0.5)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => _shareOnWhatsApp(inviteCode, referralLink),
+                                icon: const Icon(Icons.share_rounded, size: 16),
+                                label: const Text("WhatsApp"),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF25D366),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
                                 ),
                               ),
                             ),

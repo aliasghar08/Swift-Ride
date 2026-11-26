@@ -64,6 +64,10 @@ class DriverProfile {
   bool get isFeeWaiverActive =>
       feeWaiverUntil != null && feeWaiverUntil!.isAfter(DateTime.now());
 
+  /// Shareable referral link for peer drivers on Firebase Hosting.
+  String get captainReferralLink =>
+      'https://swift-ride-5ab75.web.app/join?code=${captainInviteCode ?? "CAPT786"}';
+
   /// Effective platform fee rate: 0.0% if waiver is active, else standard 2.0% (0.02).
   double get effectivePlatformFeeRate => isFeeWaiverActive ? 0.0 : 0.02;
 
@@ -188,6 +192,7 @@ class DriverProfile {
       'isGenderVerified': isGenderVerified,
       'femalePassengersOnly': femalePassengersOnly,
       if (captainInviteCode != null) 'captainInviteCode': captainInviteCode,
+      'captainReferralLink': captainReferralLink,
       if (referredByDriverUid != null) 'referredByDriverUid': referredByDriverUid,
       if (referredByCode != null) 'referredByCode': referredByCode,
       'verifiedReferralsCount': verifiedReferralsCount,

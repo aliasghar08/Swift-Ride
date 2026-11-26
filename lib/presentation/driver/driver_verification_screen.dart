@@ -9,6 +9,7 @@ import '../../domain/models/driver_document_model.dart';
 import '../../domain/models/vehicle_info_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
+import '../../services/referral_link_service.dart';
 import '../common/ai_consent_dialog.dart';
 import '../common/reserved_bottom_ad_bar.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -109,6 +110,21 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       _vehicleType = v.type;
       _hasAc = v.hasAc;
       _seats = v.seats;
+      _checkPendingReferralCode(driverProv);
+    }
+  }
+
+  Future<void> _checkPendingReferralCode(DriverProvider driverProv) async {
+    final driver = driverProv.driverProfile;
+    if (driver.referredByCode != null && driver.referredByCode!.isNotEmpty) return;
+    final pending = await ReferralLinkService().checkAndCaptureInitialReferralCode();
+    if (pending != null && pending.isNotEmpty && mounted) {
+      if (_promoController.text.isEmpty) {
+        setState(() {
+          _promoController.text = pending;
+          _promoMessage = 'Captain code $pending detected from referral link!';
+        });
+      }
     }
   }
 
@@ -949,6 +965,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                           });
                           if (_isPromoSuccess) {
                             _promoController.clear();
+                            ReferralLinkService().clearPendingReferralCode();
                           }
                         },
                   style: ElevatedButton.styleFrom(

@@ -19,6 +19,8 @@ import Network
   private var locationService: IosLocationService?
   private var geocodingService: IosGeocodingService?
   private var mapService: NativeMapService?
+  private var pendingReferralCode: String?
+  private var referralMethodChannel: FlutterMethodChannel?
 
   override func application(
     _ application: UIApplication,
@@ -79,6 +81,37 @@ import Network
     didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
   ) {
     super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+  }
+
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey : Any] = [:]
+  ) -> Bool {
+    handleReferralUrl(url)
+    return super.application(app, open: url, options: options)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    continue userActivity: NSUserActivity,
+    restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+  ) -> Bool {
+    if userActivity.activityType == NSUserActivityTypeBrowsingWeb, let url = userActivity.webpageURL {
+      handleReferralUrl(url)
+    }
+    return super.application(application, continue: userActivity, restorationHandler: restorationHandler)
+  }
+
+  private func handleReferralUrl(_ url: URL) {
+    // Matches swiftride://join?code=... OR https://swift-ride-5ab75.web.app/join?code=...
+    guard let components = URLComponents(url: url, resolvingAgainstBaseURL: true),
+          let items = components.queryItems else { return }
+    let code = items.first(where: { $0.name == "code" || $0.name == "captain_code" || $0.name == "referrer" })?.value
+    if let cleanCode = code?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased(), !cleanCode.isEmpty {
+      self.pendingReferralCode = cleanCode
+      self.referralMethodChannel?.invokeMethod("onReferralCodeReceived", arguments: cleanCode)
+    }
   }
 
   // MARK: - Method Channels
@@ -313,6 +346,25 @@ import Network
         result(FlutterMethodNotImplemented)
       }
     }
+
+    // 9. Captain Referral & Deep Link Channel
+    let referralChannel1 = FlutterMethodChannel(name: "com.dartnexuslab.swiftride/referral", binaryMessenger: binaryMessenger)
+    let referralChannel2 = FlutterMethodChannel(name: "com.swiftride.app/referral", binaryMessenger: binaryMessenger)
+    self.referralMethodChannel = referralChannel1
+
+    let referralHandler: FlutterMethodCallHandler = { [weak self] (call, result) in
+      switch call.method {
+      case "getInitialReferralCode":
+        result(self?.pendingReferralCode)
+      case "clearReferralCode":
+        self?.pendingReferralCode = nil
+        result(true)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+    referralChannel1.setMethodCallHandler(referralHandler)
+    referralChannel2.setMethodCallHandler(referralHandler)
   }
 
   private func startSpeechRecognition(result: @escaping FlutterResult) {

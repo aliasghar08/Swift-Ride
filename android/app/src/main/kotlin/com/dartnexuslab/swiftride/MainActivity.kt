@@ -20,6 +20,9 @@ import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import com.android.installreferrer.api.InstallReferrerClient
+import com.android.installreferrer.api.InstallReferrerStateListener
+import com.android.installreferrer.api.ReferrerDetails
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -35,6 +38,11 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
     private val launcherChannel = "com.swiftride.app/launcher"
     private val connectivityChannel = "com.swiftride.app/connectivity"
     private val audioChannel = "com.swiftride.app/audio"
+    private val referralChannel = "com.dartnexuslab.swiftride/referral"
+    private val referralChannelApp = "com.swiftride.app/referral"
+
+    private var referralMethodChannel: MethodChannel? = null
+    private var pendingReferralCode: String? = null
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
@@ -45,6 +53,75 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        handleReferralIntent(intent)
+        checkInstallReferrer()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleReferralIntent(intent)
+    }
+
+    private fun handleReferralIntent(intent: Intent?) {
+        val data = intent?.data ?: return
+        val code = data.getQueryParameter("code")
+            ?: data.getQueryParameter("captain_code")
+            ?: data.getQueryParameter("referrer")
+        if (!code.isNullOrBlank()) {
+            val cleanCode = code.trim().uppercase(Locale.US)
+            pendingReferralCode = cleanCode
+            referralMethodChannel?.invokeMethod("onReferralCodeReceived", cleanCode)
+        }
+    }
+
+    private fun checkInstallReferrer() {
+        try {
+            val referrerClient = InstallReferrerClient.newBuilder(this).build()
+            referrerClient.startConnection(object : InstallReferrerStateListener {
+                override fun onInstallReferrerSetupFinished(responseCode: Int) {
+                    if (responseCode == InstallReferrerClient.InstallReferrerResponse.OK) {
+                        try {
+                            val response: ReferrerDetails = referrerClient.installReferrer
+                            val referrerUrl: String? = response.installReferrer
+                            if (!referrerUrl.isNullOrBlank()) {
+                                parseReferrerUrl(referrerUrl)
+                            }
+                            referrerClient.endConnection()
+                        } catch (_: Exception) {}
+                    }
+                }
+                override fun onInstallReferrerServiceDisconnected() {}
+            })
+        } catch (_: Exception) {}
+    }
+
+    private fun parseReferrerUrl(rawReferrer: String) {
+        val decoded = try {
+            Uri.decode(rawReferrer)
+        } catch (_: Exception) {
+            rawReferrer
+        }
+        val params = decoded.split("&")
+        for (param in params) {
+            val parts = param.split("=")
+            if (parts.size == 2) {
+                val k = parts[0].trim()
+                val v = parts[1].trim()
+                if (k.equals("captain_code", ignoreCase = true) ||
+                    k.equals("code", ignoreCase = true) ||
+                    k.equals("referrer", ignoreCase = true)) {
+                    if (v.isNotBlank()) {
+                        val cleanCode = v.uppercase(Locale.US)
+                        if (pendingReferralCode == null) {
+                            pendingReferralCode = cleanCode
+                            referralMethodChannel?.invokeMethod("onReferralCodeReceived", cleanCode)
+                        }
+                        break
+                    }
+                }
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -446,6 +523,26 @@ class MainActivity : FlutterFragmentActivity(), TextToSpeech.OnInitListener {
                 else -> result.notImplemented()
             }
         }
+
+        // 9. Captain Referral & Deep Link Channel
+        val refHandler: (io.flutter.plugin.common.MethodCall, io.flutter.plugin.common.MethodChannel.Result) -> Unit = { call, result ->
+            when (call.method) {
+                "getInitialReferralCode" -> {
+                    result.success(pendingReferralCode)
+                }
+                "clearReferralCode" -> {
+                    pendingReferralCode = null
+                    result.success(true)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        val refChan1 = MethodChannel(messenger, referralChannel)
+        refChan1.setMethodCallHandler(refHandler)
+        val refChan2 = MethodChannel(messenger, referralChannelApp)
+        refChan2.setMethodCallHandler(refHandler)
+        referralMethodChannel = refChan1
     }
 
     private fun readDouble(prefs: android.content.SharedPreferences, key: String): Double? {

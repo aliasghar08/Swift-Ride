@@ -124,4 +124,5 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("com.google.firebase:firebase-database:21.0.0")
     implementation("com.google.firebase:firebase-firestore:25.1.2")
+    implementation("com.android.installreferrer:installreferrer:2.2")
 }

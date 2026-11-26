@@ -80,6 +80,27 @@
                     android:host="swift-ride-5ab75.firebaseapp.com"
                     android:pathPrefix="/__/auth/handler" />
             </intent-filter>
+
+            <!-- Custom scheme deep-link for Captain Referral Link -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="swiftride"
+                    android:host="join" />
+            </intent-filter>
+
+            <!-- App Links for Firebase Hosting Captain Referral URLs -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="https"
+                    android:host="swift-ride-5ab75.web.app"
+                    android:pathPrefix="/join" />
+            </intent-filter>
         </activity>
         <service
             android:name=".NativeLocationService"

@@ -1195,6 +1195,68 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         ),
                                       ),
                                     ),
+                                    if (driver.vehicle.type == 'sevenSeater') ...[
+                                      const SizedBox(width: 6),
+                                      // 7-Seater Driver: Also Accept 4-Seat Car Rides Toggle Pill
+                                      InkWell(
+                                        onTap: () async {
+                                          await driverProv.setAcceptsStandardCarRides(
+                                            !driverProv.acceptsStandardCarRides,
+                                          );
+                                        },
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 180),
+                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4.5),
+                                          decoration: BoxDecoration(
+                                            color: driverProv.acceptsStandardCarRides
+                                                ? AppTheme.primaryBlue.withValues(alpha: 0.16)
+                                                : (isDark ? Colors.white.withValues(alpha: 0.05) : Colors.black.withValues(alpha: 0.04)),
+                                            borderRadius: BorderRadius.circular(16),
+                                            border: Border.all(
+                                              color: driverProv.acceptsStandardCarRides
+                                                  ? AppTheme.primaryBlue
+                                                  : (isDark ? Colors.white24 : Colors.black12),
+                                              width: driverProv.acceptsStandardCarRides ? 1.3 : 1.0,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.directions_car_rounded,
+                                                size: 14,
+                                                color: driverProv.acceptsStandardCarRides
+                                                  ? AppTheme.primaryBlue
+                                                  : (isDark ? Colors.white70 : Colors.black54),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                '+ Car Rides',
+                                                style: TextStyle(
+                                                  fontSize: layout.fontSize(10),
+                                                  fontWeight: driverProv.acceptsStandardCarRides ? FontWeight.w800 : FontWeight.w600,
+                                                  color: driverProv.acceptsStandardCarRides
+                                                      ? AppTheme.primaryBlue
+                                                      : (isDark ? Colors.white70 : Colors.black87),
+                                                ),
+                                              ),
+                                              if (driverProv.acceptsStandardCarRides) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  width: 5,
+                                                  height: 5,
+                                                  decoration: const BoxDecoration(
+                                                    color: AppTheme.primaryBlue,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                     const SizedBox(width: 6),
                                     // Khata Quick Pill
                                     InkWell(
@@ -2076,7 +2138,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                                         const SizedBox(width: 3),
                                         Text(
                                           request.bookedSeats > 1
-                                              ? '${request.bookedSeats} Seats'
+                                              ? '${request.bookedSeats}/${VehicleTypeX.fromString(request.vehicleType).seats} Seats'
                                               : '1 Seat',
                                           style: TextStyle(
                                             fontSize: layout.fontSize(9.5),
@@ -2701,7 +2763,8 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                       ),
                     ),
                   ),
-                  if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car) ...[
+                  if (VehicleTypeX.fromString(ride.vehicleType) == VehicleType.car ||
+                      VehicleTypeX.fromString(ride.vehicleType) == VehicleType.sevenSeater) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                       decoration: BoxDecoration(
@@ -2715,7 +2778,7 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
                           const SizedBox(width: 4),
                           Text(
                             ride.bookedSeats > 1
-                                ? '${ride.bookedSeats} Seats'
+                                ? '${ride.bookedSeats}/${VehicleTypeX.fromString(ride.vehicleType).seats} Seats'
                                 : '1 Seat',
                             style: TextStyle(
                               color: AppTheme.emeraldGreen,

@@ -109,7 +109,11 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       }
       _vehicleType = v.type;
       _hasAc = v.hasAc;
-      _seats = v.seats;
+      _seats = v.seats > 0
+          ? v.seats
+          : (v.type == 'sevenSeater'
+              ? 6
+              : (v.type == 'bike' ? 1 : (v.type == 'rikshaw' ? 3 : 4)));
       _checkPendingReferralCode(driverProv);
     }
   }
@@ -1043,7 +1047,9 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                       ? Icons.two_wheeler_rounded
                       : (_vehicleType == 'rikshaw'
                           ? Icons.electric_rickshaw_rounded
-                          : Icons.directions_car_rounded),
+                          : (_vehicleType == 'sevenSeater'
+                              ? Icons.airport_shuttle_rounded
+                              : Icons.directions_car_rounded)),
                   color: isConfigured ? AppTheme.emeraldGreen : AppTheme.primaryBlue,
                   size: 22,
                 ),
@@ -1107,7 +1113,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
           Row(
             children: [
               _buildCategoryChip(
-                label: 'Car',
+                label: 'Car (4 Seats)',
                 icon: Icons.directions_car_rounded,
                 selected: _vehicleType == 'car',
                 c: c,
@@ -1120,6 +1126,24 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 },
               ),
               const SizedBox(width: 8),
+              _buildCategoryChip(
+                label: '7-Seater / MPV',
+                icon: Icons.airport_shuttle_rounded,
+                selected: _vehicleType == 'sevenSeater',
+                c: c,
+                onTap: () {
+                  setState(() {
+                    _vehicleType = 'sevenSeater';
+                    _seats = 6;
+                    _hasAc = true;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
               _buildCategoryChip(
                 label: 'Bike / Moto',
                 icon: Icons.two_wheeler_rounded,
@@ -1158,7 +1182,11 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 child: _buildInputField(
                   controller: _makeController,
                   label: 'Vehicle Make',
-                  hint: _vehicleType == 'bike' ? 'Honda, United' : 'Toyota, Suzuki',
+                  hint: _vehicleType == 'bike'
+                      ? 'Honda, United'
+                      : (_vehicleType == 'sevenSeater'
+                          ? 'Changan, Suzuki'
+                          : 'Toyota, Suzuki'),
                   layout: layout,
                   c: c,
                   isDark: isDark,
@@ -1169,7 +1197,11 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 child: _buildInputField(
                   controller: _modelController,
                   label: 'Vehicle Model',
-                  hint: _vehicleType == 'bike' ? 'CD 70, 125' : 'Corolla, Alto',
+                  hint: _vehicleType == 'bike'
+                      ? 'CD 70, 125'
+                      : (_vehicleType == 'sevenSeater'
+                          ? 'Karvaan, Every, BR-V'
+                          : 'Corolla, Alto'),
                   layout: layout,
                   c: c,
                   isDark: isDark,
@@ -1177,6 +1209,39 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
               ),
             ],
           ),
+          if (_vehicleType == 'sevenSeater') ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ('Changan', 'Karvaan'),
+                ('Suzuki', 'Every'),
+                ('Honda', 'BR-V'),
+                ('Suzuki', 'Bolan'),
+                ('Suzuki', 'APV'),
+                ('Toyota', 'Sienta'),
+              ].map((m) {
+                final isSelected = _makeController.text == m.$1 && _modelController.text == m.$2;
+                return ActionChip(
+                  label: Text('${m.$1} ${m.$2}'),
+                  backgroundColor: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                  side: BorderSide(color: isSelected ? AppTheme.primaryBlue : c.border),
+                  labelStyle: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? AppTheme.primaryBlue : c.textSecondary,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _makeController.text = m.$1;
+                      _modelController.text = m.$2;
+                    });
+                  },
+                );
+              }).toList(),
+            ),
+          ],
           const SizedBox(height: 12),
 
           // Plate & Year Row
@@ -1237,7 +1302,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
             ],
           ),
 
-          if (_vehicleType == 'car') ...[
+          if (_vehicleType == 'car' || _vehicleType == 'sevenSeater') ...[
             const SizedBox(height: 14),
             Row(
               children: [

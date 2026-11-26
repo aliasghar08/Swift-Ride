@@ -332,6 +332,10 @@ class PricingMLService {
       resolvedTier = 1.0;
       resolvedKmL = 23.0;
       baseWearRate = 2.50;
+    } else if (vehicleType == VehicleType.sevenSeater) {
+      resolvedTier = 5.0; // Tier 5: 7-Seater / MPV / Family Van
+      resolvedKmL = 11.0;
+      baseWearRate = 5.00;
     } else {
       // VehicleType.car
       effectiveCarTier = carEngineTier ?? CarEngineTierX.fromCarModel(carModel);
@@ -345,7 +349,9 @@ class PricingMLService {
     }
 
     final double validRoad = roadCondition.clamp(0, 2).toDouble();
-    final bool effectiveAc = (vehicleType == VehicleType.car) ? (acEnabled ?? true) : false;
+    final bool effectiveAc = (vehicleType == VehicleType.car || vehicleType == VehicleType.sevenSeater)
+        ? (acEnabled ?? true)
+        : false;
     final double acCode = effectiveAc ? 1.0 : 0.0;
 
     double predictedFuelLiters = 0.0;
@@ -411,31 +417,31 @@ class PricingMLService {
               ? 80.0
               : (resolvedTier == 2.0
                   ? 100.0
-                  : (resolvedTier == 3.0 ? 110.0 : 130.0)));
+                  : (resolvedTier == 3.0 ? 110.0 : (resolvedTier == 5.0 ? 150.0 : 130.0))));
       final kmRate = resolvedTier == 0.0
           ? 15.0
           : (resolvedTier == 1.0
               ? 25.0
               : (resolvedTier == 2.0
                   ? 32.0
-                  : (resolvedTier == 3.0 ? 36.0 : 46.0)));
+                  : (resolvedTier == 3.0 ? 36.0 : (resolvedTier == 5.0 ? 52.0 : 46.0))));
       final minRate = resolvedTier == 0.0
           ? 0.3
           : (resolvedTier == 1.0
               ? 0.5
               : (resolvedTier == 2.0
                   ? 0.5
-                  : (resolvedTier == 3.0 ? 0.6 : 1.0)));
+                  : (resolvedTier == 3.0 ? 0.6 : (resolvedTier == 5.0 ? 1.2 : 1.0))));
       final acSurcharge = effectiveAc ? 1.065 : 1.0;
       final seatBoost = clampedSeats > 1 ? (1.0 + (clampedSeats - 1) * 0.04) : 1.0;
       final rawFare = ((baseFare + (validDist * kmRate) + (validDur * minRate)) * acSurcharge) * seatBoost;
       final fuelCostEst = predictedFuelLiters * validFuelPrice;
-      final directCostFloor = (fuelCostEst + predictedMaintPkr) * 1.18;
+      final directCostFloor = (fuelCostEst + predictedMaintPkr) * (resolvedTier == 5.0 ? 1.35 : 1.18);
       final minFloor = resolvedTier == 0.0
           ? 40.0
           : (resolvedTier == 1.0
               ? 60.0
-              : (resolvedTier == 2.0 ? 90.0 : (resolvedTier == 3.0 ? 100.0 : 120.0)));
+              : (resolvedTier == 2.0 ? 90.0 : (resolvedTier == 3.0 ? 100.0 : (resolvedTier == 5.0 ? 140.0 : 120.0))));
       final safeFare = math.max(rawFare, math.max(directCostFloor, minFloor));
       predictedFarePkr = ((safeFare / 5.0).round() * 5.0).toDouble();
     }
@@ -443,7 +449,7 @@ class PricingMLService {
     // Clean rounding and secondary calculations
     final fuelCost = ((predictedFuelLiters * validFuelPrice) * 10).round() / 10.0;
     final maintenanceCost = (predictedMaintPkr * 10).round() / 10.0;
-    final costFloor = (fuelCost + maintenanceCost) * 1.18;
+    final costFloor = (fuelCost + maintenanceCost) * (vehicleType == VehicleType.sevenSeater ? 1.35 : 1.18);
     final effectiveFare = math.max(predictedFarePkr, costFloor);
     final roundedFare = ((effectiveFare / 5.0).round() * 5.0).toDouble();
     final effectiveFeeRate = platformFeeRate ?? 0.02;

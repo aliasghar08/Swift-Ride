@@ -5,6 +5,7 @@ enum VehicleType {
   car,
   bike,
   rikshaw,
+  sevenSeater,
 }
 
 /// Realistic engine displacement and chassis tiers for cars in Pakistan.
@@ -119,6 +120,8 @@ extension VehicleTypeX on VehicleType {
         return 'Bike / Moto';
       case VehicleType.rikshaw:
         return 'Auto Rikshaw';
+      case VehicleType.sevenSeater:
+        return '7-Seater / Van';
     }
   }
 
@@ -131,6 +134,8 @@ extension VehicleTypeX on VehicleType {
         return 'Fastest in traffic • Solo 1 Seat';
       case VehicleType.rikshaw:
         return 'Economical • 2 Seats';
+      case VehicleType.sevenSeater:
+        return 'Spacious MPV / Family Van • 6 Seats';
     }
   }
 
@@ -143,6 +148,8 @@ extension VehicleTypeX on VehicleType {
         return 1;
       case VehicleType.rikshaw:
         return 2;
+      case VehicleType.sevenSeater:
+        return 6;
     }
   }
 
@@ -155,6 +162,8 @@ extension VehicleTypeX on VehicleType {
         return 22.0; // 4-stroke auto rickshaw
       case VehicleType.bike:
         return 30.0; // Motorcycle / 70cc-125cc real-world city average
+      case VehicleType.sevenSeater:
+        return 11.0; // 7-Seater MPV / Van baseline city mileage
     }
   }
 
@@ -183,7 +192,7 @@ extension VehicleTypeX on VehicleType {
       }
     }
 
-    if (this != VehicleType.car || distanceKm <= 0) {
+    if ((this != VehicleType.car && this != VehicleType.sevenSeater) || distanceKm <= 0) {
       return base;
     }
 
@@ -235,7 +244,7 @@ extension VehicleTypeX on VehicleType {
     // AC compressor drag penalty (~1.2 - 1.5 km/L) when active
     final double acPenalty;
     if (acEnabled != null) {
-      acPenalty = (this == VehicleType.car && acEnabled) ? 1.4 : 0.0;
+      acPenalty = ((this == VehicleType.car || this == VehicleType.sevenSeater) && acEnabled) ? 1.4 : 0.0;
     } else if (carEngineTier != null) {
       acPenalty = 1.4;
     } else {
@@ -256,6 +265,8 @@ extension VehicleTypeX on VehicleType {
         return 2.5;
       case VehicleType.bike:
         return 1.5;
+      case VehicleType.sevenSeater:
+        return 5.0; // Family Van / MPV wear rate
     }
   }
 
@@ -271,6 +282,8 @@ extension VehicleTypeX on VehicleType {
         return 0.70;
       case VehicleType.bike:
         return 0.45;
+      case VehicleType.sevenSeater:
+        return 1.35; // Whole-vehicle base multiplier
     }
   }
 
@@ -283,6 +296,8 @@ extension VehicleTypeX on VehicleType {
         return 60.0;
       case VehicleType.bike:
         return 40.0;
+      case VehicleType.sevenSeater:
+        return 120.0;
     }
   }
 
@@ -295,6 +310,8 @@ extension VehicleTypeX on VehicleType {
         return 4;
       case VehicleType.car:
         return 6;
+      case VehicleType.sevenSeater:
+        return 7;
     }
   }
 
@@ -307,6 +324,8 @@ extension VehicleTypeX on VehicleType {
         return Icons.two_wheeler_rounded;
       case VehicleType.rikshaw:
         return Icons.electric_rickshaw_rounded;
+      case VehicleType.sevenSeater:
+        return Icons.airport_shuttle_rounded;
     }
   }
 
@@ -326,6 +345,14 @@ extension VehicleTypeX on VehicleType {
     }
     if (lower == 'rikshaw' || lower == 'rickshaw' || lower == 'auto' || lower == 'qingqi') {
       return VehicleType.rikshaw;
+    }
+    if (lower == 'sevenseater' ||
+        lower == 'seven_seater' ||
+        lower == '7seater' ||
+        lower == '7-seater' ||
+        lower == 'van' ||
+        lower == 'mpv') {
+      return VehicleType.sevenSeater;
     }
     return VehicleType.car;
   }

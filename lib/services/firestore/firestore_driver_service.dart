@@ -74,6 +74,7 @@ class FirestoreDriverService {
           'verifiedReferralsCount': driver.verifiedReferralsCount,
           'badges': driver.badges,
           'weeklyCompletedRides': driver.weeklyCompletedRides,
+          'acceptsStandardCarRides': driver.acceptsStandardCarRides,
           if (driver.feeWaiverUntil != null)
             'feeWaiverUntil': Timestamp.fromDate(driver.feeWaiverUntil!),
           'createdAt': FieldValue.serverTimestamp(),
@@ -96,6 +97,7 @@ class FirestoreDriverService {
           if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
           'isVerified': currentVerified,
           'isOnline': currentVerified ? driver.isOnline : false,
+          'acceptsStandardCarRides': driver.acceptsStandardCarRides,
           if (driver.gender != null) 'gender': driver.gender,
           'femalePassengersOnly': driver.femalePassengersOnly,
           'updatedAt': FieldValue.serverTimestamp(),
@@ -456,7 +458,12 @@ class FirestoreDriverService {
       color: data['vehicleColor'] ?? '',
       type: data['vehicleType'] ?? 'car',
       hasAc: data['hasAc'] as bool? ?? (data['vehicleType'] != 'bike' && data['vehicleType'] != 'rikshaw'),
-      seats: (data['seats'] as num?)?.toInt() ?? (data['vehicleType'] == 'bike' ? 1 : (data['vehicleType'] == 'rikshaw' ? 3 : 4)),
+      seats: (data['seats'] as num?)?.toInt() ??
+          (data['vehicleType'] == 'bike'
+              ? 1
+              : (data['vehicleType'] == 'rikshaw'
+                  ? 3
+                  : (data['vehicleType'] == 'sevenSeater' ? 6 : 4))),
       engineCapacityCc: (data['engineCapacityCc'] as num?)?.toInt(),
       frontPhotoUrl: data['frontPhotoUrl'] as String?,
       interiorPhotoUrl: data['interiorPhotoUrl'] as String?,
@@ -490,6 +497,7 @@ class FirestoreDriverService {
       gender: data['gender'] as String?,
       isGenderVerified: data['isGenderVerified'] == true,
       femalePassengersOnly: data['femalePassengersOnly'] == true,
+      acceptsStandardCarRides: (data['acceptsStandardCarRides'] as bool?) ?? true,
     );
   }
 
@@ -511,6 +519,28 @@ class FirestoreDriverService {
       return true;
     } catch (e) {
       debugPrint('[FirestoreDriverService] Error updating femalePassengersOnly: $e');
+      return false;
+    }
+  }
+
+  /// Updates driver's preference to accept standard 4-seat car rides (for 7-seater drivers).
+  Future<bool> updateAcceptsStandardCarRides(String driverId, bool acceptsStandardCarRides) async {
+    final cur = _memoryDrivers[driverId];
+    if (cur != null) {
+      _memoryDrivers[driverId] = cur.copyWith(acceptsStandardCarRides: acceptsStandardCarRides);
+    }
+
+    final fs = _firestore;
+    if (fs == null) return true;
+
+    try {
+      await fs.collection(AppConstants.driversCollection).doc(driverId).update({
+        'acceptsStandardCarRides': acceptsStandardCarRides,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (e) {
+      debugPrint('[FirestoreDriverService] Error updating acceptsStandardCarRides: $e');
       return false;
     }
   }
@@ -666,6 +696,7 @@ class FirestoreDriverService {
           'gender': ?gender,
           'isGenderVerified': ?isGenderVerified,
           'femalePassengersOnly': false,
+          'acceptsStandardCarRides': true,
           'captainInviteCode':
               'CAPT${userId.length >= 3 ? userId.substring(userId.length - 3).toUpperCase() : (userId.hashCode.abs() % 900 + 100)}',
           'verifiedReferralsCount': 0,

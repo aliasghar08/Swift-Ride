@@ -63,8 +63,9 @@ class TripEconomics {
   double get fuelCostPkr => fuelCost;
   double get maintenanceCostPkr => maintenanceCost;
 
-  /// Minimum profitable fare guard: (Fuel + Wear) * 1.18 (guarantees ~13% minimum net margin)
-  double get costFloor => (fuelCostPkr + maintenanceCostPkr) * 1.18;
+  /// Minimum profitable fare guard: (Fuel + Wear) * multiplier (1.35x for 7-seater, 1.18x for cars)
+  double get costFloor =>
+      (fuelCostPkr + maintenanceCostPkr) * (vehicleType == VehicleType.sevenSeater ? 1.35 : 1.18);
 
   /// Factory calculator evaluating fuel, maintenance, and driver profit in real-time.
   /// Automatically uses live internet fuel rates from [FuelPriceService] when not overridden.
@@ -96,14 +97,15 @@ class TripEconomics {
     final effectiveSource = fuelPriceSource ?? livePrice.source;
     final effectiveIsLive = isFuelPriceLive ?? livePrice.isLive;
 
+    final isCarOrVan = vehicleType == VehicleType.car || vehicleType == VehicleType.sevenSeater;
     final effectiveCarTier = vehicleType == VehicleType.car
         ? (carEngineTier ?? CarEngineTierX.fromCarModel(carModel))
         : null;
-    final effectiveAc = vehicleType == VehicleType.car ? (acEnabled ?? true) : false;
+    final effectiveAc = isCarOrVan ? (acEnabled ?? true) : false;
 
-    // Predict car mileage dynamically from Google Maps route data (distance, speed, traffic)
+    // Predict car and 7-seater mileage dynamically from Google Maps route data (distance, speed, traffic)
     // taking into account the vehicle's model, engine tier, AC load, and fuel economy.
-    final mileage = vehicleType == VehicleType.car
+    final mileage = isCarOrVan
         ? vehicleType.predictMileage(
             distanceKm: distanceKm,
             durationMin: effectiveDuration,
@@ -118,7 +120,7 @@ class TripEconomics {
             ? fuelAverageKmPerL
             : vehicleType.averageMileageKmPerL);
 
-    final isPredicted = vehicleType == VehicleType.car;
+    final isPredicted = isCarOrVan;
     String? trafficNote;
     if (isPredicted) {
       final modelPrefix = carModel != null && carModel.isNotEmpty

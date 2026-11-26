@@ -66,6 +66,57 @@ export const onRideCreated = onDocumentCreated(
             }
           }
 
+          // 3. Vehicle compatibility matching:
+          const reqType = (rideData.vehicleType || '').toLowerCase();
+          const dVehicleType = (dData.vehicleType || dData.vehicle?.type || '').toLowerCase();
+
+          const isRideSevenSeater =
+            reqType === 'sevenseater' ||
+            reqType === 'seven_seater' ||
+            reqType === '7seater' ||
+            reqType === 'van' ||
+            reqType === 'mpv';
+          const isDriverSevenSeater =
+            dVehicleType === 'sevenseater' ||
+            dVehicleType === 'seven_seater' ||
+            dVehicleType === '7seater' ||
+            dVehicleType === 'van' ||
+            dVehicleType === 'mpv';
+
+          if (isRideSevenSeater) {
+            // Seven-seater rides must only be dispatched to 7-seater MPV drivers
+            if (!isDriverSevenSeater) {
+              continue;
+            }
+          } else if (
+            reqType === 'car' ||
+            reqType === 'car_economy' ||
+            reqType === 'car_ac' ||
+            reqType === 'comfort' ||
+            reqType === 'sedan'
+          ) {
+            // Standard car rides can be served by car drivers, OR 7-seater drivers who accept standard car rides
+            const isDriverCar =
+              dVehicleType === 'car' ||
+              dVehicleType === 'sedan' ||
+              dVehicleType === 'car_economy' ||
+              dVehicleType === 'car_ac' ||
+              dVehicleType === 'comfort';
+
+            if (!isDriverCar) {
+              if (isDriverSevenSeater) {
+                if (dData.acceptsStandardCarRides === false) {
+                  continue;
+                }
+              } else if (dVehicleType) {
+                continue;
+              }
+            }
+          } else if (reqType && dVehicleType) {
+            if (reqType.includes('bike') && !dVehicleType.includes('bike')) continue;
+            if (reqType.includes('rik') && !dVehicleType.includes('rik')) continue;
+          }
+
           const lat = dData.currentLocation?.lat;
           const lng = dData.currentLocation?.lng;
           if (lat !== undefined && lng !== undefined) {
@@ -91,9 +142,17 @@ export const onRideCreated = onDocumentCreated(
     const vehicleSeats: Record<string, number> = {
       bike: 1,
       rickshaw: 3,
+      rikshaw: 3,
+      car: 4,
+      sedan: 4,
       car_economy: 4,
       car_ac: 4,
       comfort: 4,
+      sevenseater: 6,
+      seven_seater: 6,
+      '7seater': 6,
+      van: 6,
+      mpv: 6,
     };
     const totalSeats = vehicleSeats[rideData.vehicleType] ?? 4;
     const bookedSeats = rideData.bookedSeats ?? 1;

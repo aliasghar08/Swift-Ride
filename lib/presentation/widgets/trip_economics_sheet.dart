@@ -91,7 +91,7 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
     final effectiveTier = widget.carEngineTier ?? _econ.carEngineTier;
     final effectiveAc = widget.acEnabled ??
         _econ.acEnabled ??
-        (_econ.vehicleType == VehicleType.car);
+        (_econ.vehicleType == VehicleType.car || _econ.vehicleType == VehicleType.sevenSeater);
 
     if (_econ.isAiPredicted) {
       return await PricingMLService().predictTripEconomics(
@@ -443,13 +443,16 @@ class _TripEconomicsSheetState extends State<TripEconomicsSheet> {
                         ? '1 Passenger Seat (Solo Rider • Direct Trip)'
                         : vType == VehicleType.rikshaw
                             ? 'Private Auto Rikshaw (Direct Trip)'
-                            : 'Shared Carpool (1-3 Seats) or Entire Car (4 Seats)',
+                            : vType == VehicleType.sevenSeater
+                                ? 'Shared MPV (1-5 Seats) or Entire Van (6 Seats)'
+                                : 'Shared Carpool (1-3 Seats) or Entire Car (4 Seats)',
                     style: TextStyle(
                       fontSize: layout.fontSize(11),
                       color: AppTheme.slateMuted,
                     ),
                   ),
-                  if (widget.onSeatCountChanged != null && vType == VehicleType.car) ...[
+                  if (widget.onSeatCountChanged != null &&
+                      (vType == VehicleType.car || vType == VehicleType.sevenSeater)) ...[
                     const SizedBox(height: 10),
                     Row(
                       children: List.generate(vType.seats, (idx) {

@@ -158,10 +158,11 @@ class RiderViewModel extends ChangeNotifier {
   }
 
   /// Toggles selection of a specific seat position, allowing multi-seat selection
-  /// up to [_bookedSeats] when multiple seats are booked (Cars only).
+  /// up to [_bookedSeats] when multiple seats are booked (Cars and 7-Seater Vans).
   void toggleSeatPosition(String position) {
-    if (_selectedVehicleType != VehicleType.car) return;
-    if (_bookedSeats == 4) return;
+    final isMultiSeat = _selectedVehicleType == VehicleType.car || _selectedVehicleType == VehicleType.sevenSeater;
+    if (!isMultiSeat) return;
+    if (_bookedSeats == _selectedVehicleType.seats) return;
 
     final updated = List<String>.from(_selectedSeatPositions);
 
@@ -171,6 +172,7 @@ class RiderViewModel extends ChangeNotifier {
     } else {
       updated.remove('Any Seat');
       updated.remove('Entire Car (All 4 Seats)');
+      updated.remove('Entire Van (All 6 Seats)');
 
       if (updated.contains(position)) {
         if (updated.length > 1) {
@@ -200,15 +202,21 @@ class RiderViewModel extends ChangeNotifier {
     if (_bookedSeats != clamped) {
       _bookedSeats = clamped;
 
-      if (_selectedVehicleType != VehicleType.car) {
+      final isMultiSeat = _selectedVehicleType == VehicleType.car || _selectedVehicleType == VehicleType.sevenSeater;
+      final entireLabel = _selectedVehicleType == VehicleType.sevenSeater
+          ? 'Entire Van (All 6 Seats)'
+          : 'Entire Car (All 4 Seats)';
+
+      if (!isMultiSeat) {
         _selectedSeatPositions = const ['Any Seat'];
         _seatPreference = 'Any Seat';
-      } else if (_bookedSeats == 4) {
-        _selectedSeatPositions = const ['Entire Car (All 4 Seats)'];
-        _seatPreference = 'Entire Car (All 4 Seats)';
+      } else if (_bookedSeats == _selectedVehicleType.seats) {
+        _selectedSeatPositions = [entireLabel];
+        _seatPreference = entireLabel;
       } else {
         final current = List<String>.from(_selectedSeatPositions)
-          ..remove('Entire Car (All 4 Seats)');
+          ..remove('Entire Car (All 4 Seats)')
+          ..remove('Entire Van (All 6 Seats)');
         if (current.isEmpty) {
           _selectedSeatPositions = const ['Any Seat'];
           _seatPreference = 'Any Seat';
@@ -265,7 +273,7 @@ class RiderViewModel extends ChangeNotifier {
         ? (suggestedFare < 50.0 ? 50.0 : suggestedFare)
         : (parsed > 99999.0 ? 99999.0 : parsed);
     final route = selectedRoute;
-    final isCar = _selectedVehicleType == VehicleType.car;
+    final isCarOrVan = _selectedVehicleType == VehicleType.car || _selectedVehicleType == VehicleType.sevenSeater;
     return TripEconomics.calculate(
       distanceKm: route?.distanceKm ?? _estimatedDistanceKm,
       durationMin: route?.durationMin ?? _estimatedDurationMin,
@@ -275,7 +283,7 @@ class RiderViewModel extends ChangeNotifier {
       vehicleType: _selectedVehicleType,
       bookedSeats: _bookedSeats,
       isAiPredicted: true,
-      acEnabled: isCar,
+      acEnabled: isCarOrVan,
     );
   }
 
@@ -292,8 +300,8 @@ class RiderViewModel extends ChangeNotifier {
     final dist = route?.distanceKm ?? _estimatedDistanceKm;
     final dur = (route?.durationMin ?? _estimatedDurationMin).round();
     final seats = overrideSeats ?? _bookedSeats;
-    final isCar = _selectedVehicleType == VehicleType.car;
-    final effectiveAc = acEnabled ?? isCar;
+    final isCarOrVan = _selectedVehicleType == VehicleType.car || _selectedVehicleType == VehicleType.sevenSeater;
+    final effectiveAc = acEnabled ?? isCarOrVan;
     final livePrice = FuelPriceService().currentPrice;
     final price = fuelPrice ?? livePrice.petrolPricePerL;
 
@@ -326,9 +334,19 @@ class RiderViewModel extends ChangeNotifier {
   void selectVehicleType(VehicleType type) {
     _selectedVehicleType = type;
     _bookedSeats = _bookedSeats.clamp(1, type.seats);
-    if (type != VehicleType.car) {
+    final isMultiSeat = type == VehicleType.car || type == VehicleType.sevenSeater;
+    if (!isMultiSeat) {
       _selectedSeatPositions = const ['Any Seat'];
-      _seatPreference = 'Any Seat';
+      _seatPreference = 'Any';
+    } else if (_bookedSeats == type.seats) {
+      final entireLabel = type == VehicleType.sevenSeater
+          ? 'Entire Van (All 6 Seats)'
+          : 'Entire Car (All 4 Seats)';
+      _selectedSeatPositions = [entireLabel];
+      _seatPreference = entireLabel;
+    } else if (_seatPreference.contains('Entire')) {
+      _selectedSeatPositions = const ['Any Seat'];
+      _seatPreference = 'Any';
     }
     final fare = _vehicleFares[type] ?? type.calculateFare(suggestedFare);
     fareController.text = fare.round().toString();

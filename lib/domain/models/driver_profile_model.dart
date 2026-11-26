@@ -28,6 +28,7 @@ class DriverProfile {
   final List<String> badges;
   final DateTime? feeWaiverUntil;
   final int weeklyCompletedRides;
+  final bool acceptsStandardCarRides;
 
   const DriverProfile({
     required this.userId,
@@ -58,6 +59,7 @@ class DriverProfile {
     this.badges = const [],
     this.feeWaiverUntil,
     this.weeklyCompletedRides = 0,
+    this.acceptsStandardCarRides = true,
   });
 
   /// True if driver has an active 0% fee waiver granted via promo or referrals.
@@ -111,6 +113,7 @@ class DriverProfile {
         badges: const [],
         feeWaiverUntil: null,
         weeklyCompletedRides: 0,
+        acceptsStandardCarRides: true,
       );
 
   DriverProfile copyWith({
@@ -139,6 +142,7 @@ class DriverProfile {
     List<String>? badges,
     DateTime? feeWaiverUntil,
     int? weeklyCompletedRides,
+    bool? acceptsStandardCarRides,
   }) {
     return DriverProfile(
       userId: userId ?? this.userId,
@@ -166,6 +170,7 @@ class DriverProfile {
       badges: badges ?? this.badges,
       feeWaiverUntil: feeWaiverUntil ?? this.feeWaiverUntil,
       weeklyCompletedRides: weeklyCompletedRides ?? this.weeklyCompletedRides,
+      acceptsStandardCarRides: acceptsStandardCarRides ?? this.acceptsStandardCarRides,
     );
   }
 
@@ -199,6 +204,7 @@ class DriverProfile {
       'badges': badges,
       if (feeWaiverUntil != null) 'feeWaiverUntil': feeWaiverUntil!.toIso8601String(),
       'weeklyCompletedRides': weeklyCompletedRides,
+      'acceptsStandardCarRides': acceptsStandardCarRides,
     };
   }
 
@@ -259,6 +265,7 @@ class DriverProfile {
       badges: parsedBadges,
       feeWaiverUntil: parsedWaiver,
       weeklyCompletedRides: (map['weeklyCompletedRides'] as num?)?.toInt() ?? 0,
+      acceptsStandardCarRides: map['acceptsStandardCarRides'] as bool? ?? true,
     );
   }
 }

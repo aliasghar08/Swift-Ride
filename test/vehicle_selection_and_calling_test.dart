@@ -12,7 +12,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('VehicleType Model Tests', () {
-    test('VehicleType properties for car, bike, and rikshaw', () {
+    test('VehicleType properties for car, bike, rikshaw, and 7-seater', () {
       expect(VehicleType.car.title, contains('Car'));
       expect(VehicleType.car.seats, equals(4));
       expect(VehicleType.car.fareMultiplier, equals(1.0));
@@ -28,9 +28,16 @@ void main() {
       expect(VehicleType.rikshaw.fareMultiplier, equals(0.70));
       expect(VehicleType.rikshaw.minFare, equals(60.0));
 
+      expect(VehicleType.sevenSeater.title, contains('7-Seater'));
+      expect(VehicleType.sevenSeater.seats, equals(6));
+      expect(VehicleType.sevenSeater.fareMultiplier, equals(1.35));
+      expect(VehicleType.sevenSeater.minFare, equals(120.0));
+      expect(VehicleType.sevenSeater.maintenanceRatePerKm, equals(5.0));
+
       expect(VehicleType.car.averageMileageKmPerL, equals(10.0));
       expect(VehicleType.rikshaw.averageMileageKmPerL, equals(22.0));
       expect(VehicleType.bike.averageMileageKmPerL, equals(30.0));
+      expect(VehicleType.sevenSeater.averageMileageKmPerL, equals(11.0));
     });
 
     test('VehicleType fare calculation rounds to 5 PKR and respects floor', () {
@@ -44,10 +51,14 @@ void main() {
       // Rikshaw: 200 * 0.70 = 140
       expect(VehicleType.rikshaw.calculateFare(baseCarFare), equals(140.0));
 
+      // 7-Seater: 200 * 1.35 = 270
+      expect(VehicleType.sevenSeater.calculateFare(baseCarFare), equals(270.0));
+
       // Floor test with small base fare
       const smallCarFare = 50.0;
       expect(VehicleType.bike.calculateFare(smallCarFare), equals(40.0)); // minFare is 40
       expect(VehicleType.rikshaw.calculateFare(smallCarFare), equals(60.0)); // minFare is 60
+      expect(VehicleType.sevenSeater.calculateFare(smallCarFare), equals(120.0)); // minFare is 120
     });
 
     test('VehicleType fromString parses diverse inputs', () {
@@ -58,6 +69,11 @@ void main() {
       expect(VehicleTypeX.fromString('rikshaw'), equals(VehicleType.rikshaw));
       expect(VehicleTypeX.fromString('rickshaw'), equals(VehicleType.rikshaw));
       expect(VehicleTypeX.fromString('auto'), equals(VehicleType.rikshaw));
+      expect(VehicleTypeX.fromString('sevenSeater'), equals(VehicleType.sevenSeater));
+      expect(VehicleTypeX.fromString('seven_seater'), equals(VehicleType.sevenSeater));
+      expect(VehicleTypeX.fromString('7seater'), equals(VehicleType.sevenSeater));
+      expect(VehicleTypeX.fromString('van'), equals(VehicleType.sevenSeater));
+      expect(VehicleTypeX.fromString('mpv'), equals(VehicleType.sevenSeater));
       expect(VehicleTypeX.fromString('unknown'), equals(VehicleType.car));
       expect(VehicleTypeX.fromString(null), equals(VehicleType.car));
     });
@@ -108,22 +124,26 @@ void main() {
   });
 
   group('PricingMLService Multi-Vehicle Fares', () {
-    test('computeFaresForAllVehicles returns map for car, bike, and rikshaw', () async {
+    test('computeFaresForAllVehicles returns map for car, bike, rikshaw, and 7-seater', () async {
       final pricing = PricingMLService();
       final fares = await pricing.computeFaresForAllVehicles(distanceKm: 8.0);
 
       expect(fares.containsKey(VehicleType.car), isTrue);
       expect(fares.containsKey(VehicleType.bike), isTrue);
       expect(fares.containsKey(VehicleType.rikshaw), isTrue);
+      expect(fares.containsKey(VehicleType.sevenSeater), isTrue);
 
       final carFare = fares[VehicleType.car]!;
       final bikeFare = fares[VehicleType.bike]!;
       final rikshawFare = fares[VehicleType.rikshaw]!;
+      final sevenSeaterFare = fares[VehicleType.sevenSeater]!;
 
       expect(carFare, greaterThanOrEqualTo(VehicleType.car.minFare));
       expect(bikeFare, lessThan(carFare));
       expect(rikshawFare, lessThan(carFare));
       expect(bikeFare, lessThanOrEqualTo(rikshawFare));
+      expect(sevenSeaterFare, greaterThan(carFare));
+      expect(sevenSeaterFare, greaterThanOrEqualTo(VehicleType.sevenSeater.minFare));
     });
   });
 
@@ -138,6 +158,9 @@ void main() {
 
       vm.selectVehicleType(VehicleType.rikshaw);
       expect(vm.selectedVehicleType, equals(VehicleType.rikshaw));
+
+      vm.selectVehicleType(VehicleType.sevenSeater);
+      expect(vm.selectedVehicleType, equals(VehicleType.sevenSeater));
     });
 
     test('callDriver and sendDriverSms validate empty phone number safely', () async {
@@ -160,29 +183,35 @@ void main() {
       expect(smsValid, isTrue);
     });
 
-    test('seat selection dynamically clamps to vehicle capacity', () {
+    test('seat selection dynamically clamps to vehicle capacity (6 -> 4 -> 2 -> 1)', () {
       final vm = RiderViewModel();
       expect(vm.selectedVehicleType, equals(VehicleType.car));
       expect(vm.bookedSeats, equals(1));
 
-      // Car allows up to 4 seats
-      vm.setBookedSeats(4);
-      expect(vm.bookedSeats, equals(4));
-
-      // Attempting more than 4 clamps to 4
+      // 7-Seater allows up to 6 seats
+      vm.selectVehicleType(VehicleType.sevenSeater);
       vm.setBookedSeats(6);
+      expect(vm.bookedSeats, equals(6));
+      expect(vm.seatPreference, contains('Entire Van'));
+
+      // Attempting more than 6 clamps to 6
+      vm.setBookedSeats(8);
+      expect(vm.bookedSeats, equals(6));
+
+      // Switching to Car immediately clamps booked seats from 6 to 4
+      vm.selectVehicleType(VehicleType.car);
       expect(vm.bookedSeats, equals(4));
+      expect(vm.seatPreference, contains('Entire Car'));
 
-      // Switching to Bike immediately clamps booked seats from 4 to 1
-      vm.selectVehicleType(VehicleType.bike);
-      expect(vm.bookedSeats, equals(1));
-
-      // Switching to Rikshaw allows max 2 seats
+      // Switching to Rikshaw immediately clamps booked seats from 4 to 2
       vm.selectVehicleType(VehicleType.rikshaw);
-      vm.setBookedSeats(2);
       expect(vm.bookedSeats, equals(2));
       vm.setBookedSeats(3); // exceeding clamps to 2
       expect(vm.bookedSeats, equals(2));
+
+      // Switching to Bike immediately clamps booked seats from 2 to 1
+      vm.selectVehicleType(VehicleType.bike);
+      expect(vm.bookedSeats, equals(1));
     });
   });
 
@@ -256,6 +285,25 @@ void main() {
       expect(carEcon.fuelCost, greaterThan(0.0));
       expect(carEcon.maintenanceCost, equals(20.0 * 4.0)); // 80 PKR
       expect(carEcon.driverNetProfit, greaterThan(0.0));
+    });
+
+    test('calculates correct economics for 7-Seater / MPV (11.0 km/L, PKR 5/km wear, 1.35x cost floor)', () {
+      final vanEcon = TripEconomics.calculate(
+        distanceKm: 22.0,
+        fare: 1000.0,
+        vehicleType: VehicleType.sevenSeater,
+        fuelAverageKmPerL: 11.0,
+      );
+      expect(vanEcon.vehicleMileageKmPerL, equals(11.0));
+      expect(vanEcon.fuelConsumedLiters, closeTo(2.0, 0.01));
+      // 2.0 L * 285 PKR/L = 570 PKR
+      expect(vanEcon.fuelCost, equals(570.0));
+      // Maintenance: 22 * 5.0 = 110.0
+      expect(vanEcon.maintenanceCost, equals(110.0));
+      // Cost floor: (570 + 110) * 1.35 = 680 * 1.35 = 918.0
+      expect(vanEcon.costFloor, closeTo(918.0, 0.5));
+      // Driver net profit: 1000 - (570 + 110 + 20.0 [2% fee]) = 300.0
+      expect(vanEcon.driverNetProfit, equals(300.0));
     });
 
     test('FuelPriceData handles live internet prices and fallback baseline', () {

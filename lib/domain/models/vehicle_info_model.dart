@@ -4,7 +4,7 @@ class VehicleInfo {
   final int year;
   final String plate;
   final String color;
-  final String type; // 'car', 'bike', 'rikshaw'
+  final String type; // 'car', 'bike', 'rikshaw', 'sevenSeater'
   final bool hasAc;
   final int seats;
   final int? engineCapacityCc;
@@ -90,7 +90,12 @@ class VehicleInfo {
         color: map['vehicleColor'] ?? map['color'] ?? 'Silver',
         type: map['vehicleType'] ?? map['type'] ?? 'car',
         hasAc: map['hasAc'] as bool? ?? (map['vehicleType'] != 'bike' && map['vehicleType'] != 'rikshaw'),
-        seats: (map['seats'] as num?)?.toInt() ?? (map['vehicleType'] == 'bike' ? 1 : (map['vehicleType'] == 'rikshaw' ? 3 : 4)),
+        seats: (map['seats'] as num?)?.toInt() ??
+            (map['vehicleType'] == 'bike'
+                ? 1
+                : (map['vehicleType'] == 'rikshaw'
+                    ? 2
+                    : (map['vehicleType'] == 'sevenSeater' ? 6 : 4))),
         engineCapacityCc: (map['engineCapacityCc'] as num?)?.toInt(),
         frontPhotoUrl: map['frontPhotoUrl'] as String?,
         interiorPhotoUrl: map['interiorPhotoUrl'] as String?,
@@ -109,6 +114,7 @@ extension VehicleInfoX on VehicleInfo {
     final t = type.toLowerCase().trim();
     if (t == 'bike' || t == 'motorcycle' || t == 'moto') return 0;
     if (t == 'rikshaw' || t == 'rickshaw' || t == 'auto') return 1;
+    if (t == 'sevenseater' || t == 'seven_seater' || t == '7seater' || t == 'van' || t == 'mpv') return 4;
     final m = model.toLowerCase();
     if (m.contains('corolla') ||
         m.contains('civic') ||
@@ -129,6 +135,7 @@ extension VehicleInfoX on VehicleInfo {
   double get baselineFuelAverageKmPerL {
     if (carTier == 0) return 38.0;
     if (carTier == 1) return 22.0;
+    if (carTier == 4) return 11.0; // 7-Seater / Family Van baseline
     if (carTier == 3) return 10.0;
     final m = model.toLowerCase();
     if (m.contains('alto') || m.contains('mira') || m.contains('mehran') || m.contains('660')) {

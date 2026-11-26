@@ -116,6 +116,7 @@ async function ensureDriverDocumentExists(userId: string, data: { phone?: string
       vehicleType: 'sedan',
       hasAc: true,
       seats: 4,
+      acceptsStandardCarRides: true,
       isVerified: true,
       isOnline: false,
       subscriptionStatus: 'ACTIVE',

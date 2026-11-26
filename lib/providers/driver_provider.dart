@@ -100,6 +100,7 @@ class DriverProvider extends ChangeNotifier {
   double get totalEarnings => _driverProfile.totalEarnings;
   int get totalRides => _driverProfile.totalRides;
   bool get femalePassengersOnly => _driverProfile.femalePassengersOnly;
+  bool get acceptsStandardCarRides => _driverProfile.acceptsStandardCarRides;
   bool get isGenderVerified => _driverProfile.isGenderVerified;
   String? get gender => _driverProfile.gender;
 
@@ -154,6 +155,17 @@ class DriverProvider extends ChangeNotifier {
     _driverProfile = _driverProfile.copyWith(femalePassengersOnly: enabled);
     notifyListeners();
     return null;
+  }
+
+  /// Toggles preference to also accept standard 4-seat car ride requests for 7-seater drivers.
+  Future<bool> setAcceptsStandardCarRides(bool accepts) async {
+    final uid = _driverProfile.userId;
+    if (uid.isNotEmpty) {
+      await _firestoreService.updateAcceptsStandardCarRides(uid, accepts);
+    }
+    _driverProfile = _driverProfile.copyWith(acceptsStandardCarRides: accepts);
+    notifyListeners();
+    return true;
   }
 
   String? _availabilityError;

@@ -62,6 +62,10 @@ export const VEHICLE_ECONOMICS = {
     fuelRatePerKmPkr: 22.0,        // ~14 km/l at PKR 300/l
     maintenanceRatePerKmPkr: 4.0,  // tyres, oil, wear
   },
+  SEVEN_SEATER: {
+    fuelRatePerKmPkr: 27.27,       // ~11 km/l at PKR 300/l
+    maintenanceRatePerKmPkr: 5.0,  // tyres, brake wear, MPV suspension
+  },
 } as const;
 
 export type VehicleType = keyof typeof VEHICLE_ECONOMICS;

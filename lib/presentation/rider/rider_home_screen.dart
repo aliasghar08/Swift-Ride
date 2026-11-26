@@ -3213,10 +3213,10 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         // Women-Only Mode / Female Captain Filter Pill
         _buildFemaleCaptainFilterPill(layout, c),
 
-        if (selectedType == VehicleType.car) ...[
+        if (selectedType == VehicleType.car || selectedType == VehicleType.sevenSeater) ...[
           const SizedBox(height: 12),
 
-          // Shared Ride & Seat Selection Card (Cars Only)
+          // Shared Ride & Seat Selection Card (Cars & 7-Seater Vans)
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -3287,8 +3287,8 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             const Icon(Icons.group_add_rounded, size: 12, color: AppTheme.emeraldGreen),
                             const SizedBox(width: 4),
                             Text(
-                              _viewModel.bookedSeats == 4
-                                  ? 'Private Car (4 Seats)'
+                              _viewModel.bookedSeats == selectedType.seats
+                                  ? (selectedType == VehicleType.sevenSeater ? 'Private Van (6 Seats)' : 'Private Car (4 Seats)')
                                   : '${_viewModel.bookedSeats} Seats',
                               style: TextStyle(
                                 fontSize: layout.fontSize(10.5),
@@ -3303,7 +3303,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Book 1 to 3 seats to share with passengers along your route, or reserve all 4 seats for a private car.',
+                  selectedType == VehicleType.sevenSeater
+                      ? 'Book 1 to 5 seats to share with passengers along your route, or reserve all 6 seats for a private van.'
+                      : 'Book 1 to 3 seats to share with passengers along your route, or reserve all 4 seats for a private car.',
                   style: TextStyle(
                     fontSize: layout.fontSize(11),
                     color: c.textMuted,
@@ -3311,13 +3313,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                 ),
                 const SizedBox(height: 10),
                 Row(
-                  children: List.generate(4, (index) {
+                  children: List.generate(selectedType.seats, (index) {
                     final seatCount = index + 1;
                     final isSelected = seatCount == _viewModel.bookedSeats;
                     return Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
-                          right: index < 3 ? 6 : 0,
+                          right: index < selectedType.seats - 1 ? 6 : 0,
                         ),
                         child: InkWell(
                           onTap: () {
@@ -3347,18 +3349,20 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                     Icon(
                                       seatCount == 1
                                           ? Icons.person
-                                          : (seatCount == 2
-                                              ? Icons.people
-                                              : (seatCount == 3
-                                                  ? Icons.group
-                                                  : Icons.directions_car_filled_rounded)),
+                                          : (seatCount == selectedType.seats
+                                              ? (selectedType == VehicleType.sevenSeater
+                                                  ? Icons.airport_shuttle_rounded
+                                                  : Icons.directions_car_filled_rounded)
+                                              : (seatCount <= 2
+                                                  ? Icons.people
+                                                  : Icons.group)),
                                       size: 16,
                                       color: isSelected ? Colors.white : AppTheme.slateMuted,
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      seatCount == 4
-                                          ? 'Entire Car'
+                                      seatCount == selectedType.seats
+                                          ? (selectedType == VehicleType.sevenSeater ? 'Entire Van' : 'Entire Car')
                                           : (seatCount == 1 ? '1 Seat' : '$seatCount Seats'),
                                       style: TextStyle(
                                         fontSize: layout.fontSize(11),
@@ -3377,7 +3381,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   }),
                 ),
                 const SizedBox(height: 12),
-                if (_viewModel.bookedSeats == 4)
+                if (_viewModel.bookedSeats == selectedType.seats)
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -3400,7 +3404,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Entire Car Reserved (All 4 Seats)',
+                                selectedType == VehicleType.sevenSeater
+                                    ? 'Entire Van Reserved (All 6 Seats)'
+                                    : 'Entire Car Reserved (All 4 Seats)',
                                 style: TextStyle(
                                   fontSize: layout.fontSize(11.5),
                                   fontWeight: FontWeight.w700,
@@ -3408,7 +3414,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                                 ),
                               ),
                               Text(
-                                'All 4 seats are booked exclusively for your party. Enjoy a completely private ride with no co-riders.',
+                                selectedType == VehicleType.sevenSeater
+                                    ? 'All 6 seats are booked exclusively for your group. Enjoy a completely private ride with no co-riders.'
+                                    : 'All 4 seats are booked exclusively for your party. Enjoy a completely private ride with no co-riders.',
                                 style: TextStyle(
                                   fontSize: layout.fontSize(10.5),
                                   color: c.textMuted,
@@ -3528,11 +3536,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
         // Live Trip Economics Preview Card
         InkWell(
           onTap: () {
-            final isCar = _viewModel.selectedVehicleType == VehicleType.car;
+            final isCarOrVan = _viewModel.selectedVehicleType == VehicleType.car ||
+                _viewModel.selectedVehicleType == VehicleType.sevenSeater;
             TripEconomicsSheet.show(
               context,
               economics: _viewModel.currentTripEconomics,
-              acEnabled: isCar,
+              acEnabled: isCarOrVan,
               onSeatCountChanged: (seats) {
                 setState(() {
                   _viewModel.setBookedSeats(seats);

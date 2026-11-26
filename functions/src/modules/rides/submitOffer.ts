@@ -14,7 +14,7 @@ const SubmitOfferSchema = z.object({
 });
 
 export const submitOffer = onCall(
-  { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: true },
   async (request) => {
     const driver = await assertRole(request, ['driver', 'admin']);
     const data = validateInput(SubmitOfferSchema, request.data);

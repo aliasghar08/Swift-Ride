@@ -16,7 +16,7 @@ const RegisterUserSchema = z.object({
 });
 
 export const registerUser = onCall(
-  { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: true },
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(RegisterUserSchema, request.data);

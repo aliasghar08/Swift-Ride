@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/geohash_util.dart';
+import '../../core/utils/vehicle_validator.dart';
 import '../../domain/models/driver_profile_model.dart';
 import '../../domain/models/driver_document_model.dart';
 import '../../domain/models/vehicle_info_model.dart';
@@ -30,76 +31,88 @@ class FirestoreDriverService {
 
   /// Saves or updates a driver profile in `drivers/{driverId}`.
   Future<void> saveDriverProfile(DriverProfile driver) async {
-    _memoryDrivers[driver.userId] = driver;
+    final cleanPlate = VehicleValidator.normalizeLicensePlate(driver.vehicle.plate);
+    final cleanLicense = VehicleValidator.normalizeLicenseNumber(driver.licenseNumber);
+    final cleanVehicle = driver.vehicle.copyWith(
+      plate: cleanPlate.isNotEmpty ? cleanPlate : driver.vehicle.plate,
+      seats: VehicleValidator.getCategorySeats(driver.vehicle.type),
+      hasAc: VehicleValidator.getCategoryAllowsAc(driver.vehicle.type) ? driver.vehicle.hasAc : false,
+    );
+    final sanitizedDriver = driver.copyWith(
+      vehicle: cleanVehicle,
+      licenseNumber: cleanLicense.isNotEmpty ? cleanLicense : driver.licenseNumber,
+    );
+
+    _memoryDrivers[sanitizedDriver.userId] = sanitizedDriver;
     final fs = _firestore;
     if (fs == null) return;
 
     try {
-      final docRef = fs.collection(AppConstants.driversCollection).doc(driver.userId);
+      final docRef = fs.collection(AppConstants.driversCollection).doc(sanitizedDriver.userId);
       final doc = await docRef.get();
 
       if (!doc.exists) {
         await docRef.set({
-          'userId': driver.userId,
-          'licenseNumber': driver.licenseNumber,
-          'vehicleMake': driver.vehicle.make,
-          'vehicleModel': driver.vehicle.model,
-          'vehiclePlate': driver.vehicle.plate,
-          'vehicleColor': driver.vehicle.color,
-          'vehicleYear': driver.vehicle.year,
-          'vehicleType': driver.vehicle.type,
-          'hasAc': driver.vehicle.hasAc,
-          'seats': driver.vehicle.seats,
-          if (driver.vehicle.engineCapacityCc != null) 'engineCapacityCc': driver.vehicle.engineCapacityCc,
-          if (driver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': driver.vehicle.frontPhotoUrl,
-          if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
-          'isVerified': driver.isVerified,
-          'isOnline': driver.isOnline,
-          'subscriptionStatus': driver.subscriptionStatus.name.toUpperCase(),
-          'subscriptionExpiresAt': Timestamp.fromDate(driver.subscriptionExpiresAt),
-          'stripeAccountId': driver.stripeAccountId,
-          'payoutStatus': driver.payoutStatus,
-          'rating': driver.rating,
-          'totalRides': driver.totalRides,
-          'totalEarnings': driver.totalEarnings,
+          'userId': sanitizedDriver.userId,
+          'licenseNumber': sanitizedDriver.licenseNumber,
+          'vehicleMake': sanitizedDriver.vehicle.make,
+          'vehicleModel': sanitizedDriver.vehicle.model,
+          'vehiclePlate': sanitizedDriver.vehicle.plate,
+          'vehicleColor': sanitizedDriver.vehicle.color,
+          'vehicleYear': sanitizedDriver.vehicle.year,
+          'vehicleType': sanitizedDriver.vehicle.type,
+          'hasAc': sanitizedDriver.vehicle.hasAc,
+          'seats': sanitizedDriver.vehicle.seats,
+          if (sanitizedDriver.vehicle.engineCapacityCc != null) 'engineCapacityCc': sanitizedDriver.vehicle.engineCapacityCc,
+          if (sanitizedDriver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': sanitizedDriver.vehicle.frontPhotoUrl,
+          if (sanitizedDriver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': sanitizedDriver.vehicle.interiorPhotoUrl,
+          'isVerified': sanitizedDriver.isVerified,
+          'isOnline': sanitizedDriver.isOnline,
+          'subscriptionStatus': sanitizedDriver.subscriptionStatus.name.toUpperCase(),
+          'subscriptionExpiresAt': Timestamp.fromDate(sanitizedDriver.subscriptionExpiresAt),
+          'stripeAccountId': sanitizedDriver.stripeAccountId,
+          'payoutStatus': sanitizedDriver.payoutStatus,
+          'rating': sanitizedDriver.rating,
+          'totalRides': sanitizedDriver.totalRides,
+          'totalEarnings': sanitizedDriver.totalEarnings,
           'currentLocation': {
-            'geopoint': GeoPoint(driver.latitude, driver.longitude),
-            'geohash': GeohashUtil.encode(driver.latitude, driver.longitude, 7),
+            'geopoint': GeoPoint(sanitizedDriver.latitude, sanitizedDriver.longitude),
+            'geohash': GeohashUtil.encode(sanitizedDriver.latitude, sanitizedDriver.longitude, 7),
           },
-          if (driver.gender != null) 'gender': driver.gender,
-          'isGenderVerified': driver.isGenderVerified,
-          'femalePassengersOnly': driver.femalePassengersOnly,
-          'captainInviteCode': driver.captainInviteCode ??
-              'CAPT${driver.userId.length >= 3 ? driver.userId.substring(driver.userId.length - 3).toUpperCase() : (driver.userId.hashCode.abs() % 900 + 100)}',
-          'verifiedReferralsCount': driver.verifiedReferralsCount,
-          'badges': driver.badges,
-          'weeklyCompletedRides': driver.weeklyCompletedRides,
-          'acceptsStandardCarRides': driver.acceptsStandardCarRides,
-          if (driver.feeWaiverUntil != null)
-            'feeWaiverUntil': Timestamp.fromDate(driver.feeWaiverUntil!),
+          if (sanitizedDriver.gender != null) 'gender': sanitizedDriver.gender,
+          'isGenderVerified': sanitizedDriver.isGenderVerified,
+          'femalePassengersOnly': sanitizedDriver.femalePassengersOnly,
+          'captainInviteCode': sanitizedDriver.captainInviteCode ??
+              'CAPT${sanitizedDriver.userId.length >= 3 ? sanitizedDriver.userId.substring(sanitizedDriver.userId.length - 3).toUpperCase() : (sanitizedDriver.userId.hashCode.abs() % 900 + 100)}',
+          'verifiedReferralsCount': sanitizedDriver.verifiedReferralsCount,
+          'badges': sanitizedDriver.badges,
+          'weeklyCompletedRides': sanitizedDriver.weeklyCompletedRides,
+          'acceptsStandardCarRides': sanitizedDriver.acceptsStandardCarRides,
+          if (sanitizedDriver.feeWaiverUntil != null)
+            'feeWaiverUntil': Timestamp.fromDate(sanitizedDriver.feeWaiverUntil!),
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
       } else {
         final currentVerified = (doc.data()?['isVerified'] as bool?) ?? false;
         await docRef.update({
-          'licenseNumber': driver.licenseNumber,
-          'vehicleMake': driver.vehicle.make,
-          'vehicleModel': driver.vehicle.model,
-          'vehiclePlate': driver.vehicle.plate,
-          'vehicleColor': driver.vehicle.color,
-          'vehicleYear': driver.vehicle.year,
-          'vehicleType': driver.vehicle.type,
-          'hasAc': driver.vehicle.hasAc,
-          'seats': driver.vehicle.seats,
-          if (driver.vehicle.engineCapacityCc != null) 'engineCapacityCc': driver.vehicle.engineCapacityCc,
-          if (driver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': driver.vehicle.frontPhotoUrl,
-          if (driver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': driver.vehicle.interiorPhotoUrl,
+          'licenseNumber': sanitizedDriver.licenseNumber,
+          'vehicleMake': sanitizedDriver.vehicle.make,
+          'vehicleModel': sanitizedDriver.vehicle.model,
+          'vehiclePlate': sanitizedDriver.vehicle.plate,
+          'vehicleColor': sanitizedDriver.vehicle.color,
+          'vehicleYear': sanitizedDriver.vehicle.year,
+          'vehicleType': sanitizedDriver.vehicle.type,
+          'hasAc': sanitizedDriver.vehicle.hasAc,
+          'seats': sanitizedDriver.vehicle.seats,
+          if (sanitizedDriver.vehicle.engineCapacityCc != null) 'engineCapacityCc': sanitizedDriver.vehicle.engineCapacityCc,
+          if (sanitizedDriver.vehicle.frontPhotoUrl != null) 'frontPhotoUrl': sanitizedDriver.vehicle.frontPhotoUrl,
+          if (sanitizedDriver.vehicle.interiorPhotoUrl != null) 'interiorPhotoUrl': sanitizedDriver.vehicle.interiorPhotoUrl,
           'isVerified': currentVerified,
-          'isOnline': currentVerified ? driver.isOnline : false,
-          'acceptsStandardCarRides': driver.acceptsStandardCarRides,
-          if (driver.gender != null) 'gender': driver.gender,
-          'femalePassengersOnly': driver.femalePassengersOnly,
+          'isOnline': currentVerified ? sanitizedDriver.isOnline : false,
+          'acceptsStandardCarRides': sanitizedDriver.acceptsStandardCarRides,
+          if (sanitizedDriver.gender != null) 'gender': sanitizedDriver.gender,
+          'femalePassengersOnly': sanitizedDriver.femalePassengersOnly,
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }

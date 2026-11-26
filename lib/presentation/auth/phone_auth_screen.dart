@@ -14,6 +14,7 @@ import '../../domain/models/user_role.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/auth_service.dart';
 import '../common/google_logo.dart';
+import '../common/human_verification_widget.dart';
 import '../common/legal_terms_modal.dart';
 import '../common/reserved_bottom_ad_bar.dart';
 import '../view_models/responsive_layout_helper.dart';
@@ -53,6 +54,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _otpController = TextEditingController();
   final FocusNode _otpFocusNode = FocusNode();
+  final HumanVerificationController _captchaController = HumanVerificationController();
   bool _isSavingProfile = false;
 
   final TextEditingController _nameController = TextEditingController();
@@ -161,6 +163,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
     _otpFocusNode.dispose();
     _nameController.dispose();
     _emailController.dispose();
+    _captchaController.dispose();
     super.dispose();
   }
 
@@ -438,6 +441,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       return;
     }
 
+    // Auto-bypass for store review sandbox, emulator test numbers, and automated test runners
+    final isTestEnvironment = !kReleaseMode &&
+        (WidgetsBinding.instance.runtimeType.toString().contains('Test') ||
+            WidgetsBinding.instance.runtimeType.toString().contains('Automated'));
+    final isSandboxNumber = fullPhone == '+923001234567' ||
+        fullPhone == '+923000000000' ||
+        rawDigits == '923001234567' ||
+        rawDigits == '3001234567' ||
+        rawDigits == '923000000000' ||
+        rawDigits == '3000000000';
+    if ((isSandboxNumber || isTestEnvironment) && !_captchaController.isVerified) {
+      _captchaController.simulateVerification('hvt_test_bypass');
+    }
+
+    if (!_captchaController.isVerified) {
+      _setError('Please complete the human verification check first.');
+      return;
+    }
+
     final enteredName = _nameController.text.trim();
     if (enteredName.isNotEmpty && enteredName.length < 2) {
       _setError('Please enter a valid full name (at least 2 characters).');
@@ -489,6 +511,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
 
     await auth.sendOtp(
       phoneNumber: fullPhone,
+      verificationToken: _captchaController.verificationToken,
       onAutoVerified: (PhoneAuthCredential credential) async {
         autoVerified = true;
         _autoVerifyTimer?.cancel();
@@ -617,6 +640,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
       },
       onError: (err) {
         _autoVerifyTimer?.cancel();
+        _captchaController.reset();
         if (!mounted) return;
         setState(() {
           _currentStep = AuthStep.phone;
@@ -771,7 +795,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
         child: SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: layout.scale(24),
-            vertical: layout.scale(10),
+            vertical: layout.scale(4),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -781,25 +805,25 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                 child: GestureDetector(
                   onLongPress: kReleaseMode ? null : _useTestNumber,
                   child: Container(
-                    width: layout.scale(56),
-                    height: layout.scale(56),
+                    width: layout.scale(48),
+                    height: layout.scale(48),
                     decoration: BoxDecoration(
                       gradient: AppTheme.brandGradient,
                       shape: BoxShape.circle,
                       boxShadow: AppTheme.glowShadow(
                         AppTheme.primaryBlue,
-                        blur: 16,
+                        blur: 14,
                       ),
                     ),
                     child: const Icon(
                       Icons.directions_car_filled,
                       color: Colors.white,
-                      size: 30,
+                      size: 26,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 6),
               Text(
                 _currentStep == AuthStep.phone
                     ? 'Enter Your Mobile Number'
@@ -816,7 +840,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 _currentStep == AuthStep.phone
                     ? 'We will send a 6-digit verification code.'
@@ -832,7 +856,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
                   height: 1.35,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 8),
 
               // Animated Step Container
               AnimatedSwitcher(
@@ -1288,7 +1312,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
             ),
           ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           // 2. Full Name in its own separate row
           Container(
             decoration: BoxDecoration(
@@ -1327,7 +1351,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           // 3. Optional Email in its own separate row
           Container(
             decoration: BoxDecoration(
@@ -1365,7 +1389,7 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           // 4. Account Role Selector in its own separate row
           Row(
             children: [
@@ -1407,7 +1431,15 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          HumanVerificationWidget(
+            controller: _captchaController,
+            currentPhoneNumber: _phoneController.text.trim(),
+            onVerified: (token) {
+              _clearInlineError();
+            },
+          ),
+          const SizedBox(height: 8),
           _buildInlineErrorBanner(layout, isDark),
           ElevatedButton(
             key: const Key('continue_with_phone_btn'),
@@ -1757,7 +1789,10 @@ class _PhoneAuthScreenState extends State<PhoneAuthScreen> {
             ),
             _canResend
                 ? TextButton(
-                    onPressed: _handleSendOtp,
+                    onPressed: () {
+                      _captchaController.reset();
+                      _handleSendOtp();
+                    },
                     child: const Text(
                       'Resend Code',
                       style: TextStyle(

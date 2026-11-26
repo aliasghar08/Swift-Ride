@@ -133,6 +133,7 @@ class AuthService {
     void Function(PhoneAuthCredential credential)? onAutoVerified,
     void Function(String verificationId)? onAutoRetrievalTimeout,
     int? forceResendingToken,
+    String? verificationToken,
     Duration timeout = const Duration(seconds: 60),
   }) async {
     final auth = _auth;
@@ -327,9 +328,11 @@ class AuthService {
     required void Function(String verificationId) onCodeSent,
     required void Function(FirebaseAuthException e) onError,
     void Function(PhoneAuthCredential credential)? verificationCompleted,
+    String? verificationToken,
   }) async {
     await sendOtp(
       phoneNumber: phoneNumber,
+      verificationToken: verificationToken,
       onCodeSent: (vId, _) => onCodeSent(vId),
       onError: (errMsg) => onError(FirebaseAuthException(code: 'verification-failed', message: errMsg)),
       onAutoVerified: verificationCompleted,

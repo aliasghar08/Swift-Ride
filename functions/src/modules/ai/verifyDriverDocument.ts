@@ -60,7 +60,7 @@ export interface DocumentVerificationResult {
 }
 
 export const verifyDriverDocument = onCall(
-  { region: APP_CONSTANTS.REGION, enforceAppCheck: false, timeoutSeconds: 60, memory: '512MiB' },
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: true, timeoutSeconds: 60, memory: '512MiB' },
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(VerifyDriverDocumentSchema, request.data);
@@ -80,6 +80,17 @@ export const verifyDriverDocument = onCall(
     cleanBase64 = cleanBase64.replace(/\s/g, '');
 
     const expected = data.expectedData || {};
+    if (expected.vehiclePlate) {
+      const cleanPlate = expected.vehiclePlate.toUpperCase().trim();
+      const dummyPlates = ['SWIFT-101', 'ABC-1234', 'AAA-0000', 'XXX-1234', 'ABC-1111', '000-0000', 'TEST-123'];
+      const pakPlatePattern = /^[A-Z]{2,4}-[0-9]{1,4}(-[A-Z0-9]{1,4})?$/;
+      if (dummyPlates.includes(cleanPlate) || !pakPlatePattern.test(cleanPlate)) {
+        throw new HttpsError(
+          'invalid-argument',
+          'Vehicle registration plate does not match valid Pakistani registration format.'
+        );
+      }
+    }
 
     const prompt = `
 You are an expert document verification and fraud prevention officer for SwiftRide in Pakistan.

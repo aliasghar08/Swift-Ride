@@ -21,7 +21,7 @@ const RequestRideSchema = z.object({
 });
 
 export const requestRide = onCall(
-  { region: APP_CONSTANTS.REGION, enforceAppCheck: false },
+  { region: APP_CONSTANTS.REGION, enforceAppCheck: true },
   async (request) => {
     const caller = await assertAuthenticated(request);
     const data = validateInput(RequestRideSchema, request.data);

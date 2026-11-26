@@ -173,6 +173,7 @@ class AuthProvider extends ChangeNotifier {
     void Function(String error)? onError,
     void Function(PhoneAuthCredential credential)? onAutoVerified,
     void Function(String verificationId)? onAutoRetrievalTimeout,
+    String? verificationToken,
   }) async {
     _isLoading = true;
     _authError = null;
@@ -181,6 +182,7 @@ class AuthProvider extends ChangeNotifier {
     await _authService.sendOtp(
       phoneNumber: phoneNumber,
       forceResendingToken: _resendToken,
+      verificationToken: verificationToken,
       onCodeSent: (vId, token) {
         _verificationId = vId;
         _resendToken = token;

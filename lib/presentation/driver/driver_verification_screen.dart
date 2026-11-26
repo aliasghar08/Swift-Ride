@@ -5,8 +5,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/provider/custom_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/design_tokens.dart';
+import '../../core/utils/vehicle_validator.dart';
 import '../../domain/models/driver_document_model.dart';
 import '../../domain/models/vehicle_info_model.dart';
+import '../../domain/models/vehicle_presets.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/driver_provider.dart';
 import '../../services/referral_link_service.dart';
@@ -135,26 +137,56 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
   Future<void> _saveVehicleDetails(DriverProvider driverProv) async {
     final make = _makeController.text.trim();
     final model = _modelController.text.trim();
-    final plate = _plateController.text.trim().toUpperCase();
+    final plate = VehicleValidator.normalizeLicensePlate(_plateController.text);
     final year = int.tryParse(_yearController.text.trim()) ?? 0;
     final color = _colorController.text.trim();
-    final license = _licenseController.text.trim();
+    final license = VehicleValidator.normalizeLicenseNumber(_licenseController.text);
 
-    if (make.isEmpty || model.isEmpty || plate.isEmpty || color.isEmpty) {
+    final makeModelErr = VehicleValidator.validateMakeModel(make: make, model: model);
+    if (makeModelErr != null) {
       setState(() {
-        _vehicleSaveError = 'Please fill in make, model, number plate, and color.';
+        _vehicleSaveError = makeModelErr;
         _vehicleSaveSuccess = null;
       });
       return;
     }
 
-    final currentYear = DateTime.now().year;
-    if (year < 1995 || year > currentYear + 1) {
+    final plateErr = VehicleValidator.validateLicensePlate(plate);
+    if (plateErr != null) {
       setState(() {
-        _vehicleSaveError = 'Please enter a valid model year (1995 - ${currentYear + 1}).';
+        _vehicleSaveError = plateErr;
         _vehicleSaveSuccess = null;
       });
       return;
+    }
+
+    final yearErr = VehicleValidator.validateModelYear(year);
+    if (yearErr != null) {
+      setState(() {
+        _vehicleSaveError = yearErr;
+        _vehicleSaveSuccess = null;
+      });
+      return;
+    }
+
+    final colorErr = VehicleValidator.validateColor(color);
+    if (colorErr != null) {
+      setState(() {
+        _vehicleSaveError = colorErr;
+        _vehicleSaveSuccess = null;
+      });
+      return;
+    }
+
+    if (license.isNotEmpty) {
+      final licenseErr = VehicleValidator.validateLicenseNumber(license);
+      if (licenseErr != null) {
+        setState(() {
+          _vehicleSaveError = licenseErr;
+          _vehicleSaveSuccess = null;
+        });
+        return;
+      }
     }
 
     setState(() {
@@ -163,6 +195,13 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       _vehicleSaveSuccess = null;
     });
 
+    final enforcedSeats = VehicleValidator.getCategorySeats(_vehicleType);
+    final allowsAc = VehicleValidator.getCategoryAllowsAc(_vehicleType);
+    final enforcedAc = allowsAc ? _hasAc : false;
+
+    _seats = enforcedSeats;
+    _hasAc = enforcedAc;
+
     final updatedVehicle = VehicleInfo(
       make: make,
       model: model,
@@ -170,7 +209,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
       plate: plate,
       color: color,
       type: _vehicleType,
-      hasAc: _hasAc,
+      hasAc: enforcedAc,
       seats: _seats,
     );
 
@@ -1120,8 +1159,8 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 onTap: () {
                   setState(() {
                     _vehicleType = 'car';
-                    _seats = 4;
-                    _hasAc = true;
+                    _seats = VehicleValidator.getCategorySeats('car');
+                    _hasAc = VehicleValidator.getCategoryAllowsAc('car') ? _hasAc : false;
                   });
                 },
               ),
@@ -1134,8 +1173,8 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 onTap: () {
                   setState(() {
                     _vehicleType = 'sevenSeater';
-                    _seats = 6;
-                    _hasAc = true;
+                    _seats = VehicleValidator.getCategorySeats('sevenSeater');
+                    _hasAc = VehicleValidator.getCategoryAllowsAc('sevenSeater') ? _hasAc : false;
                   });
                 },
               ),
@@ -1152,7 +1191,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 onTap: () {
                   setState(() {
                     _vehicleType = 'bike';
-                    _seats = 1;
+                    _seats = VehicleValidator.getCategorySeats('bike');
                     _hasAc = false;
                   });
                 },
@@ -1166,7 +1205,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                 onTap: () {
                   setState(() {
                     _vehicleType = 'rikshaw';
-                    _seats = 3;
+                    _seats = VehicleValidator.getCategorySeats('rikshaw');
                     _hasAc = false;
                   });
                 },
@@ -1190,6 +1229,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                   layout: layout,
                   c: c,
                   isDark: isDark,
+                  onChanged: (val) => setState(() {}),
                 ),
               ),
               const SizedBox(width: 10),
@@ -1205,69 +1245,159 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
                   layout: layout,
                   c: c,
                   isDark: isDark,
+                  onChanged: (val) => setState(() {}),
                 ),
               ),
             ],
           ),
-          if (_vehicleType == 'sevenSeater') ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                ('Changan', 'Karvaan'),
-                ('Suzuki', 'Every'),
-                ('Honda', 'BR-V'),
-                ('Suzuki', 'Bolan'),
-                ('Suzuki', 'APV'),
-                ('Toyota', 'Sienta'),
-              ].map((m) {
-                final isSelected = _makeController.text == m.$1 && _modelController.text == m.$2;
-                return ActionChip(
-                  label: Text('${m.$1} ${m.$2}'),
-                  backgroundColor: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
-                  side: BorderSide(color: isSelected ? AppTheme.primaryBlue : c.border),
-                  labelStyle: TextStyle(
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? AppTheme.primaryBlue : c.textSecondary,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _makeController.text = m.$1;
-                      _modelController.text = m.$2;
-                    });
-                  },
-                );
-              }).toList(),
+          const SizedBox(height: 8),
+          Text(
+            'Popular Suggestions',
+            style: TextStyle(
+              fontSize: layout.fontSize(11),
+              fontWeight: FontWeight.w600,
+              color: c.textMuted,
             ),
-          ],
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: VehiclePresets.modelsFor(_vehicleType).map((preset) {
+              final spaceIdx = preset.indexOf(' ');
+              final make = spaceIdx > 0 ? preset.substring(0, spaceIdx) : preset;
+              final model = spaceIdx > 0 ? preset.substring(spaceIdx + 1) : '';
+              final isSelected = _makeController.text.trim().toLowerCase() == make.toLowerCase() &&
+                  _modelController.text.trim().toLowerCase() == model.toLowerCase();
+              return ActionChip(
+                label: Text(preset),
+                backgroundColor: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                side: BorderSide(color: isSelected ? AppTheme.primaryBlue : c.border),
+                labelStyle: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? AppTheme.primaryBlue : c.textSecondary,
+                ),
+                onPressed: () {
+                  setState(() {
+                    _makeController.text = make;
+                    _modelController.text = model;
+                  });
+                },
+              );
+            }).toList(),
+          ),
           const SizedBox(height: 12),
 
           // Plate & Year Row
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _buildInputField(
-                  controller: _plateController,
-                  label: 'Registration Plate #',
-                  hint: 'LEA-2021 / ICT-123',
-                  layout: layout,
-                  c: c,
-                  isDark: isDark,
-                  textCapitalization: TextCapitalization.characters,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInputField(
+                      controller: _plateController,
+                      label: 'Registration Plate #',
+                      hint: 'LEA-2021 / JHG-412',
+                      layout: layout,
+                      c: c,
+                      isDark: isDark,
+                      textCapitalization: TextCapitalization.characters,
+                      onChanged: (val) => setState(() {}),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: VehiclePresets.platePrefixes.map((prefix) {
+                        final isPrefix = _plateController.text.toUpperCase().startsWith(prefix);
+                        return ActionChip(
+                          label: Text(prefix),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: isPrefix ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                          side: BorderSide(color: isPrefix ? AppTheme.primaryBlue : c.border),
+                          labelStyle: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: isPrefix ? FontWeight.w700 : FontWeight.w500,
+                            color: isPrefix ? AppTheme.primaryBlue : c.textSecondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              final cur = _plateController.text.trim().toUpperCase();
+                              if (cur.isEmpty) {
+                                _plateController.text = prefix;
+                              } else if (cur.contains('-')) {
+                                final suffix = cur.substring(cur.indexOf('-') + 1);
+                                _plateController.text = '$prefix$suffix';
+                              } else {
+                                _plateController.text = '$prefix$cur';
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildInputField(
-                  controller: _yearController,
-                  label: 'Model Year',
-                  hint: '2022',
-                  layout: layout,
-                  c: c,
-                  isDark: isDark,
-                  keyboardType: TextInputType.number,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInputField(
+                      controller: _yearController,
+                      label: 'Model Year',
+                      hint: '2022',
+                      layout: layout,
+                      c: c,
+                      isDark: isDark,
+                      keyboardType: TextInputType.number,
+                      onChanged: (val) => setState(() {}),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        ...VehiclePresets.modelYears.take(4).map((yr) {
+                          final isSelected = _yearController.text.trim() == yr.toString();
+                          return ActionChip(
+                            label: Text('$yr'),
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                            visualDensity: VisualDensity.compact,
+                            backgroundColor: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                            side: BorderSide(color: isSelected ? AppTheme.primaryBlue : c.border),
+                            labelStyle: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                              color: isSelected ? AppTheme.primaryBlue : c.textSecondary,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _yearController.text = yr.toString();
+                              });
+                            },
+                          );
+                        }),
+                        ActionChip(
+                          label: const Text('More...'),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          side: BorderSide(color: c.border),
+                          labelStyle: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.primaryBlue,
+                          ),
+                          onPressed: () => _showYearPickerModal(context, layout, c, isDark),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1276,27 +1406,111 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
 
           // Color & License Row
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _buildInputField(
-                  controller: _colorController,
-                  label: 'Vehicle Color',
-                  hint: 'White, Silver, Black',
-                  layout: layout,
-                  c: c,
-                  isDark: isDark,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInputField(
+                      controller: _colorController,
+                      label: 'Vehicle Color',
+                      hint: 'White, Silver, Black',
+                      layout: layout,
+                      c: c,
+                      isDark: isDark,
+                      onChanged: (val) => setState(() {}),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: VehiclePresets.colors.take(6).map((swatch) {
+                        final isSelected = _colorController.text.trim().toLowerCase() == swatch.name.toLowerCase();
+                        return ActionChip(
+                          avatar: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: swatch.color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? Colors.white30 : Colors.black26,
+                                width: 0.8,
+                              ),
+                            ),
+                          ),
+                          label: Text(swatch.name),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: isSelected ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                          side: BorderSide(color: isSelected ? AppTheme.primaryBlue : c.border),
+                          labelStyle: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? AppTheme.primaryBlue : c.textSecondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _colorController.text = swatch.name;
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _buildInputField(
-                  controller: _licenseController,
-                  label: 'Driving License #',
-                  hint: 'PK-DL-XXXXXXX',
-                  layout: layout,
-                  c: c,
-                  isDark: isDark,
-                  textCapitalization: TextCapitalization.characters,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildInputField(
+                      controller: _licenseController,
+                      label: 'Driving License #',
+                      hint: 'PK-DL-XXXXXXX',
+                      layout: layout,
+                      c: c,
+                      isDark: isDark,
+                      textCapitalization: TextCapitalization.characters,
+                      onChanged: (val) => setState(() {}),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: VehiclePresets.licensePrefixes.map((prefix) {
+                        final isPrefix = _licenseController.text.toUpperCase().startsWith(prefix);
+                        return ActionChip(
+                          label: Text(prefix),
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                          backgroundColor: isPrefix ? AppTheme.primaryBlue.withValues(alpha: 0.15) : null,
+                          side: BorderSide(color: isPrefix ? AppTheme.primaryBlue : c.border),
+                          labelStyle: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: isPrefix ? FontWeight.w700 : FontWeight.w500,
+                            color: isPrefix ? AppTheme.primaryBlue : c.textSecondary,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              final cur = _licenseController.text.trim().toUpperCase();
+                              if (cur.isEmpty) {
+                                _licenseController.text = prefix;
+                              } else if (cur.contains('-')) {
+                                final lastHyphen = cur.lastIndexOf('-');
+                                final suffix = cur.substring(lastHyphen + 1);
+                                _licenseController.text = '$prefix$suffix';
+                              } else {
+                                _licenseController.text = '$prefix$cur';
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1441,6 +1655,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
     required bool isDark,
     TextInputType keyboardType = TextInputType.text,
     TextCapitalization textCapitalization = TextCapitalization.words,
+    ValueChanged<String>? onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1458,6 +1673,7 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
           controller: controller,
           keyboardType: keyboardType,
           textCapitalization: textCapitalization,
+          onChanged: onChanged,
           style: TextStyle(
             fontSize: layout.fontSize(13),
             color: c.textPrimary,
@@ -1488,6 +1704,81 @@ class _DriverVerificationScreenState extends State<DriverVerificationScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  void _showYearPickerModal(
+    BuildContext context,
+    ResponsiveLayoutHelper layout,
+    AppColors c,
+    bool isDark,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final years = VehiclePresets.modelYears;
+        return SafeArea(
+          child: SizedBox(
+            height: 350,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Select Model Year',
+                        style: TextStyle(
+                          fontSize: layout.fontSize(16),
+                          fontWeight: FontWeight.w700,
+                          color: c.textPrimary,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: years.length,
+                    itemBuilder: (ctx, index) {
+                      final yr = years[index];
+                      final isSelected = _yearController.text.trim() == yr.toString();
+                      return ListTile(
+                        title: Text(
+                          yr.toString(),
+                          style: TextStyle(
+                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                            color: isSelected ? AppTheme.primaryBlue : c.textPrimary,
+                          ),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppTheme.primaryBlue)
+                            : null,
+                        onTap: () {
+                          setState(() {
+                            _yearController.text = yr.toString();
+                          });
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

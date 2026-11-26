@@ -68,18 +68,30 @@ export const toggleOnline = onCall(
     }
 
     const isVerified = driverData?.isVerified === true;
-    const plate = driverData?.vehiclePlate;
+    const plate = (driverData?.vehiclePlate || '').trim().toUpperCase();
+    const make = (driverData?.vehicleMake || '').trim();
+    const model = (driverData?.vehicleModel || '').trim();
+    const year = Number(driverData?.vehicleYear);
+
+    const dummyPlates = ['SWIFT-101', 'ABC-1234', 'AAA-0000', 'XXX-1234', 'ABC-1111', '000-0000', 'TEST-123'];
+    const pakPlatePattern = /^[A-Z]{2,4}-[0-9]{1,4}(-[A-Z0-9]{1,4})?$/;
+    const currentMaxYear = new Date().getFullYear() + 1;
+
     const hasValidVehicle = Boolean(
       plate &&
-      plate !== 'SWIFT-101' &&
-      plate !== 'ABC-1234' &&
-      driverData?.vehicleMake
+      !dummyPlates.includes(plate) &&
+      pakPlatePattern.test(plate) &&
+      make.length >= 2 &&
+      model.length >= 2 &&
+      !isNaN(year) &&
+      year >= 1995 &&
+      year <= currentMaxYear
     );
 
     if (data.isOnline && !hasValidVehicle) {
       throw new HttpsError(
         'failed-precondition',
-        'Please enter your vehicle details before going online.'
+        'Please enter valid Pakistani vehicle details (make, model, registered plate, year) before going online.'
       );
     }
 
